@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     sogecommerce_hmac_key: str = ""
     sogecommerce_shop_id: str = ""
     sogecommerce_api_password: str = ""
+    sogecommerce_ipn_url: str = "http://localhost:8000/payment/ipn"
 
 
 settings = Settings()
