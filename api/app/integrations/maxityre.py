@@ -114,23 +114,82 @@ class MaxityreConnector(SupplierConnector):
 
     # ---- Recherche ---------------------------------------------------------
 
-    async def search_by_dimension(
-        self, width: int, height: int, diameter: int
-    ) -> list[SupplierTyre]:
-        await self.authenticate()
-        url = f"{settings.maxityre_base_url}/search/pneus/dimension"
+    async def _fetch_page(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        width: int,
+        height: int,
+        diameter: int,
+        page: int,
+    ) -> dict:
         params = {
             "search_pneus_dimension[category]": "auto",
             "search_pneus_dimension[width]": width,
             "search_pneus_dimension[height]": height,
             "search_pneus_dimension[diameter]": diameter,
+            "search_pneus_dimension[page]": page,
         }
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(url, headers=self._headers(), params=params)
+        resp = await client.get(
+            url, headers=self._headers(), params=params
+        )
         if resp.status_code != 200:
-            return []
-        items = resp.json().get("items", []) or []
-        out = []
+            return {}
+        return resp.json() or {}
+
+    async def search_by_dimension(
+        self, width: int, height: int, diameter: int
+    ) -> list[SupplierTyre]:
+        """
+        Récupère TOUTES les pages Maxityre pour la dimension.
+
+        L'API pagine : details.nbResults = total, details.limit = taille
+        de page. On lit la 1re page pour connaître le total, puis on
+        récupère les pages restantes EN PARALLÈLE (pas en série, sinon
+        le client attendrait N appels séquentiels).
+
+        Garde-fou : MAXITYRE_MAX_PAGES borne le nombre de pages pour
+        éviter une boucle si l'API renvoie un total aberrant.
+        """
+        await self.authenticate()
+        url = f"{settings.maxityre_base_url}/search/pneus/dimension"
+
+        import asyncio
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            first = await self._fetch_page(
+                client, url, width, height, diameter, 1
+            )
+            if not first:
+                return []
+
+            details = first.get("details") or {}
+            items = list(first.get("items") or [])
+
+            nb_results = int(details.get("nbResults") or len(items))
+            limit = int(details.get("limit") or len(items) or 20)
+            if limit <= 0:
+                limit = 20
+
+            # Nombre total de pages, borné par sécurité
+            total_pages = (nb_results + limit - 1) // limit
+            total_pages = min(total_pages, settings.maxityre_max_pages)
+
+            if total_pages > 1:
+                # Pages 2..N en parallèle
+                tasks = [
+                    self._fetch_page(
+                        client, url, width, height, diameter, p
+                    )
+                    for p in range(2, total_pages + 1)
+                ]
+                for res in await asyncio.gather(
+                    *tasks, return_exceptions=True
+                ):
+                    if isinstance(res, dict) and res:
+                        items.extend(res.get("items") or [])
+
+        out: list[SupplierTyre] = []
         for it in items:
             tyre = self._to_tyre(it)
             if tyre is not None:
