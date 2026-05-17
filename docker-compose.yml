@@ -39,5 +39,17 @@ services:
       - ./api:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
+  web:
+    build: ./web
+    depends_on:
+      - api
+    environment:
+      # SSR (conteneur -> conteneur) : URL interne Docker
+      API_URL_INTERNAL: http://api:8000
+      # Navigateur du client : URL publique
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+
 volumes:
   pgdata:

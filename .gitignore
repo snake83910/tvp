@@ -30,3 +30,9 @@ Thumbs.db
 # === Logs / archives ===
 *.log
 *.tar.gz
+
+# === Frontend Next.js ===
+node_modules/
+.next/
+web/node_modules/
+web/.next/
