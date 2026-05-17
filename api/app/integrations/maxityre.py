@@ -1,0 +1,146 @@
+"""
+Connecteur Maxityre / AD Tyres.
+
+Repris de la logique du script existant, mais :
+- asynchrone (httpx) au lieu de requests + threads
+- secrets via settings (.env), jamais en dur
+- jeton mis en cache et rafraîchi automatiquement
+- normalisation robuste des dimensions (module catalog.normalize)
+- AUCUN stockage de catalogue : interrogation à la volée, cache Redis court
+
+Le jour où l'API dropship officielle est disponible : créer une 2e classe
+implémentant SupplierConnector et changer le connecteur actif. Rien d'autre
+ne bouge.
+"""
+import time
+
+import httpx
+
+from app.core.config import settings
+from app.integrations.supplier_base import SupplierConnector, SupplierTyre
+from app.modules.catalog.normalize import map_season, parse_dimension
+
+_CDN_IMG = "https://cdn.maxityre.com/assets/img/tyre/big/"
+
+
+class MaxityreConnector(SupplierConnector):
+    name = "maxityre"
+
+    def __init__(self) -> None:
+        self._token: str | None = None
+        self._token_ts: float = 0.0
+        self._token_ttl = 1800  # 30 min, on rafraîchit avant expiration
+
+    # ---- Authentification --------------------------------------------------
+
+    async def authenticate(self) -> None:
+        if self._token and (time.time() - self._token_ts) < self._token_ttl:
+            return  # jeton encore valide
+
+        if not settings.maxityre_username or not settings.maxityre_password:
+            raise RuntimeError(
+                "Identifiants Maxityre manquants : configurer "
+                "MAXITYRE_USERNAME / MAXITYRE_PASSWORD dans .env"
+            )
+
+        url = f"{settings.maxityre_base_url}/fr_FR/login_check"
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                url,
+                headers={
+                    "ad-tyres-site": settings.maxityre_site_id,
+                    "content-type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "_username": settings.maxityre_username,
+                    "_password": settings.maxityre_password,
+                },
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        token = data.get("token")
+        if not token:
+            raise RuntimeError("Maxityre : jeton absent de la réponse de login")
+        self._token = token
+        self._token_ts = time.time()
+
+    def _headers(self) -> dict:
+        return {
+            "ad-tyres-site": settings.maxityre_site_id,
+            "jwt": f"Bearer {self._token}",
+        }
+
+    # ---- Normalisation -----------------------------------------------------
+
+    def _to_tyre(self, item: dict) -> SupplierTyre | None:
+        try:
+            profil = item.get("profil") or {}
+            marque = profil.get("marque") or {}
+            raw_dim = item.get("dimension", "") or ""
+            dim = parse_dimension(raw_dim)
+
+            price_ht = item.get("prixHt")
+            if price_ht is None:
+                return None
+            price_ht = float(price_ht)
+
+            image_id = item.get("imageB2bId")
+            image_url = (
+                f"{_CDN_IMG}{image_id}.jpg" if image_id else None
+            )
+
+            return SupplierTyre(
+                supplier_ref=str(item.get("id") or item.get("articleReference")),
+                brand=marque.get("marque", "") or "",
+                model=profil.get("profil", "") or "",
+                raw_dimension=raw_dim,
+                width=dim.width if dim else None,
+                aspect_ratio=dim.aspect_ratio if dim else None,
+                diameter=dim.diameter if dim else None,
+                load_index=dim.load_index if dim else None,
+                speed_rating=dim.speed_rating if dim else None,
+                season=map_season(item.get("saison")),
+                price_ht=price_ht,
+                image_url=image_url,
+                eu_label={
+                    "noise": item.get("noise"),
+                    "grip": item.get("grip"),
+                    "wet": item.get("wet"),
+                },
+            )
+        except (KeyError, ValueError, TypeError):
+            # Un item malformé ne doit pas casser toute la recherche
+            return None
+
+    # ---- Recherche ---------------------------------------------------------
+
+    async def search_by_dimension(
+        self, width: int, height: int, diameter: int
+    ) -> list[SupplierTyre]:
+        await self.authenticate()
+        url = f"{settings.maxityre_base_url}/search/pneus/dimension"
+        params = {
+            "search_pneus_dimension[category]": "auto",
+            "search_pneus_dimension[width]": width,
+            "search_pneus_dimension[height]": height,
+            "search_pneus_dimension[diameter]": diameter,
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url, headers=self._headers(), params=params)
+        if resp.status_code != 200:
+            return []
+        items = resp.json().get("items", []) or []
+        out = []
+        for it in items:
+            tyre = self._to_tyre(it)
+            if tyre is not None:
+                out.append(tyre)
+        return out
+
+    async def get_by_ref(self, supplier_ref: str) -> SupplierTyre | None:
+        # L'API Maxityre ne fournit pas de get unitaire fiable côté "site" :
+        # on s'appuiera sur le cache Redis alimenté par la recherche.
+        # Implémentation dédiée à brancher avec l'API officielle.
+        raise NotImplementedError(
+            "get_by_ref : à implémenter avec l'API dropship officielle"
+        )

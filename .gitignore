@@ -1,0 +1,32 @@
+# === SECRETS — ne JAMAIS committer ===
+.env
+api/.env
+*.env
+!.env.example
+*.pem
+*.key
+secrets/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === Docker / volumes ===
+pgdata/
+
+# === OS / éditeurs ===
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# === Logs / archives ===
+*.log
+*.tar.gz

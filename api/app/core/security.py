@@ -1,0 +1,56 @@
+from datetime import datetime, timedelta, timezone
+
+import bcrypt
+from jose import JWTError, jwt
+
+from app.core.config import settings
+
+
+def hash_password(plain: str) -> str:
+    # bcrypt limite l'entrée à 72 octets : on tronque proprement
+    pw = plain.encode("utf-8")[:72]
+    return bcrypt.hashpw(pw, bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    pw = plain.encode("utf-8")[:72]
+    try:
+        return bcrypt.checkpw(pw, hashed.encode("utf-8"))
+    except ValueError:
+        return False
+
+
+def _create_token(sub: str, claims: dict, expires: timedelta, token_type: str) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": sub,
+        "type": token_type,
+        "iat": now,
+        "exp": now + expires,
+        **claims,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def create_access_token(user_id: str, account_type: str, role: str) -> str:
+    # account_type et role portés dans le token : web + future app mobile
+    return _create_token(
+        sub=user_id,
+        claims={"account_type": account_type, "role": role},
+        expires=timedelta(minutes=settings.access_token_expire_minutes),
+        token_type="access",
+    )
+
+
+def create_refresh_token(user_id: str) -> str:
+    return _create_token(
+        sub=user_id,
+        claims={},
+        expires=timedelta(days=settings.refresh_token_expire_days),
+        token_type="refresh",
+    )
+
+
+def decode_token(token: str) -> dict:
+    """Lève JWTError si invalide/expiré."""
+    return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
