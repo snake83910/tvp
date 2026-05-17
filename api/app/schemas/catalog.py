@@ -14,10 +14,29 @@ class TyreResult(BaseModel):
     season: str
     image_url: str | None
     eu_label: dict
-    # Prix calculé selon le compte courant.
-    # purchase_ht n'est JAMAIS exposé ici.
+    # Prix calcule selon le compte courant.
+    # purchase_ht n'est JAMAIS expose ici.
     price_ht: float
     price_ttc: float
     # Prix mis en avant selon le type de client (pro -> HT, particulier -> TTC)
     display_price: float
     display_mode: str  # "HT" ou "TTC"
+
+
+class SearchFacets(BaseModel):
+    """Valeurs reellement presentes dans les resultats, pour construire
+    dynamiquement la barre de filtres cote frontend."""
+
+    brands: list[str]
+    seasons: list[str]
+    price_min: float
+    price_max: float
+
+
+class SearchResponse(BaseModel):
+    items: list[TyreResult]      # uniquement la page demandee
+    total: int                   # total apres filtres (avant pagination)
+    page: int
+    per_page: int
+    pages: int                   # nombre de pages total
+    facets: SearchFacets

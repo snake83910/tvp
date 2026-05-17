@@ -32,6 +32,22 @@ export interface TyreResult {
   display_mode: "HT" | "TTC";
 }
 
+export interface SearchFacets {
+  brands: string[];
+  seasons: string[];
+  price_min: number;
+  price_max: number;
+}
+
+export interface SearchResponse {
+  items: TyreResult[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+  facets: SearchFacets;
+}
+
 export interface ApiError {
   detail: string;
 }
@@ -65,20 +81,35 @@ export const api = {
   health: () => request<{ status: string; env: string }>("/health"),
 
   searchByDimensions: (
-    width: number,
-    ratio: number,
-    diameter: number,
-    season?: string,
+    params: {
+      width: number;
+      ratio: number;
+      diameter: number;
+      brand?: string;
+      season?: string;
+      minPrice?: number;
+      maxPrice?: number;
+      sort?: string;
+      page?: number;
+    },
     token?: string,
   ) => {
     const q = new URLSearchParams({
-      width: String(width),
-      ratio: String(ratio),
-      diameter: String(diameter),
+      width: String(params.width),
+      ratio: String(params.ratio),
+      diameter: String(params.diameter),
     });
-    if (season) q.set("season", season);
-    return request<TyreResult[]>(`/search/dimensions?${q.toString()}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    if (params.brand) q.set("brand", params.brand);
+    if (params.season) q.set("season", params.season);
+    if (params.minPrice != null)
+      q.set("min_price", String(params.minPrice));
+    if (params.maxPrice != null)
+      q.set("max_price", String(params.maxPrice));
+    if (params.sort) q.set("sort", params.sort);
+    if (params.page) q.set("page", String(params.page));
+    return request<SearchResponse>(
+      `/search/dimensions?${q.toString()}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
   },
 };
