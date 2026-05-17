@@ -38,7 +38,7 @@ export function Pagination({
         <>
           <PageBtn onClick={() => go(1)} label="1" />
           {start > 2 && (
-            <span className="px-1 text-bone-dim">…</span>
+            <span className="px-1 text-ink-muted">…</span>
           )}
         </>
       )}
@@ -53,7 +53,7 @@ export function Pagination({
       {end < pages && (
         <>
           {end < pages - 1 && (
-            <span className="px-1 text-bone-dim">…</span>
+            <span className="px-1 text-ink-muted">…</span>
           )}
           <PageBtn onClick={() => go(pages)} label={String(pages)} />
         </>
@@ -84,8 +84,8 @@ function PageBtn({
       disabled={disabled}
       className={`h-10 min-w-10 rounded-lg border px-3 text-sm font-semibold transition ${
         active
-          ? "border-signal bg-signal text-bone"
-          : "border-ink-muted text-bone-dim hover:border-bone/40 disabled:opacity-30"
+          ? "border-signal bg-signal text-white"
+          : "border-ink-muted text-ink-muted hover:border-bone/40 disabled:opacity-30"
       }`}
     >
       {label}

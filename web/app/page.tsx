@@ -1,91 +1,103 @@
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
+import { SearchHero } from "@/components/SearchHero";
+import { TrustBar } from "@/components/TrustBar";
+
+const CATEGORIES = [
+  { t: "Pneus été", q: "?season=ete" },
+  { t: "Pneus hiver", q: "?season=hiver" },
+  { t: "Pneus 4 saisons", q: "?season=4saisons" },
+  { t: "Toutes dimensions", q: "" },
+];
+
+const CONSEILS = [
+  { t: "Où lire ma dimension ?", d: "Le marquage sur le flanc du pneu, décrypté." },
+  { t: "Quand changer ses pneus ?", d: "Témoins d'usure, âge, signes d'alerte." },
+  { t: "Été, hiver ou 4 saisons ?", d: "Le bon choix selon votre usage." },
+];
 
 export default function HomePage() {
   return (
     <>
       <SiteHeader />
 
-      <main className="relative z-10">
-        {/* HERO */}
-        <section className="mx-auto max-w-7xl px-6 pb-24 pt-20 md:pt-32">
-          <div className="fade-up">
-            <p className="mb-6 inline-block border-l-2 border-signal pl-3 text-sm font-semibold uppercase tracking-[0.25em] text-bone-dim">
-              Dropshipping pneumatique · Particuliers &amp; Pros
-            </p>
-            <h1 className="max-w-4xl font-display text-5xl font-black leading-[0.95] tracking-tightest md:text-7xl lg:text-8xl">
-              LE BON PNEU.
-              <br />
-              <span className="text-signal">LE BON PRIX.</span>
-              <br />
-              LIVRÉ CHEZ VOUS.
-            </h1>
-            <p className="mt-8 max-w-xl text-lg text-bone-dim">
-              Des milliers de références, sans intermédiaire inutile.
-              Livraison à domicile ou montage chez un garage
-              partenaire près de chez vous.
-            </p>
+      <main>
+        <section className="diag-accent">
+          <div className="mx-auto max-w-7xl px-6 py-16 md:py-20">
+            <div className="fade-up max-w-2xl">
+              <p className="mb-4 text-sm font-bold uppercase tracking-[0.2em] text-white/70">
+                Pneus en ligne · Particuliers
+              </p>
+              <h1 className="font-display text-4xl font-black leading-tight tracking-tightest text-white md:text-6xl">
+                Le bon pneu,
+                <br />
+                au <span className="text-signal">meilleur prix</span>.
+              </h1>
+              <p className="mt-5 max-w-lg text-base text-white/75">
+                Des milliers de références livrées chez vous ou montées
+                chez un garage partenaire près de chez vous.
+              </p>
+            </div>
 
-            <div className="mt-10 flex flex-wrap gap-4">
-              <Link
-                href="/recherche"
-                className="sweep-line rounded-full bg-signal px-8 py-4 font-display text-base font-bold uppercase tracking-wide text-bone transition hover:bg-signal-dark"
-              >
-                Trouver mes pneus
-              </Link>
-              <Link
-                href="/pro"
-                className="rounded-full border border-ink-muted px-8 py-4 font-display text-base font-bold uppercase tracking-wide text-bone-dim transition hover:border-bone hover:text-bone"
-              >
-                Je suis un professionnel
-              </Link>
+            <div className="fade-up mt-10 max-w-3xl">
+              <SearchHero />
             </div>
           </div>
         </section>
 
-        {/* BANDE ARGUMENTS */}
-        <section className="border-y border-ink-muted bg-ink-soft">
-          <div className="mx-auto grid max-w-7xl grid-cols-1 divide-y divide-ink-muted md:grid-cols-3 md:divide-x md:divide-y-0">
-            {[
-              {
-                k: "01",
-                t: "Recherche précise",
-                d: "Par dimensions ou par plaque d'immatriculation.",
-              },
-              {
-                k: "02",
-                t: "Prix transparent",
-                d: "TTC pour les particuliers, HT pour les pros.",
-              },
-              {
-                k: "03",
-                t: "Livraison flexible",
-                d: "À domicile ou chez un garage partenaire.",
-              },
-            ].map((f) => (
-              <div key={f.k} className="px-6 py-10">
-                <span className="font-display text-sm font-bold text-signal">
-                  {f.k}
+        <TrustBar />
+
+        <section className="mx-auto max-w-7xl px-6 py-14">
+          <h2 className="mb-6 font-display text-2xl font-black tracking-tightest text-ink">
+            Parcourir le catalogue
+          </h2>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {CATEGORIES.map((c) => (
+              <Link
+                key={c.t}
+                href={`/recherche${c.q}`}
+                className="group rounded-xl border border-line bg-paper p-6 transition hover:border-signal hover:shadow-lift"
+              >
+                <span className="font-display text-lg font-bold text-ink group-hover:text-signal">
+                  {c.t}
                 </span>
-                <h3 className="mt-3 font-display text-xl font-bold">
-                  {f.t}
-                </h3>
-                <p className="mt-2 text-sm text-bone-dim">{f.d}</p>
-              </div>
+                <p className="mt-1 text-sm text-ink-muted">Voir les offres →</p>
+              </Link>
             ))}
+          </div>
+        </section>
+
+        <section className="border-t border-line bg-paper">
+          <div className="mx-auto max-w-7xl px-6 py-14">
+            <h2 className="mb-6 font-display text-2xl font-black tracking-tightest text-ink">
+              Conseils &amp; guides
+            </h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {CONSEILS.map((c) => (
+                <div
+                  key={c.t}
+                  className="rounded-xl border border-line p-6"
+                >
+                  <h3 className="font-display text-lg font-bold text-ink">
+                    {c.t}
+                  </h3>
+                  <p className="mt-2 text-sm text-ink-muted">{c.d}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-ink-muted">
-        <div className="mx-auto max-w-7xl px-6 py-10 text-sm text-bone-dim">
-          <p>
-            tousvospneus.com — SAS · SIREN 977 671 965 · TVA FR38
-            977 671 965
+      <footer className="border-t border-line bg-ink">
+        <div className="mx-auto max-w-7xl px-6 py-10 text-sm text-paper/60">
+          <p className="font-display font-bold text-paper">
+            TOUSVOSPNEUS<span className="text-signal">.COM</span>
           </p>
-          <p className="mt-1">
-            35 B Chemin des Beaumouilles, 13710 Fuveau
+          <p className="mt-3">
+            SAS · SIREN 977 671 965 · TVA FR38 977 671 965
           </p>
+          <p className="mt-1">35 B Chemin des Beaumouilles, 13710 Fuveau</p>
         </div>
       </footer>
     </>

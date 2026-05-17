@@ -44,7 +44,7 @@ export function FilterBar({
         <p className="mb-1 font-display text-2xl font-black">
           {total}
         </p>
-        <p className="text-xs uppercase tracking-wider text-bone-dim">
+        <p className="text-xs uppercase tracking-wider text-ink-muted">
           pneu{total > 1 ? "s" : ""} trouvé{total > 1 ? "s" : ""}
         </p>
       </div>
@@ -53,7 +53,7 @@ export function FilterBar({
         <select
           value={currentSort}
           onChange={(e) => setParam("sort", e.target.value)}
-          className="h-11 w-full rounded-lg border border-ink-muted bg-ink px-3 text-sm text-bone outline-none focus:border-signal"
+          className="h-11 w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-signal"
         >
           {SORTS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -67,7 +67,7 @@ export function FilterBar({
         <select
           value={currentBrand}
           onChange={(e) => setParam("brand", e.target.value || null)}
-          className="h-11 w-full rounded-lg border border-ink-muted bg-ink px-3 text-sm text-bone outline-none focus:border-signal"
+          className="h-11 w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-signal"
         >
           <option value="">Toutes les marques</option>
           {facets.brands.map((b) => (
@@ -105,7 +105,7 @@ export function FilterBar({
             onBlur={(e) =>
               setParam("min_price", e.target.value || null)
             }
-            className="h-11 w-full rounded-lg border border-ink-muted bg-ink px-3 text-sm text-bone outline-none focus:border-signal"
+            className="h-11 w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-signal"
           />
           <input
             type="number"
@@ -114,7 +114,7 @@ export function FilterBar({
             onBlur={(e) =>
               setParam("max_price", e.target.value || null)
             }
-            className="h-11 w-full rounded-lg border border-ink-muted bg-ink px-3 text-sm text-bone outline-none focus:border-signal"
+            className="h-11 w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink outline-none focus:border-signal"
           />
         </div>
       </FilterGroup>
@@ -131,7 +131,7 @@ function FilterGroup({
 }) {
   return (
     <div>
-      <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-bone-dim">
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
         {label}
       </p>
       {children}
@@ -153,8 +153,8 @@ function SeasonChip({
       onClick={onClick}
       className={`block w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
         active
-          ? "border-signal bg-signal/10 text-bone"
-          : "border-ink-muted text-bone-dim hover:border-bone/40"
+          ? "border-signal bg-signal/10 text-signal"
+          : "border-line text-ink-soft hover:border-signal/50"
       }`}
     >
       {label}

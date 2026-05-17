@@ -1,5 +1,5 @@
 import { SiteHeader } from "@/components/SiteHeader";
-import { SearchForm } from "@/components/SearchForm";
+import { SearchHero } from "@/components/SearchHero";
 import { TyreCard } from "@/components/TyreCard";
 import { FilterBar } from "@/components/FilterBar";
 import { Pagination } from "@/components/Pagination";
@@ -61,26 +61,26 @@ export default async function SearchPage({
           Trouvez vos <span className="text-signal">pneus</span>
         </h1>
 
-        <SearchForm />
+        <SearchHero />
 
         {!hasQuery && (
-          <p className="mt-12 text-bone-dim">
+          <p className="mt-12 text-ink-muted">
             Renseignez les dimensions inscrites sur le flanc de votre
             pneu pour lancer la recherche.
           </p>
         )}
 
         {hasQuery && error && (
-          <div className="mt-12 rounded-xl border border-signal/40 bg-signal/5 p-6">
+          <div className="mt-12 rounded-xl border border-signal/40 bg-signal-light p-6">
             <p className="font-semibold text-signal">
               La recherche a échoué
             </p>
-            <p className="mt-1 text-sm text-bone-dim">{error}</p>
+            <p className="mt-1 text-sm text-ink-muted">{error}</p>
           </div>
         )}
 
         {hasQuery && data && data.total === 0 && (
-          <p className="mt-12 text-bone-dim">
+          <p className="mt-12 text-ink-muted">
             Aucun pneu trouvé pour {width}/{ratio} R{diameter} avec ces
             filtres. Essayez d&apos;élargir les critères.
           </p>
@@ -97,7 +97,7 @@ export default async function SearchPage({
                 ))}
               </div>
               <Pagination page={data.page} pages={data.pages} />
-              <p className="mt-6 text-center text-xs text-bone-dim">
+              <p className="mt-6 text-center text-xs text-ink-muted">
                 Page {data.page} sur {data.pages}
               </p>
             </div>
