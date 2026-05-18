@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
+import { useCart } from "@/components/CartProvider";
 
 export function SiteHeader() {
+  const { count } = useCart();
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-paper/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
@@ -19,13 +23,7 @@ export function SiteHeader() {
           <Link href="/recherche" className="transition hover:text-signal">
             Rechercher
           </Link>
-          <Link href="/conseils" className="transition hover:text-signal">
-            Conseils
-          </Link>
-          <Link
-            href="/connexion"
-            className="flex items-center gap-2 transition hover:text-signal"
-          >
+          <Link href="/connexion" className="transition hover:text-signal">
             Mon compte
           </Link>
           <Link
@@ -33,14 +31,24 @@ export function SiteHeader() {
             className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-paper transition hover:bg-signal"
           >
             Panier
+            {count > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-signal px-1.5 text-xs font-bold text-white">
+                {count}
+              </span>
+            )}
           </Link>
         </nav>
 
         <Link
           href="/panier"
-          className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper md:hidden"
+          className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper md:hidden"
         >
           Panier
+          {count > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-signal px-1.5 text-xs font-bold text-white">
+              {count}
+            </span>
+          )}
         </Link>
       </div>
     </header>

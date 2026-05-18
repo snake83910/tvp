@@ -19,6 +19,7 @@ from app.schemas.order import (
     CartItemOut,
     CartOut,
     CheckoutResult,
+    UpdateQtyIn,
 )
 
 router = APIRouter(prefix="/cart", tags=["cart"])
@@ -87,6 +88,39 @@ async def get_cart(
         cart = None
     if cart is None:
         raise HTTPException(status_code=404, detail="Panier vide")
+    return _serialize(cart)
+
+
+@router.patch("/items/{item_id}", response_model=CartOut)
+async def update_item(
+    item_id: str,
+    data: UpdateQtyIn,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+    x_cart_session: str | None = Header(default=None),
+):
+    try:
+        cart = await service.update_item_quantity(
+            db, user, x_cart_session, item_id, data.quantity
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return _serialize(cart)
+
+
+@router.delete("/items/{item_id}", response_model=CartOut)
+async def delete_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+    x_cart_session: str | None = Header(default=None),
+):
+    try:
+        cart = await service.remove_item(
+            db, user, x_cart_session, item_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return _serialize(cart)
 
 

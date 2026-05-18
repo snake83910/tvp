@@ -11,7 +11,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -62,18 +62,32 @@ async def _get_or_create_cart(
 async def merge_anonymous_cart(
     db: AsyncSession, user: User, session_token: str
 ) -> None:
-    """À la connexion : déverse le panier anonyme dans celui du user."""
+    """À la connexion : déverse le panier anonyme dans celui du user.
+
+    On fait un UPDATE SQL direct du cart_id des items, sans passer par
+    la relation ORM Cart.items : cette relation a une cascade
+    delete-orphan qui supprimait les items dès qu'on les détachait du
+    panier anonyme (bug constaté : panier vidé à la connexion). Le
+    UPDATE direct contourne entièrement la cascade.
+    """
     anon = await db.scalar(
-        select(Cart)
-        .where(Cart.session_token == session_token)
-        .options(selectinload(Cart.items))
+        select(Cart).where(Cart.session_token == session_token)
     )
-    if anon is None or not anon.items:
+    if anon is None:
         return
+
     user_cart = await _get_or_create_cart(db, user, None)
-    for it in list(anon.items):
-        it.cart_id = user_cart.id
-    await db.delete(anon)
+    if anon.id == user_cart.id:
+        return
+
+    # Transfert des lignes par UPDATE direct (pas via la relation ORM)
+    await db.execute(
+        update(CartItem)
+        .where(CartItem.cart_id == anon.id)
+        .values(cart_id=user_cart.id)
+    )
+    # Le panier anonyme est maintenant sans items : suppression directe
+    await db.execute(delete(Cart).where(Cart.id == anon.id))
     await db.commit()
 
 
@@ -138,6 +152,61 @@ async def add_item(
         .options(selectinload(Cart.items))
     )
     return cart
+
+
+async def _load_cart(
+    db: AsyncSession, user: User | None, session_token: str | None
+) -> Cart | None:
+    if user is not None:
+        return await db.scalar(
+            select(Cart)
+            .where(Cart.user_id == user.id)
+            .options(selectinload(Cart.items))
+        )
+    if session_token:
+        return await db.scalar(
+            select(Cart)
+            .where(Cart.session_token == session_token)
+            .options(selectinload(Cart.items))
+        )
+    return None
+
+
+async def update_item_quantity(
+    db: AsyncSession,
+    user: User | None,
+    session_token: str | None,
+    item_id,
+    quantity: int,
+) -> Cart:
+    cart = await _load_cart(db, user, session_token)
+    if cart is None:
+        raise ValueError("Panier introuvable")
+    item = next((i for i in cart.items if str(i.id) == str(item_id)), None)
+    if item is None:
+        raise ValueError("Article introuvable dans le panier")
+    if quantity < 1:
+        raise ValueError("Quantité invalide")
+    item.quantity = quantity
+    await db.commit()
+    return await _load_cart(db, user, session_token)
+
+
+async def remove_item(
+    db: AsyncSession,
+    user: User | None,
+    session_token: str | None,
+    item_id,
+) -> Cart:
+    cart = await _load_cart(db, user, session_token)
+    if cart is None:
+        raise ValueError("Panier introuvable")
+    item = next((i for i in cart.items if str(i.id) == str(item_id)), None)
+    if item is None:
+        raise ValueError("Article introuvable dans le panier")
+    await db.delete(item)
+    await db.commit()
+    return await _load_cart(db, user, session_token)
 
 
 @dataclass

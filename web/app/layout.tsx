@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
+import { CartProvider } from "@/components/CartProvider";
 
 export const metadata: Metadata = {
   title: "tousvospneus.com — Pneus au meilleur prix, livrés chez vous",
   description:
-    "Achetez vos pneus en ligne. Recherche par dimensions, livraison à domicile ou montage chez un garage partenaire. Particuliers et professionnels.",
+    "Achetez vos pneus en ligne. Recherche par dimensions, livraison à domicile ou montage chez un garage partenaire.",
 };
 
 export default function RootLayout({
@@ -15,10 +16,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <head>
-        <link
-          rel="preconnect"
-          href="https://fonts.googleapis.com"
-        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
           href="https://fonts.gstatic.com"
@@ -29,7 +27,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="grain min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   );
 }

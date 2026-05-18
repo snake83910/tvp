@@ -8,7 +8,11 @@ class AddItemIn(BaseModel):
     width: int
     ratio: int
     diameter: int
-    quantity: int = 1
+    quantity: int = 2  # défaut métier pneu : par essieu
+
+
+class UpdateQtyIn(BaseModel):
+    quantity: int
 
 
 class CartItemOut(BaseModel):
