@@ -2,9 +2,20 @@
 
 import Link from "next/link";
 import { useCart } from "@/components/CartProvider";
+import { useCurrentUser } from "@/lib/auth";
 
 export function SiteHeader() {
   const { count } = useCart();
+  const { user, loading } = useCurrentUser();
+
+  // Connecté -> /compte ; sinon -> /connexion
+  const accountHref = user ? "/compte" : "/connexion";
+  const accountLabel = user
+    ? user.first_name
+      ? `Bonjour ${user.first_name}`
+      : "Mon compte"
+    : "Connexion";
+
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-paper/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
@@ -23,8 +34,11 @@ export function SiteHeader() {
           <Link href="/recherche" className="transition hover:text-signal">
             Rechercher
           </Link>
-          <Link href="/connexion" className="transition hover:text-signal">
-            Mon compte
+          <Link
+            href={accountHref}
+            className="transition hover:text-signal"
+          >
+            {loading ? "Mon compte" : accountLabel}
           </Link>
           <Link
             href="/panier"

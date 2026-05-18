@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { TyreResult } from "@/lib/api";
 import { useCart } from "@/components/CartProvider";
+import { TyreImage } from "@/components/TyreImage";
 
 const SEASON: Record<string, string> = {
   ete: "Été", hiver: "Hiver", "4saisons": "4 saisons", inconnu: "—",
@@ -15,6 +16,7 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
   const [qty, setQty] = useState(2);
   const [state, setState] = useState<"idle"|"adding"|"done"|"error">("idle");
   const price = tyre.display_price.toFixed(2).replace(".", ",");
+  const detailHref = `/produit/${encodeURIComponent(tyre.supplier_ref)}?w=${tyre.width}&h=${tyre.aspect_ratio}&d=${tyre.diameter}`;
 
   async function handleAdd() {
     if (tyre.width == null || tyre.aspect_ratio == null || tyre.diameter == null) {
@@ -34,10 +36,17 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
 
   return (
     <article className="flex flex-col rounded-xl border border-line bg-paper p-5 shadow-card transition hover:border-signal hover:shadow-lift">
+      <Link href={detailHref} className="mb-4 block">
+        <TyreImage
+          src={tyre.image_url}
+          alt={`${tyre.brand} ${tyre.model} ${tyre.dimension}`}
+          className="h-40 w-full rounded-lg"
+        />
+      </Link>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <Link
-            href={`/produit/${encodeURIComponent(tyre.supplier_ref)}?w=${tyre.width}&h=${tyre.aspect_ratio}&d=${tyre.diameter}`}
+            href={detailHref}
             className="font-display text-lg font-bold text-ink hover:text-signal"
           >
             {tyre.brand}
