@@ -26,10 +26,12 @@ export default async function ProductPage({
 
   if (w && h && d) {
     try {
-      const res = await api.searchByDimensions({
-        width: Number(w), ratio: Number(h), diameter: Number(d), page: 1,
-      });
-      tyre = res.items.find((t) => t.supplier_ref === ref) ?? null;
+      tyre = await api.getProduct(
+        ref,
+        Number(w),
+        Number(h),
+        Number(d),
+      );
     } catch (e) {
       error = e instanceof Error ? e.message : "Erreur";
     }

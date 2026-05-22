@@ -34,6 +34,77 @@ _connector = MaxityreConnector()
 SORTS = {"price_asc", "price_desc", "brand"}
 
 
+async def _load_dimension_catalog(
+    width: int, ratio: int, diameter: int
+) -> list[dict]:
+    """Catalogue brut d'une dimension : cache Redis sinon Maxityre.
+
+    Centralisé pour que tous les endpoints partagent la même source
+    (et donc le même cache : zéro appel Maxityre redondant).
+    """
+    cache_key = f"maxityre:dim:{width}:{ratio}:{diameter}"
+    raw_items = await cache_get(cache_key)
+    if raw_items is None:
+        tyres = await _connector.search_by_dimension(width, ratio, diameter)
+        raw_items = [t.__dict__ for t in tyres]
+        await cache_set(cache_key, raw_items, settings.maxityre_cache_ttl)
+    return raw_items
+
+
+async def _to_priced_tyre(
+    db: AsyncSession,
+    raw: dict,
+    account_type: str,
+    price_tier: str | None,
+) -> TyreResult:
+    """Transforme un item brut fournisseur en TyreResult avec prix
+    calculé selon le compte. Helper centralisé pour ne pas dupliquer."""
+    priced = await compute_price(
+        db,
+        purchase_ht=raw["price_ht"],
+        account_type=account_type,
+        price_tier=price_tier,
+        brand=raw.get("brand", ""),
+    )
+    disp = priced.sale_ht if account_type == "pro" else priced.sale_ttc
+    return TyreResult(
+        supplier_ref=raw["supplier_ref"],
+        brand=raw["brand"],
+        model=raw["model"],
+        dimension=raw.get("raw_dimension")
+        or f"{raw.get('width')}/{raw.get('aspect_ratio')} "
+        f"R{raw.get('diameter')}",
+        width=raw.get("width"),
+        aspect_ratio=raw.get("aspect_ratio"),
+        diameter=raw.get("diameter"),
+        load_index=raw.get("load_index"),
+        speed_rating=raw.get("speed_rating"),
+        season=raw.get("season", "inconnu"),
+        image_url=raw.get("image_url"),
+        eu_label=raw.get("eu_label", {}),
+        price_ht=priced.sale_ht,
+        price_ttc=priced.sale_ttc,
+        display_price=disp,
+        display_mode="HT" if account_type == "pro" else "TTC",
+    )
+
+
+async def _resolve_account(
+    db: AsyncSession, user: User | None
+) -> tuple[str, str | None]:
+    """Renvoie (account_type, price_tier) selon le user connecté."""
+    if not user:
+        return "particulier", None
+    account_type = user.account_type.value
+    price_tier = None
+    if account_type == "pro":
+        profile = await db.scalar(
+            select(ProProfile).where(ProProfile.user_id == user.id)
+        )
+        price_tier = profile.price_tier if profile else None
+    return account_type, price_tier
+
+
 @router.get("/dimensions", response_model=SearchResponse)
 async def search_by_dimensions(
     width: int = Query(..., ge=100, le=400, examples=[205]),
@@ -49,57 +120,14 @@ async def search_by_dimensions(
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ):
-    account_type = user.account_type.value if user else "particulier"
+    account_type, price_tier = await _resolve_account(db, user)
 
-    price_tier = None
-    if user and account_type == "pro":
-        profile = await db.scalar(
-            select(ProProfile).where(ProProfile.user_id == user.id)
-        )
-        price_tier = profile.price_tier if profile else None
-
-    cache_key = f"maxityre:dim:{width}:{ratio}:{diameter}"
-    raw_items = await cache_get(cache_key)
-    if raw_items is None:
-        tyres = await _connector.search_by_dimension(width, ratio, diameter)
-        raw_items = [t.__dict__ for t in tyres]
-        await cache_set(cache_key, raw_items, settings.maxityre_cache_ttl)
+    raw_items = await _load_dimension_catalog(width, ratio, diameter)
 
     priced_all: list[TyreResult] = []
     for it in raw_items:
-        priced = await compute_price(
-            db,
-            purchase_ht=it["price_ht"],
-            account_type=account_type,
-            price_tier=price_tier,
-            brand=it.get("brand", ""),
-        )
-        disp = (
-            priced.sale_ht
-            if account_type == "pro"
-            else priced.sale_ttc
-        )
         priced_all.append(
-            TyreResult(
-                supplier_ref=it["supplier_ref"],
-                brand=it["brand"],
-                model=it["model"],
-                dimension=it.get("raw_dimension")
-                or f"{it.get('width')}/{it.get('aspect_ratio')} "
-                f"R{it.get('diameter')}",
-                width=it.get("width"),
-                aspect_ratio=it.get("aspect_ratio"),
-                diameter=it.get("diameter"),
-                load_index=it.get("load_index"),
-                speed_rating=it.get("speed_rating"),
-                season=it.get("season", "inconnu"),
-                image_url=it.get("image_url"),
-                eu_label=it.get("eu_label", {}),
-                price_ht=priced.sale_ht,
-                price_ttc=priced.sale_ttc,
-                display_price=disp,
-                display_mode="HT" if account_type == "pro" else "TTC",
-            )
+            await _to_priced_tyre(db, it, account_type, price_tier)
         )
 
     facets = SearchFacets(
@@ -146,3 +174,36 @@ async def search_by_dimensions(
         pages=pages,
         facets=facets,
     )
+
+
+@router.get("/product/{ref}", response_model=TyreResult)
+async def get_product(
+    ref: str,
+    width: int = Query(..., ge=100, le=400),
+    ratio: int = Query(..., ge=20, le=100),
+    diameter: int = Query(..., ge=10, le=30),
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+):
+    """
+    Récupère un pneu par sa référence fournisseur + sa dimension.
+
+    Exploite le cache catalogue de la dimension (rempli par la
+    recherche) : trouver une référence dedans est instantané, peu
+    importe la "page" où elle apparaîtrait dans une liste paginée.
+    Si le cache est vide, on remplit en un seul appel (qui paginera
+    Maxityre une bonne fois et servira ensuite toutes les requêtes).
+    """
+    raw_items = await _load_dimension_catalog(width, ratio, diameter)
+    match = next(
+        (it for it in raw_items if it.get("supplier_ref") == ref),
+        None,
+    )
+    if match is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=404,
+            detail="Référence introuvable pour cette dimension",
+        )
+    account_type, price_tier = await _resolve_account(db, user)
+    return await _to_priced_tyre(db, match, account_type, price_tier)

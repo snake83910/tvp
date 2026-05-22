@@ -80,6 +80,24 @@ async function request<T>(
 export const api = {
   health: () => request<{ status: string; env: string }>("/health"),
 
+  getProduct: (
+    ref: string,
+    width: number,
+    ratio: number,
+    diameter: number,
+    token?: string,
+  ) => {
+    const q = new URLSearchParams({
+      width: String(width),
+      ratio: String(ratio),
+      diameter: String(diameter),
+    });
+    return request<TyreResult>(
+      `/search/product/${encodeURIComponent(ref)}?${q.toString()}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+  },
+
   searchByDimensions: (
     params: {
       width: number;
