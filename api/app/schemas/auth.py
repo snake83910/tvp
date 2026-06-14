@@ -1,7 +1,8 @@
+import re
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import AccountType, UserRole
 
@@ -59,13 +60,40 @@ class UserOut(BaseModel):
 # ---------- Adresses ----------
 
 class AddressIn(BaseModel):
-    label: str | None = None
-    line1: str
-    line2: str | None = None
-    postal_code: str
-    city: str
-    country: str = "FR"
+    label: str | None = Field(default=None, max_length=80)
+    line1: str = Field(min_length=5, max_length=255)
+    line2: str | None = Field(default=None, max_length=255)
+    postal_code: str = Field(min_length=4, max_length=10)
+    city: str = Field(min_length=2, max_length=120)
+    country: str = Field(default="FR", min_length=2, max_length=2)
     is_default: bool = False
+
+    @field_validator("postal_code")
+    @classmethod
+    def validate_postal_code(cls, v: str, info) -> str:
+        v = v.strip()
+        country = (info.data.get("country") or "FR").upper()
+        if country == "FR" and not re.match(r"^\d{5}$", v):
+            raise ValueError("Code postal invalide (5 chiffres pour la France)")
+        return v
+
+    @field_validator("city")
+    @classmethod
+    def validate_city(cls, v: str) -> str:
+        v = v.strip()
+        if not re.match(r"^[\w\s\-\'\(\)\.]+$", v, re.UNICODE):
+            raise ValueError("Nom de ville invalide")
+        return v
+
+    @field_validator("line1")
+    @classmethod
+    def validate_line1(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("country")
+    @classmethod
+    def validate_country(cls, v: str) -> str:
+        return v.strip().upper()
 
 
 class AddressOut(AddressIn):
