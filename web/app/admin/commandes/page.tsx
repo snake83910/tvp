@@ -3,8 +3,11 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { adminApi, type AdminOrderSummary } from "@/lib/admin";
+import { getToken } from "@/lib/auth";
 import { STATUS_LABEL } from "@/lib/orderStatus";
 import { OrderTable } from "@/components/admin/OrderTable";
+
+const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const STATUSES = [
   "paid",
@@ -60,9 +63,67 @@ export default function AdminOrders() {
     fetch_(search, val, 1);
   }
 
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (fromDate) params.set("from_date", fromDate);
+      if (toDate) params.set("to_date", toDate);
+      const url = `${BROWSER_API}/admin/orders/export.csv${params.size ? `?${params}` : ""}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) throw new Error(`Erreur ${res.status}`);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      const objectUrl = URL.createObjectURL(blob);
+      a.href = objectUrl;
+      a.download = `commandes-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur export");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div>
-      <h1 className="mb-6 font-display text-3xl font-black text-ink">Commandes</h1>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <h1 className="font-display text-3xl font-black text-ink">Commandes</h1>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-muted">Du</label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="h-9 rounded-lg border border-line bg-paper px-2 text-sm outline-none focus:border-signal"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-muted">Au</label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="h-9 rounded-lg border border-line bg-paper px-2 text-sm outline-none focus:border-signal"
+            />
+          </div>
+          <button
+            onClick={exportCsv}
+            disabled={exporting}
+            className="h-9 rounded-lg bg-ink px-4 text-sm font-bold text-paper transition hover:bg-signal disabled:opacity-60"
+          >
+            {exporting ? "Export…" : "Export CSV"}
+          </button>
+        </div>
+      </div>
 
       {/* Filtres */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
