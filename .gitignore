@@ -3,6 +3,8 @@
 api/.env
 *.env
 !.env.example
+# Fichiers Next.js publics (pas de secrets)
+!web/.env.production
 *.pem
 *.key
 secrets/
