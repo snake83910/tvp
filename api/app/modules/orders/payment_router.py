@@ -8,9 +8,13 @@ probante (l'utilisateur peut fermer l'onglet, rejouer l'URL...).
 Idempotence : un même IPN rejoué ne doit pas créer 2 paiements ni
 re-déclencher la transmission fournisseur.
 """
+import hashlib
+import hmac
+import json
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -262,3 +266,73 @@ async def sync_payment(
         send_order_confirmation(order_full, user)
 
     return {"status": "synced", "order_status": OrderStatus.paid.value}
+
+
+@router.post("/verify-kr-answer/{order_number}")
+async def verify_kr_answer(
+    order_number: str,
+    kr_answer: Annotated[str, Body()],
+    kr_hash: Annotated[str, Body()],
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Vérifie le kr-answer Sogecommerce reçu par le navigateur après paiement.
+    Sécurisé par HMAC-SHA256 : si la signature est invalide, on refuse.
+    Ne nécessite pas WS_REST_GET (Order/Get).
+    """
+    if settings.payment_provider != "sogecommerce":
+        raise HTTPException(status_code=400, detail="sogecommerce uniquement")
+
+    hmac_key = settings.sogecommerce_hmac_key
+    if not hmac_key:
+        raise HTTPException(status_code=500, detail="SOGECOMMERCE_HMAC_KEY non configurée")
+
+    computed = hmac.new(
+        hmac_key.encode(),
+        kr_answer.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(computed, kr_hash):
+        raise HTTPException(status_code=400, detail="Signature kr-answer invalide")
+
+    try:
+        answer = json.loads(kr_answer)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="kr-answer malformé")
+
+    if answer.get("orderStatus") != "PAID":
+        return {"status": "not_paid", "order_status": answer.get("orderStatus")}
+
+    order = await db.scalar(
+        select(Order).where(Order.order_number == order_number)
+    )
+    if order is None or order.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+
+    if order.status == OrderStatus.paid:
+        return {"status": "already_paid", "order_status": order.status.value}
+
+    payment = await db.scalar(
+        select(Payment).where(Payment.order_id == order.id)
+    )
+    if payment is None:
+        raise HTTPException(status_code=400, detail="Aucun paiement initialisé")
+
+    payment.status = "captured"
+    payment.ipn_signature_ok = True
+    payment.ipn_payload = answer
+    order.transition_to(OrderStatus.paid)
+    order.paid_at = datetime.now(timezone.utc)
+    order.invoice_number = (
+        await db.execute(text("SELECT nextval('invoice_number_seq')"))
+    ).scalar()
+    await db.commit()
+
+    order_full = await db.scalar(
+        select(Order).where(Order.id == order.id).options(selectinload(Order.items))
+    )
+    if order_full:
+        send_order_confirmation(order_full, user)
+
+    return {"status": "ok", "order_status": OrderStatus.paid.value}

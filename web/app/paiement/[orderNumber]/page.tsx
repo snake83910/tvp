@@ -91,7 +91,6 @@ export default function PaymentPage({
         );
         if (cancelled) return;
 
-        const successUrl = `${window.location.origin}/paiement/retour?cmd=${params.orderNumber}`;
         const refusedUrl = `${window.location.origin}/paiement/retour?cmd=${params.orderNumber}&status=refused`;
 
         const { KR } = await KRGlue.loadLibrary(
@@ -103,8 +102,27 @@ export default function PaymentPage({
         await KR.setFormConfig({
           formToken: init!.form_token,
           "kr-language": "fr-FR",
-          "kr-post-url-success": successUrl,
           "kr-get-url-refused": refusedUrl,
+        });
+
+        await KR.onSubmit(async (paymentData: any) => {
+          // kr-answer et kr-hash retournés par Krypton au navigateur après paiement
+          const krAnswer: string = paymentData.rawClientAnswer ?? JSON.stringify(paymentData.clientAnswer);
+          const krHash: string = paymentData.hash;
+          try {
+            await fetch(`${BROWSER_API}/payment/verify-kr-answer/${params.orderNumber}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${getToken()}`,
+              },
+              body: JSON.stringify({ kr_answer: krAnswer, kr_hash: krHash }),
+            });
+          } catch {
+            // en cas d'erreur réseau, on redirige quand même (l'IPN prendra le relais)
+          }
+          router.push(`/paiement/retour?cmd=${params.orderNumber}`);
+          return false; // empêche la soumission du formulaire par Krypton
         });
 
         await KR.onError((e: any) => {
