@@ -190,20 +190,30 @@ async def export_orders_csv(
     """Export CSV des commandes pour la comptabilité."""
     import csv
     import io
-    from datetime import date as _date
+    from datetime import date as _date, datetime as _dt, timedelta
 
     stmt = (
-        select(Order, User.email)
-        .join(User, User.id == Order.user_id)
+        select(Order)
         .options(selectinload(Order.items))
         .order_by(Order.created_at.desc())
     )
     if from_date:
         stmt = stmt.where(Order.created_at >= _date.fromisoformat(from_date))
     if to_date:
-        stmt = stmt.where(Order.created_at <= _date.fromisoformat(to_date))
+        # +1 jour pour inclure les commandes du jour to_date
+        end = _date.fromisoformat(to_date) + timedelta(days=1)
+        stmt = stmt.where(Order.created_at < end)
 
-    rows = (await db.execute(stmt)).all()
+    orders = list(await db.scalars(stmt))
+
+    # Charger les emails clients en une seule requête séparée
+    user_ids = {o.user_id for o in orders}
+    emails: dict = {}
+    if user_ids:
+        for uid, email in (await db.execute(
+            select(User.id, User.email).where(User.id.in_(user_ids))
+        )).all():
+            emails[uid] = email
 
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
@@ -213,17 +223,17 @@ async def export_orders_csv(
         "total_ht_eur", "total_vat_eur", "total_ttc_eur",
         "item_count",
     ])
-    for order, email in rows:
+    for order in orders:
         w.writerow([
             order.order_number,
             order.status.value,
             order.created_at.isoformat() if order.created_at else "",
             order.paid_at.isoformat() if order.paid_at else "",
-            email,
+            emails.get(order.user_id, ""),
             order.invoice_number or "",
-            f"{order.total_ht_cents / 100:.2f}",
-            f"{(order.total_ttc_cents - order.total_ht_cents) / 100:.2f}",
-            f"{order.total_ttc_cents / 100:.2f}",
+            f"{(order.total_ht_cents or 0) / 100:.2f}",
+            f"{((order.total_ttc_cents or 0) - (order.total_ht_cents or 0)) / 100:.2f}",
+            f"{(order.total_ttc_cents or 0) / 100:.2f}",
             sum(it.quantity for it in order.items),
         ])
 
