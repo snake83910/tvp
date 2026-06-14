@@ -103,7 +103,7 @@ export default function PaymentPage({
         await KR.setFormConfig({
           formToken: init!.form_token,
           "kr-language": "fr-FR",
-          "kr-get-url-success": successUrl,
+          "kr-post-url-success": successUrl,
           "kr-get-url-refused": refusedUrl,
         });
 
