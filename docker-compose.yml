@@ -42,9 +42,6 @@ services:
   web:
     build:
       context: ./web
-      args:
-        # NEXT_PUBLIC_* sont inlinées au build — passer via ARG, pas environment
-        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
       - api
     environment:
