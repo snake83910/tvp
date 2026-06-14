@@ -123,8 +123,22 @@ export default function AccountPage() {
     setSaveError(null);
   }
 
+  function validateForm(): string | null {
+    if (form.line1.trim().length < 5)
+      return "L'adresse doit contenir au moins 5 caractères.";
+    if (form.country === "FR" && !/^\d{5}$/.test(form.postal_code.trim()))
+      return "Le code postal doit contenir exactement 5 chiffres.";
+    if (form.city.trim().length < 2)
+      return "Veuillez saisir une ville.";
+    if (!/^[\p{L}\s\-'().]+$/u.test(form.city.trim()))
+      return "Le nom de ville contient des caractères invalides.";
+    return null;
+  }
+
   async function submitForm(e: React.FormEvent) {
     e.preventDefault();
+    const validationError = validateForm();
+    if (validationError) { setSaveError(validationError); return; }
     setSaving(true);
     setSaveError(null);
     try {
