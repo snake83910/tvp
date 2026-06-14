@@ -52,14 +52,13 @@ function RetourContent() {
           }
         );
         // 200 → synced ou already_processed, on continue
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          setSyncError(body.detail ?? "Erreur de synchronisation");
-        }
+        // On ignore les erreurs de sync (PSP_100 si Order/Get pas activé)
+        // L'IPN serveur ou le webhook mettra à jour le statut
       } catch {
-        // Erreur réseau : on laisse la redirection automatique se faire
+        // Erreur réseau : on ignore et on redirige quand même
       } finally {
         setSyncing(false);
+        setSyncError(null); // on n'affiche pas d'erreur si sync indispo
         // Countdown de redirection (3s)
         let n = 3;
         setCountdown(n);
