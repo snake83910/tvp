@@ -40,8 +40,9 @@ export default function PaymentPage({
   const krRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!loading && !user) router.push("/connexion");
-  }, [loading, user, router]);
+    if (!loading && !user)
+      router.push(`/connexion?next=/paiement/${params.orderNumber}`);
+  }, [loading, user, router, params.orderNumber]);
 
   // 1. Initialise le paiement côté serveur → récupère formToken + publicKey
   useEffect(() => {
