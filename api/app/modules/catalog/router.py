@@ -10,6 +10,7 @@ Recherche catalogue.
 - Les facettes (marques, saisons, fourchette de prix reellement
   presentes) sont renvoyees pour batir la barre de filtres cote front.
 """
+import asyncio
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,8 +22,9 @@ from app.core.config import settings
 from app.core.deps import get_current_user_optional
 from app.db.session import get_db
 from app.integrations.maxityre import MaxityreConnector
+from app.models.catalog import PricingRule
 from app.models.user import ProProfile, User
-from app.modules.pricing.engine import compute_price
+from app.modules.pricing.engine import compute_price_sync, load_active_rules
 from app.schemas.catalog import (
     SearchFacets,
     SearchResponse,
@@ -54,16 +56,16 @@ async def _load_dimension_catalog(
     return raw_items
 
 
-async def _to_priced_tyre(
-    db: AsyncSession,
+def _to_priced_tyre(
     raw: dict,
+    rules: list[PricingRule],
     account_type: str,
     price_tier: str | None,
 ) -> TyreResult:
-    """Transforme un item brut fournisseur en TyreResult avec prix
-    calculé selon le compte. Helper centralisé pour ne pas dupliquer."""
-    priced = await compute_price(
-        db,
+    """Transforme un item brut en TyreResult. Synchrone : les règles sont
+    déjà chargées en mémoire, aucune requête DB supplémentaire."""
+    priced = compute_price_sync(
+        rules,
         purchase_ht=raw["price_ht"],
         account_type=account_type,
         price_tier=price_tier,
@@ -125,13 +127,16 @@ async def search_by_dimensions(
 ):
     account_type, price_tier = await _resolve_account(db, user)
 
-    raw_items = await _load_dimension_catalog(width, ratio, diameter)
+    # 1 requête DB pour les règles, 1 pour le catalogue (cache Redis) — pas de N+1
+    raw_items, rules = await asyncio.gather(
+        _load_dimension_catalog(width, ratio, diameter),
+        load_active_rules(db),
+    )
 
-    priced_all: list[TyreResult] = []
-    for it in raw_items:
-        priced_all.append(
-            await _to_priced_tyre(db, it, account_type, price_tier)
-        )
+    priced_all: list[TyreResult] = [
+        _to_priced_tyre(it, rules, account_type, price_tier)
+        for it in raw_items
+    ]
 
     facets = SearchFacets(
         brands=sorted({t.brand for t in priced_all if t.brand}),
@@ -294,10 +299,10 @@ async def get_product(
         None,
     )
     if match is None:
-        from fastapi import HTTPException
         raise HTTPException(
             status_code=404,
             detail="Référence introuvable pour cette dimension",
         )
     account_type, price_tier = await _resolve_account(db, user)
-    return await _to_priced_tyre(db, match, account_type, price_tier)
+    rules = await load_active_rules(db)
+    return _to_priced_tyre(match, rules, account_type, price_tier)

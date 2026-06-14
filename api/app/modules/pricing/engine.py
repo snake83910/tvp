@@ -45,16 +45,25 @@ def _round(value: Decimal, mode: str) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-async def _select_rule(
-    db: AsyncSession, account_type: str, price_tier: str | None, brand: str
-) -> PricingRule | None:
-    """La règle active la plus prioritaire qui matche le contexte."""
+async def load_active_rules(db: AsyncSession) -> list[PricingRule]:
+    """Charge toutes les règles actives triées par priorité décroissante.
+    À appeler une seule fois, puis passer la liste à select_rule_sync."""
     rows = await db.scalars(
         select(PricingRule)
         .where(PricingRule.is_active.is_(True))
         .order_by(PricingRule.priority.desc())
     )
-    for rule in rows:
+    return list(rows)
+
+
+def select_rule_sync(
+    rules: list[PricingRule],
+    account_type: str,
+    price_tier: str | None,
+    brand: str,
+) -> PricingRule | None:
+    """Sélection de règle en mémoire — pas de requête DB."""
+    for rule in rules:
         if rule.account_type and rule.account_type != account_type:
             continue
         if rule.price_tier and rule.price_tier != price_tier:
@@ -65,28 +74,38 @@ async def _select_rule(
     return None
 
 
-async def compute_price(
-    db: AsyncSession,
+async def _select_rule(
+    db: AsyncSession, account_type: str, price_tier: str | None, brand: str
+) -> PricingRule | None:
+    """La règle active la plus prioritaire qui matche le contexte."""
+    rules = await load_active_rules(db)
+    return select_rule_sync(rules, account_type, price_tier, brand)
+
+
+def compute_price_sync(
+    rules: list[PricingRule],
     purchase_ht: float,
     account_type: str = "particulier",
     price_tier: str | None = None,
     brand: str = "",
 ) -> ComputedPrice:
-    rule = await _select_rule(db, account_type, price_tier, brand)
+    """Version synchrone : utilise des règles déjà chargées (pas de DB)."""
+    rule = select_rule_sync(rules, account_type, price_tier, brand)
+    return _apply_rule(rule, purchase_ht)
 
+
+def _apply_rule(rule: PricingRule | None, purchase_ht: float) -> ComputedPrice:
     markup = Decimal(str(rule.markup_percent)) if rule else Decimal("10")
     purchase = Decimal(str(purchase_ht))
 
     sale_ht = purchase * (Decimal("1") + markup / Decimal("100"))
 
-    # Marge minimale en euros
     if rule and rule.markup_floor is not None:
         floor_ht = purchase + Decimal(str(rule.markup_floor))
         sale_ht = max(sale_ht, floor_ht)
 
     sale_ht = _round(sale_ht, rule.rounding if rule else "psych")
 
-    # Prix de vente plancher
     if rule and rule.price_floor is not None:
         sale_ht = max(sale_ht, Decimal(str(rule.price_floor)))
 
@@ -102,3 +121,14 @@ async def compute_price(
         vat_amount=float(vat),
         markup_percent=float(markup),
     )
+
+
+async def compute_price(
+    db: AsyncSession,
+    purchase_ht: float,
+    account_type: str = "particulier",
+    price_tier: str | None = None,
+    brand: str = "",
+) -> ComputedPrice:
+    rule = await _select_rule(db, account_type, price_tier, brand)
+    return _apply_rule(rule, purchase_ht)
