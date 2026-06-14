@@ -42,7 +42,8 @@ export default function AdminLoginPage() {
         setStep("2fa");
       } else if (data.access_token && data.refresh_token) {
         saveTokens(data.access_token, data.refresh_token);
-        router.push("/admin");
+        // Reload complet pour réinitialiser useCurrentUser avec le nouveau token
+        window.location.href = "/admin";
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur");
