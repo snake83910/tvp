@@ -40,9 +40,14 @@ export function SearchHero() {
         setPlateDims(dims);
       }
     } catch (err) {
-      setPlateError(
-        err instanceof Error ? err.message : "Plaque non reconnue."
-      );
+      const msg = err instanceof Error ? err.message : "Plaque non reconnue.";
+      if (msg.includes("403") || msg.includes("indisponible")) {
+        setPlateError(
+          "La recherche par plaque est temporairement indisponible. Utilisez l'onglet « Dimensions » pour saisir votre taille de pneu."
+        );
+      } else {
+        setPlateError(msg);
+      }
     } finally {
       setPlateLoading(false);
     }

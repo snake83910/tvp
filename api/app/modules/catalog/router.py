@@ -234,6 +234,11 @@ async def search_by_plate(
             status_code=502, detail="Service immatriculation indisponible"
         )
 
+    if resp.status_code == 403:
+        raise HTTPException(
+            status_code=503,
+            detail="La recherche par plaque est temporairement indisponible. Veuillez saisir vos dimensions manuellement.",
+        )
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Plaque non trouvée")
     if resp.status_code != 200:
