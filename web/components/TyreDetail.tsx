@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { TyreResult } from "@/lib/api";
 import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
 import { EuLabel } from "@/components/EuLabel";
@@ -9,30 +10,11 @@ const SEASON: Record<string, string> = {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
 
-interface TyreLike {
-  supplier_ref: string;
-  brand: string;
-  model: string;
-  dimension: string;
-  width?: number | null;
-  aspect_ratio?: number | null;
-  diameter?: number | null;
-  load_index?: string | number | null;
-  speed_rating?: string | null;
-  season: string;
-  image_url: string | null;
-  eu_label?: Record<string, unknown>;
-  display_price: number;
-  display_mode: string;
-  price_ht: number;
-  price_ttc: number;
-}
-
 export function TyreDetail({
   tyre,
   canonicalUrl,
 }: {
-  tyre: TyreLike;
+  tyre: TyreResult;
   canonicalUrl: string;
 }) {
   const productJsonLd = {
