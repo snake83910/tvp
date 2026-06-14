@@ -229,7 +229,12 @@ async def sync_payment(
 
     from app.integrations.payment import SogecommercePayment
     soge = SogecommercePayment()
-    answer = await soge.get_order_status(payment.provider_ref)
+    try:
+        answer = await soge.get_order_status(payment.provider_ref)
+    except Exception as exc:
+        # Order/Get API not enabled on this shop (PSP_100) — sync indisponible.
+        # L'IPN serveur mettra à jour le statut ; on retourne 200 pour ne pas bloquer le frontend.
+        return {"status": "unavailable", "detail": str(exc), "order_status": order.status.value}
 
     order_status_soge = answer.get("orderStatus", "UNPAID")
     if order_status_soge != "PAID":
