@@ -172,14 +172,13 @@ async def get_my_order(
     articles_ht_cents = 0
     articles_ttc_cents = 0
     for it in order.items:
-        # Prix unitaire HT figé à la commande
         unit_ht = it.unit_price_ht_cents / 100
-        # TTC = HT * 1.2 (TVA 20% en France métropolitaine)
-        unit_ttc = round(unit_ht * 1.20, 2)
+        vat_mult = 1 + it.vat_rate / 100
+        unit_ttc = round(unit_ht * vat_mult, 2)
         line_ttc = round(unit_ttc * it.quantity, 2)
         line_ht_cents = it.unit_price_ht_cents * it.quantity
         articles_ht_cents += line_ht_cents
-        articles_ttc_cents += round(line_ht_cents * 1.20)
+        articles_ttc_cents += round(line_ht_cents * vat_mult)
 
         items_detail.append(OrderItemDetail(
             supplier_ref=it.supplier_ref,
