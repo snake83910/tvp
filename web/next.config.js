@@ -7,9 +7,9 @@
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api-sogecommerce.societegenerale.eu https://static.payzen.eu",
-  "style-src 'self' 'unsafe-inline' https://api-sogecommerce.societegenerale.eu",
+  "style-src 'self' 'unsafe-inline' https://api-sogecommerce.societegenerale.eu https://fonts.googleapis.com",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "connect-src 'self' https://api-sogecommerce.societegenerale.eu https://static.payzen.eu",
   "frame-src https://api-sogecommerce.societegenerale.eu https://static.payzen.eu",
   "object-src 'none'",
