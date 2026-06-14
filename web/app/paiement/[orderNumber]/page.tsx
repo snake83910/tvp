@@ -105,22 +105,19 @@ export default function PaymentPage({
           "kr-get-url-refused": refusedUrl,
         });
 
-        await KR.onSubmit(async (paymentData: any) => {
+        await KR.onSubmit((paymentData: any) => {
           // kr-answer et kr-hash retournés par Krypton au navigateur après paiement
           const krAnswer: string = paymentData.rawClientAnswer ?? JSON.stringify(paymentData.clientAnswer);
           const krHash: string = paymentData.hash;
-          try {
-            await fetch(`${BROWSER_API}/payment/verify-kr-answer/${params.orderNumber}`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${getToken()}`,
-              },
-              body: JSON.stringify({ kr_answer: krAnswer, kr_hash: krHash }),
-            });
-          } catch {
-            // en cas d'erreur réseau, on redirige quand même (l'IPN prendra le relais)
-          }
+          // fire-and-forget : on navigue sans attendre la réponse backend
+          fetch(`${BROWSER_API}/payment/verify-kr-answer/${params.orderNumber}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({ kr_answer: krAnswer, kr_hash: krHash }),
+          }).catch(() => {});
           router.push(`/paiement/retour?cmd=${params.orderNumber}`);
           return false; // empêche la soumission du formulaire par Krypton
         });
