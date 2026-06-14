@@ -7,13 +7,16 @@ const nextConfig = {
       { protocol: 'https', hostname: 'cdn.maxityre.com' },
     ],
   },
-  // Proxy API → FastAPI interne (évite le sous-domaine api. et les problèmes SSL/CORS)
-  // tousvospneus.com/api/* → http://127.0.0.1:8000/*
+  // Proxy API → FastAPI interne.
+  // Le rewrite s'exécute côté serveur Next.js (dans Docker) :
+  //   - en prod Docker : API_URL_INTERNAL=http://api:8000 (réseau Docker interne)
+  //   - en local       : fallback sur http://localhost:8000
   async rewrites() {
+    const dest = process.env.API_URL_INTERNAL || 'http://localhost:8000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/:path*',
+        destination: `${dest}/:path*`,
       },
     ];
   },
