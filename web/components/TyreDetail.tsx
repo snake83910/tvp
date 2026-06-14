@@ -17,7 +17,7 @@ interface TyreLike {
   width?: number | null;
   aspect_ratio?: number | null;
   diameter?: number | null;
-  load_index?: string | null;
+  load_index?: string | number | null;
   speed_rating?: string | null;
   season: string;
   image_url: string | null;
