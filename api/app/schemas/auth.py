@@ -67,6 +67,19 @@ class RefreshIn(BaseModel):
     refresh_token: str
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class VerifyEmailIn(BaseModel):
+    token: str
+
+
 # ---------- Sorties ----------
 
 class UserOut(BaseModel):

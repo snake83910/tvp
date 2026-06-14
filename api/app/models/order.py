@@ -178,6 +178,10 @@ class Order(Base):
     paid_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # Dernière relance email envoyée (dunning) — évite le spam
+    last_dunning_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"

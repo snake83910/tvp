@@ -67,6 +67,15 @@ class Settings(BaseSettings):
     # URL publique du site (utilisée dans les liens des emails)
     public_site_url: str = "http://localhost:3000"
 
+    # Sentry — error tracking. Vide = désactivé. Format DSN public Sentry :
+    # https://xxxxx@oxxxx.ingest.sentry.io/xxxxx
+    sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.1  # 10% des requêtes tracées (perf)
+
+    # Token secret partagé pour les jobs cron (curl depuis crontab).
+    # Vide = jobs cron désactivés. Génère via : openssl rand -hex 32
+    cron_token: str = ""
+
     # SIV — recherche par plaque d'immatriculation française
     # Inscription gratuite sur https://www.apiplaqueimmatriculation.com
     # Free tier ~100 req/jour. Mettre la clé dans .env : SIV_API_KEY=xxxx

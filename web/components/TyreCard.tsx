@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { TyreResult } from "@/lib/api";
 import { useCart } from "@/components/CartProvider";
 import { TyreImage } from "@/components/TyreImage";
+import { productUrl } from "@/lib/slug";
 
 const SEASON: Record<string, string> = {
   ete: "Été",
@@ -25,7 +26,18 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
   >("idle");
 
   const price = tyre.display_price.toFixed(2).replace(".", ",");
-  const detailHref = `/produit/${encodeURIComponent(tyre.supplier_ref)}?w=${tyre.width}&h=${tyre.aspect_ratio}&d=${tyre.diameter}`;
+  // URL SEO-friendly avec brand/model dans le path
+  const detailHref =
+    tyre.width != null && tyre.aspect_ratio != null && tyre.diameter != null
+      ? productUrl({
+          ref: tyre.supplier_ref,
+          brand: tyre.brand,
+          model: tyre.model,
+          width: tyre.width,
+          ratio: tyre.aspect_ratio,
+          diameter: tyre.diameter,
+        })
+      : `/produit/${encodeURIComponent(tyre.supplier_ref)}`;
 
   function clamp(n: number) {
     if (Number.isNaN(n)) return DEFAULT_QTY;

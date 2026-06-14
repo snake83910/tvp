@@ -54,3 +54,19 @@ def create_refresh_token(user_id: str) -> str:
 def decode_token(token: str) -> dict:
     """Lève JWTError si invalide/expiré."""
     return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+
+
+def create_password_reset_token(user_id: str) -> str:
+    """Token courte durée pour le reset password (15 min)."""
+    return _create_token(
+        sub=user_id, claims={}, expires=timedelta(minutes=15),
+        token_type="password_reset",
+    )
+
+
+def create_email_verify_token(user_id: str) -> str:
+    """Token de vérification email (24h)."""
+    return _create_token(
+        sub=user_id, claims={}, expires=timedelta(hours=24),
+        token_type="email_verify",
+    )

@@ -59,6 +59,38 @@ def send_welcome(user: User) -> None:
     )
 
 
+def send_verify_email(user: User, token: str) -> None:
+    """Email de vérification après inscription."""
+    mailer = get_mailer()
+    verify_url = f"{_site_url()}/verifier-email?token={token}"
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject="Vérifiez votre adresse email",
+            template="verify_email.html",
+            civilite=_civilite(user),
+            site_url=_site_url(),
+            verify_url=verify_url,
+        )
+    )
+
+
+def send_password_reset(user: User, token: str) -> None:
+    """Email avec lien de reset password."""
+    mailer = get_mailer()
+    reset_url = f"{_site_url()}/reinitialiser-mot-de-passe?token={token}"
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject="Réinitialisation de votre mot de passe",
+            template="password_reset.html",
+            civilite=_civilite(user),
+            site_url=_site_url(),
+            reset_url=reset_url,
+        )
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 # Confirmation de commande (paiement validé)
 # ─────────────────────────────────────────────────────────────────

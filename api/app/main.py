@@ -39,11 +39,39 @@ def _setup_logging() -> None:
 
 
 _setup_logging()
+
+
+def _setup_sentry() -> None:
+    """Init Sentry si SENTRY_DSN est configuré."""
+    if not settings.sentry_dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.environment,
+            traces_sample_rate=settings.sentry_traces_sample_rate,
+            integrations=[FastApiIntegration(), SqlalchemyIntegration()],
+            # On n'envoie PAS d'infos personnelles (emails, mots de passe) à Sentry
+            send_default_pii=False,
+        )
+    except ImportError:
+        logging.getLogger(__name__).warning("sentry-sdk non installé, monitoring désactivé")
+
+
+_setup_sentry()
+
+
 from app.modules.accounts.router import router as accounts_router
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
+from app.modules.auth.totp_router import router as totp_router
 from app.modules.cart.router import router as cart_router
 from app.modules.catalog.router import router as catalog_router
+from app.modules.cron.router import router as cron_router
 from app.modules.orders.payment_router import router as payment_router
 
 app = FastAPI(
@@ -96,7 +124,9 @@ async def health(response: Response):
 
 app.include_router(admin_router)
 app.include_router(auth_router)
+app.include_router(totp_router)
 app.include_router(accounts_router)
 app.include_router(catalog_router)
 app.include_router(cart_router)
 app.include_router(payment_router)
+app.include_router(cron_router)

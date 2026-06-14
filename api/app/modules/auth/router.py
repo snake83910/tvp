@@ -2,21 +2,34 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.core.rate_limit import rate_limit
-from app.core.security import decode_token
+from app.core.security import (
+    create_email_verify_token,
+    create_password_reset_token,
+    decode_token,
+    hash_password,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.modules.auth.service import authenticate, issue_tokens, register_user
-from app.modules.mailer.service import send_welcome
+from app.modules.mailer.service import (
+    send_password_reset,
+    send_verify_email,
+    send_welcome,
+)
 from app.schemas.auth import (
+    ForgotPasswordIn,
     LoginIn,
     RefreshIn,
     RegisterIn,
+    ResetPasswordIn,
     TokenPair,
     UserOut,
+    VerifyEmailIn,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,6 +45,9 @@ async def register(
     await rate_limit(request, "register", max_attempts=3, window_seconds=3600)
     user = await register_user(db, data)
     send_welcome(user)
+    # Token de vérification email envoyé en parallèle
+    token = create_email_verify_token(str(user.id))
+    send_verify_email(user, token)
     return user
 
 
@@ -66,3 +82,70 @@ async def refresh(data: RefreshIn, db: AsyncSession = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 async def me(user: User = Depends(get_current_user)):
     return user
+
+
+@router.post("/forgot-password", status_code=204)
+async def forgot_password(
+    data: ForgotPasswordIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Demande de reset password.
+
+    SÉCURITÉ : on retourne TOUJOURS 204, qu'importe que l'email existe ou
+    non. Sinon on permettrait à un attaquant d'énumérer les comptes.
+    """
+    await rate_limit(request, "forgot", max_attempts=3, window_seconds=600)
+    user = await db.scalar(select(User).where(User.email == data.email.lower()))
+    if user and user.is_active:
+        token = create_password_reset_token(str(user.id))
+        send_password_reset(user, token)
+    # Réponse identique dans tous les cas
+    return None
+
+
+@router.post("/reset-password", status_code=204)
+async def reset_password(
+    data: ResetPasswordIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Applique le nouveau mot de passe si le token est valide."""
+    await rate_limit(request, "reset", max_attempts=10, window_seconds=600)
+    try:
+        payload = decode_token(data.token)
+    except JWTError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide")
+    if payload.get("type") != "password_reset":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
+
+    user = await db.get(User, uuid.UUID(payload["sub"]))
+    if user is None or not user.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Compte introuvable")
+
+    user.password_hash = hash_password(data.new_password)
+    await db.commit()
+    return None
+
+
+@router.post("/verify-email", status_code=204)
+async def verify_email(
+    data: VerifyEmailIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Marque l'email comme vérifié si le token est valide."""
+    try:
+        payload = decode_token(data.token)
+    except JWTError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide")
+    if payload.get("type") != "email_verify":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
+
+    user = await db.get(User, uuid.UUID(payload["sub"]))
+    if user is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Compte introuvable")
+
+    if not user.email_verified:
+        user.email_verified = True
+        await db.commit()
+    return None

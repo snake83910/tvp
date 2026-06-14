@@ -146,3 +146,8 @@ class AdminStats(BaseModel):
     revenue_total_ttc: float
     orders_today: int
     revenue_today_ttc: float
+    # Étendu
+    orders_30d: int = 0
+    revenue_30d_ttc: float = 0.0
+    avg_cart_ttc: float = 0.0
+    top_products: list[dict] = []  # [{ref, label, qty, revenue_ttc}]

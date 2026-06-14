@@ -236,3 +236,89 @@ async def download_invoice(
             "Content-Disposition": f'attachment; filename="facture-{order_number}.pdf"'
         },
     )
+
+
+# ---------- RGPD : export et suppression du compte ----------
+
+@router.get("/export")
+async def export_personal_data(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Droit à la portabilité (RGPD art. 20) : export JSON des données du compte."""
+    addresses = list(
+        await db.scalars(select(Address).where(Address.user_id == user.id))
+    )
+    orders = list(
+        await db.scalars(
+            select(Order)
+            .where(Order.user_id == user.id)
+            .options(selectinload(Order.items))
+        )
+    )
+
+    data = {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": user.phone,
+            "account_type": user.account_type.value,
+            "created_at": user.created_at.isoformat(),
+        },
+        "addresses": [
+            {
+                "label": a.label, "line1": a.line1, "line2": a.line2,
+                "postal_code": a.postal_code, "city": a.city,
+                "country": a.country, "is_default": a.is_default,
+            } for a in addresses
+        ],
+        "orders": [
+            {
+                "order_number": o.order_number,
+                "status": o.status.value,
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+                "total_ht_cents": o.total_ht_cents,
+                "items": [
+                    {
+                        "supplier_ref": it.supplier_ref,
+                        "label": it.label_snapshot,
+                        "quantity": it.quantity,
+                        "unit_price_ht_cents": it.unit_price_ht_cents,
+                    } for it in o.items
+                ],
+            } for o in orders
+        ],
+    }
+    return data
+
+
+@router.delete("/account", status_code=204)
+async def delete_account(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Droit à l'effacement (RGPD art. 17).
+
+    On anonymise plutôt que supprimer : les commandes/factures doivent
+    être conservées 10 ans (obligation comptable). On supprime ce qui
+    est strictement personnel et on rend le compte inutilisable.
+    """
+    from datetime import datetime, timezone
+    anon_email = f"deleted-{user.id}@anonymized.tousvospneus.com"
+    user.email = anon_email
+    user.password_hash = "DELETED"
+    user.first_name = None
+    user.last_name = None
+    user.phone = None
+    user.is_active = False
+    user.email_verified = False
+
+    # Supprimer les adresses (pas requises pour la compta — elles sont
+    # déjà figées dans Order.shipping_address en snapshot JSON)
+    await db.execute(
+        Address.__table__.delete().where(Address.user_id == user.id)
+    )
+    await db.commit()
+    return Response(status_code=204)

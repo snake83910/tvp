@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ProductActions } from "@/components/ProductActions";
@@ -10,6 +11,44 @@ export const dynamic = "force-dynamic";
 const SEASON: Record<string, string> = {
   ete: "Été", hiver: "Hiver", "4saisons": "4 saisons", inconnu: "Non précisé",
 };
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: { ref: string };
+  searchParams: { w?: string; h?: string; d?: string };
+}): Promise<Metadata> {
+  const { w, h, d } = searchParams;
+  const ref = decodeURIComponent(params.ref);
+  if (!w || !h || !d) return { title: "Pneu | Tous Vos Pneus" };
+  try {
+    const tyre = await api.getProduct(ref, Number(w), Number(h), Number(d));
+    const title = `${tyre.brand} ${tyre.model} ${tyre.dimension} — ${tyre.display_price.toFixed(2)}€`;
+    const desc = `Pneu ${tyre.brand} ${tyre.model} en ${tyre.dimension}, saison ${SEASON[tyre.season] ?? tyre.season}. Livraison rapide en France.`;
+    return {
+      title,
+      description: desc,
+      openGraph: {
+        title,
+        description: desc,
+        type: "website",
+        url: `${SITE}/produit/${encodeURIComponent(ref)}?w=${w}&h=${h}&d=${d}`,
+        images: tyre.image_url ? [{ url: tyre.image_url, alt: title }] : [],
+        siteName: "Tous Vos Pneus",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description: desc,
+      },
+    };
+  } catch {
+    return { title: "Pneu | Tous Vos Pneus" };
+  }
+}
 
 export default async function ProductPage({
   params,
@@ -37,8 +76,33 @@ export default async function ProductPage({
     }
   }
 
+  // JSON-LD : aide Google à comprendre que c'est un produit (rich snippets)
+  const productJsonLd = tyre ? {
+    "@context": "https://schema.org/",
+    "@type": "Product",
+    name: `${tyre.brand} ${tyre.model} ${tyre.dimension}`,
+    brand: { "@type": "Brand", name: tyre.brand },
+    sku: ref,
+    image: tyre.image_url || undefined,
+    description: `Pneu ${tyre.brand} ${tyre.model} en ${tyre.dimension}, saison ${SEASON[tyre.season] ?? tyre.season}.`,
+    offers: {
+      "@type": "Offer",
+      url: `${SITE}/produit/${encodeURIComponent(ref)}?w=${w}&h=${h}&d=${d}`,
+      priceCurrency: "EUR",
+      price: tyre.display_price.toFixed(2),
+      availability: "https://schema.org/InStock",
+      itemCondition: "https://schema.org/NewCondition",
+    },
+  } : null;
+
   return (
     <>
+      {productJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+        />
+      )}
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-6 py-10">
         <Link href="/recherche" className="text-sm text-ink-muted hover:text-signal">

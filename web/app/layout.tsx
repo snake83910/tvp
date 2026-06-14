@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
 import { CartProvider } from "@/components/CartProvider";
+import { CookieBanner } from "@/components/CookieBanner";
 
 export const metadata: Metadata = {
   title: "tousvospneus.com — Pneus au meilleur prix, livrés chez vous",
@@ -29,6 +30,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen">
         <CartProvider>{children}</CartProvider>
+        <CookieBanner />
       </body>
     </html>
   );

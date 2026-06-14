@@ -1,0 +1,31 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre commande attend votre paiement
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Vous avez validé votre commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    mais le paiement n'a pas été finalisé.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    Pour ne pas perdre votre panier, finalisez le paiement en quelques clics :
+  </p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+    <tr>
+      <td style="background:#D8232A;border-radius:999px;">
+        <a href="{{ payment_url }}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase;">
+          Finaliser mon paiement
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    Sans paiement sous 7 jours, votre commande sera automatiquement
+    annulée et les articles remis en stock pour d'autres clients.
+  </p>
+{% endblock %}

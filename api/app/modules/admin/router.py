@@ -15,6 +15,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from fastapi import Request
+
+from app.core.audit import audit
 from app.core.deps import get_db, require_role
 from app.models.order import ALLOWED_TRANSITIONS, Order, OrderStatus
 from app.models.user import User, UserRole
@@ -129,11 +132,108 @@ async def get_stats(
     )
     t = today_row.first()
 
+    # 30 derniers jours
+    from datetime import timedelta
+    last30 = today - timedelta(days=30)
+    row30 = (await db.execute(
+        select(func.count(Order.id), func.sum(Order.total_ttc_cents))
+        .where(Order.created_at >= last30, Order.status.in_(paid_statuses))
+    )).first()
+    orders_30d = row30[0] or 0
+    revenue_30d = (row30[1] or 0) / 100
+    avg_cart = (revenue_30d / orders_30d) if orders_30d else 0.0
+
+    # Top 5 produits sur 30 jours
+    from app.models.order import OrderItem
+    top_rows = (await db.execute(
+        select(
+            OrderItem.supplier_ref,
+            OrderItem.label_snapshot,
+            func.sum(OrderItem.quantity).label("qty"),
+            func.sum(OrderItem.quantity * OrderItem.unit_price_ht_cents).label("rev"),
+        )
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(Order.created_at >= last30, Order.status.in_(paid_statuses))
+        .group_by(OrderItem.supplier_ref, OrderItem.label_snapshot)
+        .order_by(func.sum(OrderItem.quantity).desc())
+        .limit(5)
+    )).all()
+    top_products = [
+        {
+            "ref": r.supplier_ref,
+            "label": r.label_snapshot,
+            "qty": int(r.qty or 0),
+            "revenue_ttc": round((r.rev or 0) * 1.20 / 100, 2),
+        }
+        for r in top_rows
+    ]
+
     return AdminStats(
         orders_by_status=by_status,
         revenue_total_ttc=(rev or 0) / 100,
         orders_today=t[0] or 0,
         revenue_today_ttc=(t[1] or 0) / 100,
+        orders_30d=orders_30d,
+        revenue_30d_ttc=revenue_30d,
+        avg_cart_ttc=round(avg_cart, 2),
+        top_products=top_products,
+    )
+
+
+@router.get("/orders/export.csv")
+async def export_orders_csv(
+    from_date: str | None = Query(None, description="YYYY-MM-DD"),
+    to_date: str | None = Query(None, description="YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Export CSV des commandes pour la comptabilité."""
+    import csv
+    import io
+    from datetime import date as _date
+
+    stmt = (
+        select(Order, User.email)
+        .join(User, User.id == Order.user_id)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
+    )
+    if from_date:
+        stmt = stmt.where(Order.created_at >= _date.fromisoformat(from_date))
+    if to_date:
+        stmt = stmt.where(Order.created_at <= _date.fromisoformat(to_date))
+
+    rows = (await db.execute(stmt)).all()
+
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow([
+        "order_number", "status", "created_at", "paid_at",
+        "customer_email", "invoice_number",
+        "total_ht_eur", "total_vat_eur", "total_ttc_eur",
+        "item_count",
+    ])
+    for order, email in rows:
+        w.writerow([
+            order.order_number,
+            order.status.value,
+            order.created_at.isoformat() if order.created_at else "",
+            order.paid_at.isoformat() if order.paid_at else "",
+            email,
+            order.invoice_number or "",
+            f"{order.total_ht_cents / 100:.2f}",
+            f"{(order.total_ttc_cents - order.total_ht_cents) / 100:.2f}",
+            f"{order.total_ttc_cents / 100:.2f}",
+            sum(it.quantity for it in order.items),
+        ])
+
+    csv_bytes = buf.getvalue().encode("utf-8-sig")  # BOM pour Excel
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="commandes.csv"',
+        },
     )
 
 
@@ -229,8 +329,9 @@ async def download_invoice_admin(
 async def update_status(
     order_number: str,
     data: StatusUpdateIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(_admin),
+    admin: User = Depends(_admin),
 ):
     order = await _load_order(order_number, db)
     user = await db.get(User, order.user_id)
@@ -241,6 +342,8 @@ async def update_status(
         target = OrderStatus(data.status)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Statut inconnu : {data.status}")
+
+    previous_status = order.status.value
 
     try:
         order.transition_to(target)
@@ -256,6 +359,18 @@ async def update_status(
         send_order_delivered(order, user)
     elif target == OrderStatus.cancelled:
         send_order_cancelled(order, user, data.cancel_reason)
+
+    await audit(
+        db, user=admin,
+        action="order.status_change",
+        target_type="order", target_id=order.order_number,
+        payload={
+            "from": previous_status, "to": target.value,
+            "tracking_number": data.tracking_number,
+            "cancel_reason": data.cancel_reason,
+        },
+        request=request,
+    )
 
     await db.commit()
     await db.refresh(order)
