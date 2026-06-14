@@ -60,5 +60,11 @@ class Settings(BaseSettings):
 
     # URL publique du site (utilisée dans les liens des emails)
     public_site_url: str = "http://localhost:3000"
-    
+
+    # SIV — recherche par plaque d'immatriculation française
+    # Inscription gratuite sur https://www.apiplaqueimmatriculation.com
+    # Free tier ~100 req/jour. Mettre la clé dans .env : SIV_API_KEY=xxxx
+    siv_api_key: str = ""
+    siv_api_url: str = "https://www.apiplaqueimmatriculation.com/GetInfosVehicule.php"
+
 settings = Settings()

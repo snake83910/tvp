@@ -12,7 +12,6 @@ Recherche catalogue.
 """
 import re
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -186,16 +185,26 @@ _MIDAS_URL = (
 )
 _PLATE_TTL = 86400  # 24 h — les dimensions d'un véhicule ne changent pas
 
+_MIDAS_HEADERS = {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
+    "referer": "https://www.midas.fr/",
+    "origin": "https://www.midas.fr",
+}
+
 
 @router.get("/by-plate", response_model=list[VehicleDimension])
 async def search_by_plate(
     plate: str = Query(..., min_length=4, max_length=12, examples=["AA-123-AA"]),
 ):
-    """Retourne les dimensions pneus d'un véhicule par plaque d'immatriculation.
+    """Retourne les dimensions pneus d'un véhicule par plaque française.
 
-    Proxifie l'API Midas eDriver. Le résultat est mis en cache 24 h
-    (les dimensions d'un véhicule ne changent pas d'un jour à l'autre).
+    Utilise l'API Midas eDriver via curl_cffi (empreinte TLS Chrome) pour
+    contourner la protection Cloudflare qui bloque Python/httpx.
+    Le résultat est mis en cache 24 h.
     """
+    from curl_cffi.requests import AsyncSession
+
     clean = re.sub(r"[-\s]", "", plate).upper()
     if not re.match(r"^[A-Z0-9]{4,9}$", clean):
         raise HTTPException(status_code=422, detail="Format de plaque invalide")
@@ -206,41 +215,24 @@ async def search_by_plate(
         return cached
 
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
+        async with AsyncSession(impersonate="chrome120") as session:
+            resp = await session.get(
                 _MIDAS_URL.format(plate=clean),
-                headers={
-                    "accept": "application/json, text/plain, */*",
-                    "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
-                    "accept-encoding": "gzip, deflate, br",
-                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "referer": "https://www.midas.fr/",
-                    "origin": "https://www.midas.fr",
-                    "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120"',
-                    "sec-ch-ua-mobile": "?0",
-                    "sec-ch-ua-platform": '"Windows"',
-                    "sec-fetch-dest": "empty",
-                    "sec-fetch-mode": "cors",
-                    "sec-fetch-site": "same-origin",
-                },
-                follow_redirects=True,
+                headers=_MIDAS_HEADERS,
+                timeout=15,
             )
-    except httpx.TimeoutException:
+    except Exception as exc:
         raise HTTPException(
-            status_code=504, detail="Service immatriculation indisponible (timeout)"
-        )
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=502, detail="Service immatriculation indisponible"
+            status_code=502, detail=f"Service immatriculation indisponible : {exc}"
         )
 
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Plaque non trouvée")
     if resp.status_code == 403:
         raise HTTPException(
             status_code=503,
-            detail="La recherche par plaque est temporairement indisponible. Veuillez saisir vos dimensions manuellement.",
+            detail="Service immatriculation temporairement indisponible. Veuillez saisir vos dimensions manuellement.",
         )
-    if resp.status_code == 404:
-        raise HTTPException(status_code=404, detail="Plaque non trouvée")
     if resp.status_code != 200:
         raise HTTPException(
             status_code=502,
@@ -255,9 +247,8 @@ async def search_by_plate(
     for tire in raw:
         if "width" not in tire:
             continue
-        key = f"{tire['width']}-{tire['height']}-{tire['diameter']}-{tire.get('load', '')}-{tire.get('speed', '')}"
-        if key not in seen:
-            seen[key] = tire
+        key = f"{tire['width']}-{tire['height']}-{tire['diameter']}"
+        seen.setdefault(key, tire)
 
     if not seen:
         raise HTTPException(
