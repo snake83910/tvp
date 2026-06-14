@@ -41,9 +41,13 @@ export function SearchHero() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Plaque non reconnue.";
-      if (msg.includes("403") || msg.includes("indisponible")) {
+      if (msg.includes("non configurée") || msg.includes("non configur")) {
         setPlateError(
-          "La recherche par plaque est temporairement indisponible. Utilisez l'onglet « Dimensions » pour saisir votre taille de pneu."
+          "La recherche par plaque n'est pas encore disponible. Utilisez l'onglet « Dimensions » pour saisir votre taille de pneu."
+        );
+      } else if (msg.includes("indisponible") || msg.includes("503") || msg.includes("502")) {
+        setPlateError(
+          "Service momentanément indisponible. Utilisez l'onglet « Dimensions » pour saisir votre taille de pneu."
         );
       } else {
         setPlateError(msg);
