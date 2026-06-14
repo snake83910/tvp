@@ -8,6 +8,7 @@ import { useCurrentUser } from "@/lib/auth";
 const NAV = [
   { href: "/admin", label: "Tableau de bord" },
   { href: "/admin/commandes", label: "Commandes" },
+  { href: "/admin/securite", label: "Sécurité 2FA" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
