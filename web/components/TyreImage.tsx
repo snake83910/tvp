@@ -1,11 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 /**
  * Image de pneu avec repli : beaucoup de références Maxityre n'ont
  * pas de visuel. Plutôt qu'une image cassée, on affiche une
  * silhouette de pneu sobre dans la charte.
+ *
+ * Utilise next/image pour : lazy loading, WebP/AVIF auto,
+ * srcset responsive. Fallback <img> si le hostname n'est pas
+ * dans remotePatterns (next.config.js).
  */
 export function TyreImage({
   src,
@@ -29,20 +34,8 @@ export function TyreImage({
           className="h-1/2 w-1/2 text-line-strong"
           fill="none"
         >
-          <circle
-            cx="50"
-            cy="50"
-            r="44"
-            stroke="currentColor"
-            strokeWidth="6"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="20"
-            stroke="currentColor"
-            strokeWidth="6"
-          />
+          <circle cx="50" cy="50" r="44" stroke="currentColor" strokeWidth="6" />
+          <circle cx="50" cy="50" r="20" stroke="currentColor" strokeWidth="6" />
           <circle cx="50" cy="50" r="6" fill="currentColor" />
         </svg>
       </div>
@@ -50,12 +43,16 @@ export function TyreImage({
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt={alt}
-      onError={() => setFailed(true)}
-      className={`object-contain ${className}`}
-    />
+    <div className={`relative ${className}`}>
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+        onError={() => setFailed(true)}
+        className="object-contain"
+        unoptimized={false}
+      />
+    </div>
   );
 }

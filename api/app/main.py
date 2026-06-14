@@ -1,7 +1,44 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import json
+import logging
+import sys
+from datetime import datetime, timezone
 
+from fastapi import FastAPI, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
+from app.core.cache import get_redis
 from app.core.config import settings
+from app.db.session import SessionLocal
+
+
+class JsonFormatter(logging.Formatter):
+    """Format des logs en JSON pour parsing facile (jq, Loki, etc.)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def _setup_logging() -> None:
+    root = logging.getLogger()
+    # Éviter le double-format au reload
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JsonFormatter())
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+
+_setup_logging()
 from app.modules.accounts.router import router as accounts_router
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
@@ -31,8 +68,30 @@ app.add_middleware(
 
 
 @app.get("/health", tags=["system"])
-async def health():
-    return {"status": "ok", "env": settings.environment}
+async def health(response: Response):
+    """Healthcheck applicatif : vérifie DB + Redis.
+    Retourne 503 si l'un des deux est indisponible."""
+    checks: dict[str, str] = {}
+    healthy = True
+
+    try:
+        async with SessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        checks["db"] = "ok"
+    except Exception as exc:
+        checks["db"] = f"error: {exc.__class__.__name__}"
+        healthy = False
+
+    try:
+        await get_redis().ping()
+        checks["redis"] = "ok"
+    except Exception as exc:
+        checks["redis"] = f"error: {exc.__class__.__name__}"
+        healthy = False
+
+    if not healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"status": "ok" if healthy else "degraded", "env": settings.environment, "checks": checks}
 
 
 app.include_router(admin_router)

@@ -27,11 +27,17 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        return [
+        origins = [
             o.strip()
             for o in self.cors_origins.split(",")
             if o.strip()
         ]
+        if self.environment == "production" and "*" in origins:
+            raise ValueError(
+                "CORS_ORIGINS=* est refusé en production. "
+                "Listez explicitement vos origines (ex. https://tousvospneus.com)."
+            )
+        return origins
 
     # Fournisseur Maxityre / AD Tyres
     maxityre_base_url: str = "https://api.maxityre.com"

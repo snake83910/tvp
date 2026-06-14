@@ -25,6 +25,9 @@ export function clearTokens() {
   if (typeof window !== "undefined") {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_KEY);
+    // Nettoyer aussi le panier : éviter qu'un utilisateur suivant
+    // qui se connecte sur le même navigateur voie l'ancien panier
+    localStorage.removeItem("tvp_cart_session");
   }
 }
 

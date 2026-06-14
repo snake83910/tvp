@@ -145,7 +145,7 @@ class SogecommercePayment(PaymentProvider):
             "formAction": "PAYMENT",
             "ipnTargetUrl": settings.sogecommerce_ipn_url,
         }
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)) as client:
             resp = await client.post(
                 self._API,
                 headers={
@@ -175,7 +175,7 @@ class SogecommercePayment(PaymentProvider):
     async def get_order_status(self, order_uuid: str) -> dict:
         """Interroge Sogecommerce pour connaître le statut d'un paiement.
         Fallback quand l'IPN n'arrive pas (dev local sans ngrok)."""
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)) as client:
             resp = await client.post(
                 f"{self._BASE}/Order/Get",
                 headers={

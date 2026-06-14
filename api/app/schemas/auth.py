@@ -9,10 +9,36 @@ from app.models.user import AccountType, UserRole
 
 # ---------- Inscription / connexion ----------
 
+def _validate_siret_luhn(siret: str) -> bool:
+    """Algorithme de Luhn appliqué au SIRET (14 chiffres)."""
+    if not siret.isdigit() or len(siret) != 14:
+        return False
+    total = 0
+    for i, ch in enumerate(siret):
+        n = int(ch)
+        # Position paire (1-indexée) = doublée. Position 1 = pas doublée.
+        if i % 2 == 1:
+            n *= 2
+            if n > 9:
+                n -= 9
+        total += n
+    return total % 10 == 0
+
+
 class ProInfo(BaseModel):
     company_name: str = Field(min_length=2, max_length=255)
     siret: str | None = Field(default=None, max_length=14)
     vat_number: str | None = Field(default=None, max_length=20)
+
+    @field_validator("siret")
+    @classmethod
+    def validate_siret(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.replace(" ", "")
+        if not _validate_siret_luhn(v):
+            raise ValueError("SIRET invalide (14 chiffres, contrôle Luhn)")
+        return v
 
 
 class RegisterIn(BaseModel):

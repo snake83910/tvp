@@ -12,6 +12,7 @@ import {
   type OrderSummary,
 } from "@/lib/auth";
 import { clearCartSession } from "@/lib/cart";
+import { PageSkeleton, SkeletonList } from "@/components/Skeleton";
 
 const STATUS_LABEL: Record<string, string> = {
   pending_payment: "En attente de paiement",
@@ -79,7 +80,7 @@ export default function AccountPage() {
       <>
         <SiteHeader />
         <main className="mx-auto max-w-4xl px-6 py-16">
-          <p className="text-ink-muted">Chargement…</p>
+          <PageSkeleton />
         </main>
       </>
     );
@@ -344,7 +345,7 @@ export default function AccountPage() {
 
           {/* Liste des adresses */}
           {addresses === null && !addrError && (
-            <p className="text-sm text-ink-muted">Chargement…</p>
+            <SkeletonList count={2} itemClass="h-20" />
           )}
 
           {addresses && addresses.length === 0 && !showAddForm && (
@@ -434,7 +435,7 @@ export default function AccountPage() {
           )}
 
           {orders === null && !ordersError && (
-            <p className="text-ink-muted">Chargement…</p>
+            <SkeletonList count={3} itemClass="h-24" />
           )}
 
           {orders && orders.length === 0 && (

@@ -44,7 +44,7 @@ class MaxityreConnector(SupplierConnector):
             )
 
         url = f"{settings.maxityre_base_url}/fr_FR/login_check"
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)) as client:
             resp = await client.post(
                 url,
                 headers={
@@ -123,6 +123,10 @@ class MaxityreConnector(SupplierConnector):
         diameter: int,
         page: int,
     ) -> dict:
+        """Récupère une page de résultats avec retry simple.
+        3 tentatives sur erreur réseau / 5xx, backoff 0.5s puis 1s."""
+        import asyncio as _asyncio
+
         params = {
             "search_pneus_dimension[category]": "auto",
             "search_pneus_dimension[width]": width,
@@ -130,12 +134,24 @@ class MaxityreConnector(SupplierConnector):
             "search_pneus_dimension[diameter]": diameter,
             "search_pneus_dimension[page]": page,
         }
-        resp = await client.get(
-            url, headers=self._headers(), params=params
-        )
-        if resp.status_code != 200:
-            return {}
-        return resp.json() or {}
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                resp = await client.get(
+                    url, headers=self._headers(), params=params
+                )
+                if resp.status_code == 200:
+                    return resp.json() or {}
+                if 500 <= resp.status_code < 600:
+                    # 5xx : retryable
+                    last_exc = RuntimeError(f"HTTP {resp.status_code}")
+                else:
+                    return {}
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                last_exc = exc
+            if attempt < 2:
+                await _asyncio.sleep(0.5 * (attempt + 1))
+        return {}
 
     async def search_by_dimension(
         self, width: int, height: int, diameter: int
@@ -156,7 +172,7 @@ class MaxityreConnector(SupplierConnector):
 
         import asyncio
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)) as client:
             first = await self._fetch_page(
                 client, url, width, height, diameter, 1
             )

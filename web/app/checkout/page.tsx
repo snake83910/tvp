@@ -89,9 +89,15 @@ export default function CheckoutPage() {
       }
       const res = await cartApi.checkout(addressId, true);
       if (res.price_changes.length > 0) {
+        // Détails des changements
+        const changes = res.price_changes
+          .map(c => `• ${c.label} : ${c.old_ttc.toFixed(2)}€ → ${c.new_ttc.toFixed(2)}€`)
+          .join("\n");
         setError(
-          "Le prix de certains articles a changé. Retournez au panier pour vérifier.",
+          `Le prix de certains articles a changé :\n${changes}\n\nVotre panier a été mis à jour, veuillez vérifier avant de valider.`,
         );
+        // Rafraîchir le panier pour afficher les nouveaux prix
+        await refresh();
         setBusy(false);
         return;
       }

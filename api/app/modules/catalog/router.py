@@ -13,7 +13,7 @@ Recherche catalogue.
 import asyncio
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,9 +122,15 @@ async def search_by_dimensions(
     sort: str = Query("price_asc"),
     page: int = Query(1, ge=1),
     per_page: int = Query(24, ge=1, le=96),
+    response: Response = None,  # type: ignore
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ):
+    # Cache navigateur : private (varie selon l'utilisateur connecté), 5 min.
+    # Permet à un visiteur qui revient sur la même recherche d'éviter un appel.
+    if response is not None:
+        response.headers["Cache-Control"] = "private, max-age=300"
+
     account_type, price_tier = await _resolve_account(db, user)
 
     # 1 requête DB pour les règles, 1 pour le catalogue (cache Redis) — pas de N+1

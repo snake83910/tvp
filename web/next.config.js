@@ -5,7 +5,10 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'cdn.maxityre.com' },
+      { protocol: 'https', hostname: '**.maxityre.com' },
+      { protocol: 'https', hostname: '**.adtyre.com' },
     ],
+    formats: ['image/avif', 'image/webp'],
   },
   // Proxy API → FastAPI interne.
   // Le rewrite s'exécute côté serveur Next.js (dans Docker) :
