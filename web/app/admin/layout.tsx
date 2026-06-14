@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useCurrentUser } from "@/lib/auth";
+import { clearTokens, useCurrentUser } from "@/lib/auth";
 
 const NAV = [
   { href: "/admin", label: "Tableau de bord" },
@@ -42,12 +42,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex min-h-screen bg-paper-dim">
       {/* Sidebar */}
-      <aside className="w-56 shrink-0 border-r border-line bg-paper">
+      <aside className="flex w-56 shrink-0 flex-col border-r border-line bg-paper">
         <div className="border-b border-line px-5 py-4">
           <p className="font-display text-base font-black text-signal">TVP Admin</p>
           <p className="mt-0.5 truncate text-xs text-ink-muted">{user.email}</p>
         </div>
-        <nav className="p-3">
+        <nav className="flex-1 p-3">
           {NAV.map(({ href, label }) => {
             const active =
               href === "/admin"
@@ -68,6 +68,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             );
           })}
         </nav>
+        <div className="border-t border-line p-3">
+          <button
+            onClick={() => {
+              clearTokens();
+              router.replace("/admin/login");
+            }}
+            className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink-soft transition hover:bg-signal-light hover:text-signal-dark"
+          >
+            <span className="mr-2">⎋</span>Déconnexion
+          </button>
+        </div>
       </aside>
 
       {/* Contenu */}
