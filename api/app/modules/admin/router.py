@@ -190,7 +190,7 @@ async def export_orders_csv(
     """Export CSV des commandes pour la comptabilité."""
     import csv
     import io
-    from datetime import date as _date, datetime as _dt, timedelta
+    from datetime import date as _date, datetime as _dt, timedelta, timezone
 
     stmt = (
         select(Order)
@@ -198,10 +198,12 @@ async def export_orders_csv(
         .order_by(Order.created_at.desc())
     )
     if from_date:
-        stmt = stmt.where(Order.created_at >= _date.fromisoformat(from_date))
+        # Début de journée UTC
+        start = _dt.combine(_date.fromisoformat(from_date), _dt.min.time(), tzinfo=timezone.utc)
+        stmt = stmt.where(Order.created_at >= start)
     if to_date:
-        # +1 jour pour inclure les commandes du jour to_date
-        end = _date.fromisoformat(to_date) + timedelta(days=1)
+        # Fin de journée inclusive = début du jour suivant en UTC
+        end = _dt.combine(_date.fromisoformat(to_date) + timedelta(days=1), _dt.min.time(), tzinfo=timezone.utc)
         stmt = stmt.where(Order.created_at < end)
 
     orders = list(await db.scalars(stmt))
