@@ -15,12 +15,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { user, loading } = useCurrentUser();
   const router = useRouter();
   const pathname = usePathname();
+  const isLoginPage = pathname === "/admin/login";
 
   useEffect(() => {
+    if (isLoginPage) return;
     if (loading) return;
-    if (!user) { router.replace("/connexion"); return; }
-    if (user.role !== "admin") { router.replace("/"); }
-  }, [loading, user, router]);
+    if (!user) { router.replace("/admin/login"); return; }
+    if (user.role !== "admin") { router.replace("/admin/login"); }
+  }, [loading, user, router, isLoginPage]);
+
+  // La page de login n'a pas la sidebar
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (

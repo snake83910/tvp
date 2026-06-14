@@ -70,3 +70,13 @@ def create_email_verify_token(user_id: str) -> str:
         sub=user_id, claims={}, expires=timedelta(hours=24),
         token_type="email_verify",
     )
+
+
+def create_pre_2fa_token(user_id: str) -> str:
+    """Token court (5 min) après vérification email/password.
+    Doit être échangé contre un access token via /auth/admin/verify-2fa
+    avec un code TOTP valide."""
+    return _create_token(
+        sub=user_id, claims={}, expires=timedelta(minutes=5),
+        token_type="pre_2fa",
+    )

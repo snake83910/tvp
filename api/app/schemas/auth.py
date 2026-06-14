@@ -80,6 +80,26 @@ class VerifyEmailIn(BaseModel):
     token: str
 
 
+class AdminLoginOut(BaseModel):
+    """Réponse au login admin.
+
+    - Si 2FA non activé : retourne directement les tokens.
+    - Si 2FA activé : retourne un pre_2fa_token, le client doit appeler
+      /auth/admin/verify-2fa avec ce token + code TOTP pour obtenir les
+      tokens finaux.
+    """
+    requires_2fa: bool = False
+    pre_2fa_token: str | None = None
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+
+
+class Verify2faIn(BaseModel):
+    pre_2fa_token: str
+    code: str = Field(min_length=6, max_length=6)
+
+
 # ---------- Sorties ----------
 
 class UserOut(BaseModel):

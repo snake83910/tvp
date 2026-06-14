@@ -10,9 +10,11 @@ from app.core.rate_limit import rate_limit
 from app.core.security import (
     create_email_verify_token,
     create_password_reset_token,
+    create_pre_2fa_token,
     decode_token,
     hash_password,
 )
+from app.models.user import UserRole
 from app.db.session import get_db
 from app.models.user import User
 from app.modules.auth.service import authenticate, issue_tokens, register_user
@@ -22,6 +24,7 @@ from app.modules.mailer.service import (
     send_welcome,
 )
 from app.schemas.auth import (
+    AdminLoginOut,
     ForgotPasswordIn,
     LoginIn,
     RefreshIn,
@@ -29,6 +32,7 @@ from app.schemas.auth import (
     ResetPasswordIn,
     TokenPair,
     UserOut,
+    Verify2faIn,
     VerifyEmailIn,
 )
 
@@ -149,3 +153,68 @@ async def verify_email(
         user.email_verified = True
         await db.commit()
     return None
+
+
+# ── Login admin séparé avec 2FA bloquant ──────────────────────────
+
+@router.post("/admin/login", response_model=AdminLoginOut)
+async def admin_login(
+    data: LoginIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Login dédié aux admins.
+
+    Vérifie email/password ET role == admin. Si l'admin a activé le 2FA,
+    retourne un pre_2fa_token à échanger via /auth/admin/verify-2fa avec
+    un code TOTP valide.
+    """
+    await rate_limit(request, "admin_login", max_attempts=5, window_seconds=60)
+    user = await authenticate(db, data.email, data.password)
+    if user.role != UserRole.admin:
+        # Même message qu'un mauvais password : pas d'énumération des admins
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email ou mot de passe incorrect",
+        )
+
+    if user.totp_enabled:
+        return AdminLoginOut(
+            requires_2fa=True,
+            pre_2fa_token=create_pre_2fa_token(str(user.id)),
+        )
+
+    tokens = issue_tokens(user)
+    return AdminLoginOut(
+        requires_2fa=False,
+        access_token=tokens["access_token"],
+        refresh_token=tokens["refresh_token"],
+    )
+
+
+@router.post("/admin/verify-2fa", response_model=TokenPair)
+async def admin_verify_2fa(
+    data: Verify2faIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Échange un pre_2fa_token + code TOTP contre les tokens finaux."""
+    await rate_limit(request, "admin_2fa", max_attempts=5, window_seconds=60)
+    try:
+        payload = decode_token(data.pre_2fa_token)
+    except JWTError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expirée, recommencez")
+    if payload.get("type") != "pre_2fa":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
+
+    user = await db.get(User, uuid.UUID(payload["sub"]))
+    if user is None or not user.is_active or user.role != UserRole.admin:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Compte invalide")
+    if not user.totp_enabled or not user.totp_secret:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "2FA non activé sur ce compte")
+
+    import pyotp
+    if not pyotp.TOTP(user.totp_secret).verify(data.code, valid_window=1):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Code 2FA incorrect")
+
+    return issue_tokens(user)
