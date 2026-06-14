@@ -13,6 +13,8 @@ export function saveTokens(access: string, refresh: string) {
   if (typeof window !== "undefined") {
     sessionStorage.setItem(TOKEN_KEY, access);
     sessionStorage.setItem(REFRESH_KEY, refresh);
+    // Notifie les composants qui écoutent (ex: useCurrentUser)
+    window.dispatchEvent(new Event("tvp:auth-changed"));
   }
 }
 
@@ -199,15 +201,30 @@ export function useCurrentUser() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getToken()) {
-      setLoading(false);
-      return;
+    let cancelled = false;
+
+    function refresh() {
+      if (!getToken()) {
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
+        return;
+      }
+      setLoading(true);
+      auth
+        .me()
+        .then((u) => { if (!cancelled) setUser(u); })
+        .catch(() => clearTokens())
+        .finally(() => { if (!cancelled) setLoading(false); });
     }
-    auth
-      .me()
-      .then(setUser)
-      .catch(() => clearTokens())
-      .finally(() => setLoading(false));
+
+    refresh();
+    window.addEventListener("tvp:auth-changed", refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("tvp:auth-changed", refresh);
+    };
   }, []);
 
   return { user, loading };
