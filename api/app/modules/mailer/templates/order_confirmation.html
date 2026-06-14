@@ -1,0 +1,79 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre commande est confirmée
+  </h1>
+
+  <p style="margin:0 0 8px 0;">
+    Nous avons bien reçu votre paiement pour la commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>.
+    Voici le récapitulatif :
+  </p>
+
+  <!-- Articles -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 12px 0;border-top:1px solid #e7e7e2;">
+    {% for it in items %}
+    <tr>
+      <td style="padding:14px 0;border-bottom:1px solid #e7e7e2;vertical-align:top;">
+        <div style="font-weight:700;color:#17181a;">{{ it.label }}</div>
+        <div style="font-size:13px;color:#7a7a72;">
+          {{ it.qty }} pneu{% if it.qty > 1 %}s{% endif %} ×
+          {{ "%.2f"|format(it.unit_ttc)|replace(".", ",") }} €
+        </div>
+      </td>
+      <td style="padding:14px 0;border-bottom:1px solid #e7e7e2;text-align:right;font-weight:900;color:#17181a;white-space:nowrap;vertical-align:top;">
+        {{ "%.2f"|format(it.line_ttc)|replace(".", ",") }} €
+      </td>
+    </tr>
+    {% endfor %}
+
+    <tr>
+      <td style="padding:14px 0 6px 0;color:#7a7a72;font-size:14px;">
+        Livraison
+      </td>
+      <td style="padding:14px 0 6px 0;text-align:right;color:#17181a;font-weight:700;white-space:nowrap;">
+        {% if shipping_ttc == 0 %}Offerte{% else %}{{ "%.2f"|format(shipping_ttc)|replace(".", ",") }} €{% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 0;border-top:2px solid #17181a;font-weight:900;font-size:17px;color:#17181a;">
+        Total TTC
+      </td>
+      <td style="padding:12px 0;border-top:2px solid #17181a;text-align:right;font-weight:900;font-size:17px;color:#17181a;white-space:nowrap;">
+        {{ "%.2f"|format(total_ttc)|replace(".", ",") }} €
+      </td>
+    </tr>
+  </table>
+
+  <!-- Livraison -->
+  <div style="margin:24px 0 16px 0;padding:14px 16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Livré à
+    </div>
+    <div style="color:#17181a;">
+      {{ shipping_address.line1 }}{% if shipping_address.line2 %}, {{ shipping_address.line2 }}{% endif %}<br />
+      {{ shipping_address.postal_code }} {{ shipping_address.city }}
+    </div>
+  </div>
+
+  <p style="margin:0 0 20px 0;">
+    Votre commande va maintenant être transmise à notre fournisseur. Vous
+    recevrez un nouvel email dès qu'elle sera expédiée, avec le numéro de
+    suivi du colis.
+  </p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+    <tr>
+      <td style="background:#17181a;border-radius:999px;">
+        <a href="{{ order_url }}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase;">
+          Voir ma commande
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    Merci pour votre confiance,<br />
+    L'équipe Tous Vos Pneus
+  </p>
+{% endblock %}

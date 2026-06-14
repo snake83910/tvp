@@ -1,0 +1,40 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre commande a été annulée
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Votre commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    d'un montant de
+    <strong>{{ "%.2f"|format(total_ttc)|replace(".", ",") }} €</strong>
+    a été annulée.
+  </p>
+
+  {% if reason %}
+  <div style="margin:20px 0;padding:14px 16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Motif
+    </div>
+    <div style="color:#17181a;">
+      {{ reason }}
+    </div>
+  </div>
+  {% endif %}
+
+  <p style="margin:0 0 20px 0;">
+    Si votre paiement avait été prélevé, vous serez remboursé sur le
+    moyen de paiement utilisé sous 5 à 14 jours ouvrés (le délai dépend
+    de votre banque).
+  </p>
+
+  <p style="margin:0 0 20px 0;">
+    Pour toute question concernant cette annulation, contactez-nous à
+    <a href="mailto:serviceclient@tousvospneus.com" style="color:#D8232A;text-decoration:none;">serviceclient@tousvospneus.com</a>.
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    L'équipe Tous Vos Pneus
+  </p>
+{% endblock %}

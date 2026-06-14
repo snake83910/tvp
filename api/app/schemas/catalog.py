@@ -1,6 +1,14 @@
 from pydantic import BaseModel
 
 
+class VehicleDimension(BaseModel):
+    width: int
+    height: int
+    diameter: int
+    load_index: str
+    speed_rating: str
+
+
 class TyreResult(BaseModel):
     supplier_ref: str
     brand: str

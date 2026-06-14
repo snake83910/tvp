@@ -1,0 +1,31 @@
+# Overlay de production — utiliser avec :
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Différences vs dev :
+#   - postgres/redis non exposés sur l'hôte (sécurité)
+#   - api : pas de hot-reload, pas de volume source
+#   - api : 4 workers uvicorn
+#   - web : image buildée (pas de volume source)
+
+services:
+  postgres:
+    ports: !reset []          # Ne pas exposer 5432 sur l'hôte en prod
+    restart: unless-stopped
+
+  redis:
+    ports: !reset []          # Ne pas exposer 6379 sur l'hôte en prod
+    restart: unless-stopped
+
+  api:
+    volumes: !reset []        # Pas de montage source en prod
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 4
+      --proxy-headers
+      --forwarded-allow-ips '*'
+    restart: unless-stopped
+
+  web:
+    restart: unless-stopped

@@ -46,7 +46,19 @@ class Settings(BaseSettings):
     sogecommerce_hmac_key: str = ""
     sogecommerce_shop_id: str = ""
     sogecommerce_api_password: str = ""
+    sogecommerce_public_key: str = ""   # Back Office → Clés API REST → Clé publique
     sogecommerce_ipn_url: str = "http://localhost:8000/payment/ipn"
 
+    # Email transactionnel
+    mailer_provider: str = "console"  # console | smtp
+    smtp_host: str = "smtp.ionos.fr"
+    smtp_port: int = 465
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_sender: str = ""             # peut différer de username
+    smtp_use_ssl: bool = True         # 465 = SSL, 587 = STARTTLS
 
+    # URL publique du site (utilisée dans les liens des emails)
+    public_site_url: str = "http://localhost:3000"
+    
 settings = Settings()

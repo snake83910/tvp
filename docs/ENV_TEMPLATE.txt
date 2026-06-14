@@ -1,0 +1,19 @@
+# Variables à ajouter dans api/.env (ou .env à la racine du projet)
+
+# ─────────────────────────────────────────────────────────
+# EMAILS — démarrage en mode console (visible dans logs Docker)
+# ─────────────────────────────────────────────────────────
+MAILER_PROVIDER=console
+PUBLIC_SITE_URL=http://localhost:3000
+
+# ─────────────────────────────────────────────────────────
+# EMAILS — config SMTP IONOS (à activer pour envoyer pour de vrai)
+# Décommente ces lignes et change MAILER_PROVIDER ci-dessus en "smtp"
+# ─────────────────────────────────────────────────────────
+# MAILER_PROVIDER=smtp
+# SMTP_HOST=smtp.ionos.fr
+# SMTP_PORT=465
+# SMTP_USERNAME=serviceclient@tousvospneus.com
+# SMTP_PASSWORD=ton-mot-de-passe-ionos
+# SMTP_SENDER=serviceclient@tousvospneus.com
+# SMTP_USE_SSL=true

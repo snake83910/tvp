@@ -1,0 +1,58 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre commande est en route
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Bonne nouvelle : votre commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    a été expédiée.
+  </p>
+
+  {% if tracking_number %}
+  <div style="margin:20px 0;padding:16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Numéro de suivi
+    </div>
+    <div style="font-family:'Courier New',monospace;font-weight:700;font-size:16px;color:#17181a;">
+      {{ tracking_number }}
+    </div>
+    {% if carrier %}
+    <div style="margin-top:6px;font-size:13px;color:#7a7a72;">
+      Transporteur : {{ carrier }}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div style="margin:20px 0;padding:14px 16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Adresse de livraison
+    </div>
+    <div style="color:#17181a;">
+      {{ shipping_address.line1 }}{% if shipping_address.line2 %}, {{ shipping_address.line2 }}{% endif %}<br />
+      {{ shipping_address.postal_code }} {{ shipping_address.city }}
+    </div>
+  </div>
+
+  <p style="margin:0 0 20px 0;">
+    Le délai de livraison habituel est de 3 à 5 jours ouvrés à compter
+    de l'expédition. Pensez à vérifier la présence d'un avis de passage
+    dans votre boîte aux lettres.
+  </p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+    <tr>
+      <td style="background:#17181a;border-radius:999px;">
+        <a href="{{ order_url }}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase;">
+          Suivre ma commande
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    L'équipe Tous Vos Pneus
+  </p>
+{% endblock %}

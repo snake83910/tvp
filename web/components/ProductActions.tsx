@@ -5,12 +5,21 @@ import { useState } from "react";
 import type { TyreResult } from "@/lib/api";
 import { useCart } from "@/components/CartProvider";
 
+const DEFAULT_QTY = 2;
+const MIN_QTY = 1;
+const MAX_QTY = 20;
+
 export function ProductActions({ tyre }: { tyre: TyreResult }) {
   const { add } = useCart();
-  const [qty, setQty] = useState(2);
+  const [qty, setQty] = useState(DEFAULT_QTY);
   const [state, setState] = useState<
     "idle" | "adding" | "done" | "error"
   >("idle");
+
+  function clamp(n: number) {
+    if (Number.isNaN(n)) return DEFAULT_QTY;
+    return Math.max(MIN_QTY, Math.min(MAX_QTY, Math.floor(n)));
+  }
 
   async function handleAdd() {
     if (
@@ -41,20 +50,34 @@ export function ProductActions({ tyre }: { tyre: TyreResult }) {
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-muted">
         Quantité
       </label>
-      <div className="mb-4 flex gap-2">
-        {[1, 2, 4].map((q) => (
-          <button
-            key={q}
-            onClick={() => setQty(q)}
-            className={`h-10 w-12 rounded-lg border text-sm font-bold transition ${
-              qty === q
-                ? "border-signal bg-signal text-white"
-                : "border-line text-ink-soft hover:border-signal/50"
-            }`}
-          >
-            {q}
-          </button>
-        ))}
+      <div className="mb-4 flex items-center rounded-lg border border-line w-fit">
+        <button
+          type="button"
+          onClick={() => setQty(clamp(qty - 1))}
+          disabled={qty <= MIN_QTY}
+          className="px-4 py-2 text-ink-soft transition hover:text-signal disabled:opacity-30"
+          aria-label="Diminuer la quantité"
+        >
+          −
+        </button>
+        <input
+          type="number"
+          min={MIN_QTY}
+          max={MAX_QTY}
+          value={qty}
+          onChange={(e) => setQty(clamp(parseInt(e.target.value, 10)))}
+          className="w-14 border-x border-line bg-transparent py-2 text-center font-bold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          aria-label="Quantité"
+        />
+        <button
+          type="button"
+          onClick={() => setQty(clamp(qty + 1))}
+          disabled={qty >= MAX_QTY}
+          className="px-4 py-2 text-ink-soft transition hover:text-signal disabled:opacity-30"
+          aria-label="Augmenter la quantité"
+        >
+          +
+        </button>
       </div>
 
       {state === "done" ? (

@@ -10,7 +10,10 @@ Recherche catalogue.
 - Les facettes (marques, saisons, fourchette de prix reellement
   presentes) sont renvoyees pour batir la barre de filtres cote front.
 """
-from fastapi import APIRouter, Depends, Query
+import re
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,7 @@ from app.schemas.catalog import (
     SearchFacets,
     SearchResponse,
     TyreResult,
+    VehicleDimension,
 )
 
 router = APIRouter(prefix="/search", tags=["catalog"])
@@ -174,6 +178,100 @@ async def search_by_dimensions(
         pages=pages,
         facets=facets,
     )
+
+
+_MIDAS_URL = (
+    "https://www.midas.fr/api/edriver/vehicles/tires/search"
+    "?plateNumber={plate}&plateLocale=fr-FR"
+)
+_PLATE_TTL = 86400  # 24 h — les dimensions d'un véhicule ne changent pas
+
+
+@router.get("/by-plate", response_model=list[VehicleDimension])
+async def search_by_plate(
+    plate: str = Query(..., min_length=4, max_length=12, examples=["AA-123-AA"]),
+):
+    """Retourne les dimensions pneus d'un véhicule par plaque d'immatriculation.
+
+    Proxifie l'API Midas eDriver. Le résultat est mis en cache 24 h
+    (les dimensions d'un véhicule ne changent pas d'un jour à l'autre).
+    """
+    clean = re.sub(r"[-\s]", "", plate).upper()
+    if not re.match(r"^[A-Z0-9]{4,9}$", clean):
+        raise HTTPException(status_code=422, detail="Format de plaque invalide")
+
+    cache_key = f"plate:{clean}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _MIDAS_URL.format(plate=clean),
+                headers={
+                    "accept": "application/json, text/plain, */*",
+                    "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
+                    "accept-encoding": "gzip, deflate, br",
+                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "referer": "https://www.midas.fr/",
+                    "origin": "https://www.midas.fr",
+                    "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120"',
+                    "sec-ch-ua-mobile": "?0",
+                    "sec-ch-ua-platform": '"Windows"',
+                    "sec-fetch-dest": "empty",
+                    "sec-fetch-mode": "cors",
+                    "sec-fetch-site": "same-origin",
+                },
+                follow_redirects=True,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504, detail="Service immatriculation indisponible (timeout)"
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=502, detail="Service immatriculation indisponible"
+        )
+
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Plaque non trouvée")
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Service immatriculation : erreur {resp.status_code}",
+        )
+
+    raw: list[dict] = resp.json()
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=404, detail="Aucune donnée pour cette plaque")
+
+    seen: dict[str, dict] = {}
+    for tire in raw:
+        if "width" not in tire:
+            continue
+        key = f"{tire['width']}-{tire['height']}-{tire['diameter']}-{tire.get('load', '')}-{tire.get('speed', '')}"
+        if key not in seen:
+            seen[key] = tire
+
+    if not seen:
+        raise HTTPException(
+            status_code=404, detail="Aucune dimension trouvée pour cette plaque"
+        )
+
+    result = [
+        VehicleDimension(
+            width=int(t["width"]),
+            height=int(t["height"]),
+            diameter=int(t["diameter"]),
+            load_index=str(t.get("load", "")),
+            speed_rating=str(t.get("speed", "")),
+        )
+        for t in seen.values()
+    ]
+
+    await cache_set(cache_key, [r.model_dump() for r in result], _PLATE_TTL)
+    return result
 
 
 @router.get("/product/{ref}", response_model=TyreResult)

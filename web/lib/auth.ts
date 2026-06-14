@@ -56,8 +56,105 @@ async function call<T>(
     }
     throw new Error(detail);
   }
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
   return res.json() as Promise<T>;
 }
+
+export interface Address {
+  id: string;
+  label: string | null;
+  line1: string;
+  line2: string | null;
+  postal_code: string;
+  city: string;
+  country: string;
+  is_default: boolean;
+}
+
+export interface OrderSummary {
+  order_number: string;
+  status: string;
+  created_at: string;
+  total_ttc: number;
+  item_count: number;
+}
+
+export interface OrderItemDetail {
+  supplier_ref: string;
+  label: string;
+  quantity: number;
+  unit_price_ht: number;
+  unit_price_ttc: number;
+  line_total_ttc: number;
+}
+
+export interface OrderDetail {
+  order_number: string;
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+  delivery_mode: string;
+  shipping_address: {
+    label?: string | null;
+    line1?: string;
+    line2?: string | null;
+    postal_code?: string;
+    city?: string;
+    country?: string;
+  };
+  invoice_number: number | null;
+  tracking_number: string | null;
+  carrier: string | null;
+  tracking_url: string | null;
+  items: OrderItemDetail[];
+  articles_ht: number;
+  articles_ttc: number;
+  shipping_ht: number;
+  shipping_ttc: number;
+  total_ht: number;
+  total_vat: number;
+  total_ttc: number;
+}
+
+export async function downloadInvoice(orderNumber: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(
+    `${BROWSER_API}/me/orders/${orderNumber}/invoice`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  );
+  if (!res.ok) throw new Error("Impossible de télécharger la facture");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `facture-${orderNumber}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export const accountApi = {
+  listAddresses: () => call<Address[]>("/me/addresses", "GET", undefined, true),
+
+  addAddress: (a: Omit<Address, "id">) =>
+    call<Address>("/me/addresses", "POST", a, true),
+
+  updateAddress: (id: string, a: Omit<Address, "id">) =>
+    call<Address>(`/me/addresses/${id}`, "PUT", a, true),
+
+  setDefaultAddress: (id: string) =>
+    call<Address>(`/me/addresses/${id}/default`, "PATCH", undefined, true),
+
+  deleteAddress: (id: string) =>
+    call<void>(`/me/addresses/${id}`, "DELETE", undefined, true),
+
+  listOrders: () =>
+    call<OrderSummary[]>("/me/orders", "GET", undefined, true),
+
+  getOrder: (orderNumber: string) =>
+    call<OrderDetail>(`/me/orders/${orderNumber}`, "GET", undefined, true),
+};
 
 export interface UserMe {
   id: string;
@@ -80,6 +177,7 @@ export const auth = {
       ...data,
       account_type: "particulier",
     }),
+    
 
   login: async (email: string, password: string) => {
     const r = await call<{

@@ -18,6 +18,7 @@ from app.schemas.order import (
     AddItemIn,
     CartItemOut,
     CartOut,
+    CheckoutIn,
     CheckoutResult,
     UpdateQtyIn,
 )
@@ -87,7 +88,7 @@ async def get_cart(
     else:
         cart = None
     if cart is None:
-        raise HTTPException(status_code=404, detail="Panier vide")
+        return CartOut(id=None, session_token=None, items=[], total_ht=0, total_ttc=0)
     return _serialize(cart)
 
 
@@ -143,14 +144,32 @@ async def merge_cart(
 
 @router.post("/checkout", response_model=CheckoutResult)
 async def checkout(
+    data: CheckoutIn,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """
+    Finalise le panier en commande.
+ 
+    - Exige acceptation explicite des CGV (obligation légale e-commerce FR).
+    - Adresse de livraison et mode passés au service, qui figera tout
+      dans la commande créée.
+    - Si les prix Maxityre ont changé depuis l'ajout au panier, on ne
+      crée PAS la commande : on renvoie les écarts pour confirmation
+      explicite côté frontend (anti-litige).
+    """
+    if not data.accept_terms:
+        raise HTTPException(
+            status_code=400,
+            detail="Vous devez accepter les conditions générales de vente",
+        )
     try:
-        order, changes = await service.checkout(db, user)
+        order, changes = await service.checkout(
+            db, user, data.address_id, data.delivery_mode
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
+ 
     if order is None:
         # Prix modifiés : commande non créée, on renvoie les écarts
         return CheckoutResult(

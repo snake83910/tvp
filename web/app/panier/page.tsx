@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useCart } from "@/components/CartProvider";
-import { cartApi, type Cart } from "@/lib/cart";
 import { getToken } from "@/lib/auth";
 
 export default function CartPage() {
-  const { cart, refresh } = useCart();
+  // On passe désormais par les méthodes du CartProvider : elles mettent
+  // à jour le state React directement avec la réponse de l'API, ce qui
+  // redessine la page immédiatement (plus besoin de refresh manuel ni
+  // de F5).
+  const { cart, refresh, updateQty, removeItem } = useCart();
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,18 +22,16 @@ export default function CartPage() {
     if (q < 1) return;
     setBusy(itemId);
     try {
-      await cartApi.updateQty(itemId, q);
-      await refresh();
+      await updateQty(itemId, q);
     } finally {
       setBusy(null);
     }
   }
 
-  async function removeItem(itemId: string) {
+  async function handleRemove(itemId: string) {
     setBusy(itemId);
     try {
-      await cartApi.removeItem(itemId);
-      await refresh();
+      await removeItem(itemId);
     } finally {
       setBusy(null);
     }
@@ -48,9 +49,7 @@ export default function CartPage() {
 
         {isEmpty ? (
           <div className="rounded-2xl border border-line bg-paper p-10 text-center shadow-card">
-            <p className="text-ink-muted">
-              Votre panier est vide.
-            </p>
+            <p className="text-ink-muted">Votre panier est vide.</p>
             <Link
               href="/recherche"
               className="mt-4 inline-block rounded-full bg-signal px-6 py-3 text-sm font-bold text-white transition hover:bg-signal-dark"
@@ -72,17 +71,15 @@ export default function CartPage() {
                     </p>
                     <p className="text-sm text-ink-muted">
                       {it.price_ttc.toFixed(2).replace(".", ",")} €
-                      l'unité
+                      l&apos;unité
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center rounded-lg border border-line">
                       <button
-                        onClick={() =>
-                          changeQty(it.id, it.quantity - 1)
-                        }
+                        onClick={() => changeQty(it.id, it.quantity - 1)}
                         disabled={busy === it.id}
-                        className="px-3 py-1.5 text-ink-soft hover:text-signal"
+                        className="px-3 py-1.5 text-ink-soft hover:text-signal disabled:opacity-40"
                       >
                         −
                       </button>
@@ -90,11 +87,9 @@ export default function CartPage() {
                         {it.quantity}
                       </span>
                       <button
-                        onClick={() =>
-                          changeQty(it.id, it.quantity + 1)
-                        }
+                        onClick={() => changeQty(it.id, it.quantity + 1)}
                         disabled={busy === it.id}
-                        className="px-3 py-1.5 text-ink-soft hover:text-signal"
+                        className="px-3 py-1.5 text-ink-soft hover:text-signal disabled:opacity-40"
                       >
                         +
                       </button>
@@ -106,9 +101,9 @@ export default function CartPage() {
                       €
                     </p>
                     <button
-                      onClick={() => removeItem(it.id)}
+                      onClick={() => handleRemove(it.id)}
                       disabled={busy === it.id}
-                      className="text-sm text-ink-muted hover:text-signal"
+                      className="text-sm text-ink-muted hover:text-signal disabled:opacity-40"
                       title="Retirer"
                     >
                       ✕
@@ -136,15 +131,17 @@ export default function CartPage() {
               </div>
 
               <Link
-                href={getToken() ? "/checkout" : "/connexion?next=/checkout"}
+                href={
+                  getToken() ? "/checkout" : "/connexion?next=/checkout"
+                }
                 className="mt-6 block rounded-full bg-signal py-3 text-center font-display font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
               >
                 Passer commande
               </Link>
               {!getToken() && (
                 <p className="mt-3 text-center text-xs text-ink-muted">
-                  Connexion requise pour finaliser la commande.
-                  Votre panier sera conservé.
+                  Connexion requise pour finaliser la commande. Votre
+                  panier sera conservé.
                 </p>
               )}
             </aside>

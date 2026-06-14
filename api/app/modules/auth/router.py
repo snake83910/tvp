@@ -9,6 +9,7 @@ from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
 from app.modules.auth.service import authenticate, issue_tokens, register_user
+from app.modules.mailer.service import send_welcome
 from app.schemas.auth import (
     LoginIn,
     RefreshIn,
@@ -22,7 +23,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserOut, status_code=201)
 async def register(data: RegisterIn, db: AsyncSession = Depends(get_db)):
-    return await register_user(db, data)
+    user = await register_user(db, data)
+    send_welcome(user)
+    return user
 
 
 @router.post("/login", response_model=TokenPair)

@@ -59,10 +59,6 @@ async function call<T>(
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  // 404 sur GET /cart = panier vide : cas normal, pas une erreur.
-  if (res.status === 404) {
-    return null as T;
-  }
   if (!res.ok) {
     let detail = `Erreur ${res.status}`;
     try {
@@ -107,4 +103,25 @@ export const cartApi = {
     call<Cart>(`/cart/items/${itemId}`, "DELETE"),
 
   merge: () => call<Cart>("/cart/merge", "POST"),
+
+checkout: (
+    addressId: string,
+    acceptTerms: boolean,
+    deliveryMode = "home",
+  ) =>
+    call<{
+      order_number: string | null;
+      status: string | null;
+      total_ttc: number | null;
+      price_changes: Array<{
+        supplier_ref: string;
+        label: string;
+        old_ttc: number;
+        new_ttc: number;
+      }>;
+    }>("/cart/checkout", "POST", {
+      address_id: addressId,
+      delivery_mode: deliveryMode,
+      accept_terms: acceptTerms,
+    }),  
 };

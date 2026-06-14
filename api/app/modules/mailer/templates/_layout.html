@@ -1,0 +1,56 @@
+{# Layout commun à tous les emails transactionnels.
+
+   Règles clients mail :
+   - PAS de <style> global (Outlook 2007+ ignore plein de choses)
+   - PAS de Flexbox/Grid (Gmail mobile rend mal)
+   - Tout en inline-style + tables (oui, comme en 2005, c'est triste)
+   - Largeur fixe 600px (lisible sur mobile en zoom-fit)
+#}
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="fr">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ subject_title|default('Tous Vos Pneus') }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f6f6f4;font-family:Arial,Helvetica,sans-serif;color:#17181a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f6f4;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+
+        <!-- Conteneur 600px max -->
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e7e7e2;">
+
+          <!-- Bandeau -->
+          <tr>
+            <td style="background:#17181a;padding:20px 28px;">
+              <a href="{{ site_url }}" style="color:#ffffff;text-decoration:none;font-weight:900;font-size:18px;letter-spacing:-0.5px;">
+                TOUSVOSPNEUS<span style="color:#D8232A;">.COM</span>
+              </a>
+            </td>
+          </tr>
+
+          <!-- Corps -->
+          <tr>
+            <td style="padding:32px 28px;font-size:15px;line-height:1.55;color:#17181a;">
+              {% block content %}{% endblock %}
+            </td>
+          </tr>
+
+          <!-- Pied -->
+          <tr>
+            <td style="background:#f6f6f4;padding:20px 28px;border-top:1px solid #e7e7e2;font-size:12px;color:#7a7a72;line-height:1.5;">
+              tousvospneus.com — SAS · SIREN 977 671 965 · TVA FR38 977 671 965<br />
+              35 B Chemin des Beaumouilles, 13710 Fuveau<br /><br />
+              Vous recevez cet email car vous avez un compte chez Tous Vos Pneus.
+              Pour toute question : <a href="mailto:serviceclient@tousvospneus.com" style="color:#D8232A;text-decoration:none;">serviceclient@tousvospneus.com</a>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@lyracom/embedded-form-glue": "^0.2.1",
+    "es6-promise": "^4.2.8",
     "next": "14.2.5",
     "react": "18.3.1",
     "react-dom": "18.3.1"

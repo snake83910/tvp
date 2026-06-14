@@ -48,6 +48,14 @@ export interface SearchResponse {
   facets: SearchFacets;
 }
 
+export interface VehicleDimension {
+  width: number;
+  height: number;
+  diameter: number;
+  load_index: string;
+  speed_rating: string;
+}
+
 export interface ApiError {
   detail: string;
 }
@@ -96,6 +104,11 @@ export const api = {
       `/search/product/${encodeURIComponent(ref)}?${q.toString()}`,
       { headers: token ? { Authorization: `Bearer ${token}` } : {} },
     );
+  },
+
+  searchByPlate: (plate: string) => {
+    const q = new URLSearchParams({ plate });
+    return request<VehicleDimension[]>(`/search/by-plate?${q.toString()}`);
   },
 
   searchByDimensions: (

@@ -31,6 +31,7 @@ class PaymentInit:
     provider_ref: str
     form_token: str          # jeton à passer au formulaire de paiement
     amount_cents: int
+    public_key: str = ""     # clé publique Sogecommerce (vide en simulé)
 
 
 @dataclass
@@ -118,10 +119,8 @@ class SogecommercePayment(PaymentProvider):
     """
 
     name = "sogecommerce"
-    _API = (
-        "https://api-sogecommerce.societegenerale.eu"
-        "/api-payment/V4/Charge/CreatePayment"
-    )
+    _BASE = "https://api-sogecommerce.societegenerale.eu/api-payment/V4"
+    _API = f"{_BASE}/Charge/CreatePayment"
 
     def _auth_header(self) -> str:
         shop = settings.sogecommerce_shop_id
@@ -167,10 +166,29 @@ class SogecommercePayment(PaymentProvider):
         form_token = answer["formToken"]
         return PaymentInit(
             provider=self.name,
-            provider_ref=order_id,   # on réconcilie via orderId
+            provider_ref=order_id,
             form_token=form_token,
             amount_cents=amount_cents,
+            public_key=settings.sogecommerce_public_key,
         )
+
+    async def get_order_status(self, order_uuid: str) -> dict:
+        """Interroge Sogecommerce pour connaître le statut d'un paiement.
+        Fallback quand l'IPN n'arrive pas (dev local sans ngrok)."""
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f"{self._BASE}/Order/Get",
+                headers={
+                    "Authorization": self._auth_header(),
+                    "Content-Type": "application/json",
+                },
+                content=json.dumps({"orderId": order_uuid}),
+            )
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("status") != "SUCCESS":
+            raise RuntimeError(f"Order/Get échoué : {body.get('answer', {})}")
+        return body["answer"]
 
     def verify_ipn(self, payload: dict, signature: str | None) -> IPNResult:
         """

@@ -1,0 +1,43 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre commande est livrée
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Votre commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    a été livrée. Nous espérons que vous êtes satisfait de vos
+    nouveaux pneumatiques.
+  </p>
+
+  <p style="margin:0 0 20px 0;">
+    Quelques conseils pour bien démarrer :
+  </p>
+
+  <ul style="margin:0 0 20px 0;padding-left:20px;color:#17181a;">
+    <li style="margin-bottom:8px;">Pendant les 500 premiers kilomètres, conduisez en douceur (le temps que le démoulant disparaisse).</li>
+    <li style="margin-bottom:8px;">Faites équilibrer vos pneus à l'installation pour éviter les vibrations.</li>
+    <li style="margin-bottom:8px;">Vérifiez régulièrement la pression (idéalement une fois par mois et avant les longs trajets).</li>
+  </ul>
+
+  <p style="margin:0 0 20px 0;">
+    Si vous rencontrez le moindre souci, n'hésitez pas à nous écrire à
+    <a href="mailto:serviceclient@tousvospneus.com" style="color:#D8232A;text-decoration:none;">serviceclient@tousvospneus.com</a>.
+  </p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+    <tr>
+      <td style="background:#D8232A;border-radius:999px;">
+        <a href="{{ site_url }}/recherche" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase;">
+          Continuer mes achats
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    Merci pour votre confiance,<br />
+    L'équipe Tous Vos Pneus
+  </p>
+{% endblock %}
