@@ -182,6 +182,8 @@ class Order(Base):
     last_dunning_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # Note interne admin (non visible côté client)
+    admin_note: Mapped[str | None] = mapped_column(String(2000))
 
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"

@@ -32,6 +32,21 @@ export interface AdminStats {
   revenue_total_ttc: number;
   orders_today: number;
   revenue_today_ttc: number;
+  orders_30d?: number;
+  revenue_30d_ttc?: number;
+  avg_cart_ttc?: number;
+  top_products?: { ref: string; label: string; qty: number; revenue_ttc: number }[];
+}
+
+export interface AuditEntry {
+  id: string;
+  actor_email: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  payload: Record<string, unknown> | null;
+  ip: string | null;
+  created_at: string;
 }
 
 export interface AdminOrderSummary {
@@ -69,11 +84,19 @@ export async function downloadAdminInvoice(orderNumber: string): Promise<void> {
 export const adminApi = {
   getStats: () => call<AdminStats>("/admin/stats"),
 
-  listOrders: (params?: { status?: string; q?: string; page?: number }) => {
+  listOrders: (params?: {
+    status?: string; q?: string; page?: number;
+    from_date?: string; to_date?: string;
+    min_amount?: number; max_amount?: number;
+  }) => {
     const p = new URLSearchParams();
     if (params?.status) p.set("status", params.status);
     if (params?.q) p.set("q", params.q);
     if (params?.page) p.set("page", String(params.page));
+    if (params?.from_date) p.set("from_date", params.from_date);
+    if (params?.to_date) p.set("to_date", params.to_date);
+    if (params?.min_amount != null) p.set("min_amount", String(params.min_amount));
+    if (params?.max_amount != null) p.set("max_amount", String(params.max_amount));
     const qs = p.toString();
     return call<AdminOrderSummary[]>(`/admin/orders${qs ? `?${qs}` : ""}`);
   },
@@ -91,4 +114,18 @@ export const adminApi = {
       cancel_reason?: string;
     }
   ) => call<AdminOrderDetail>(`/admin/orders/${orderNumber}/status`, "PATCH", data),
+
+  updateNote: (orderNumber: string, admin_note: string) =>
+    call<AdminOrderDetail>(`/admin/orders/${orderNumber}/note`, "PATCH", { admin_note }),
+
+  listAudit: (orderNumber: string) =>
+    call<AuditEntry[]>(`/admin/orders/${orderNumber}/audit`),
+
+  getSparkline: () => call<{ days: string[]; revenue: number[]; orders: number[] }>(`/admin/stats/sparkline`),
+
+  getAttention: () =>
+    call<{
+      to_ship: AdminOrderSummary[];
+      late: AdminOrderSummary[];
+    }>(`/admin/orders-attention`),
 };

@@ -88,6 +88,7 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
         customer_email=user.email,
         customer_name=full_name,
         allowed_transitions=allowed,
+        admin_note=order.admin_note,
     )
 
 
@@ -257,9 +258,15 @@ async def list_orders(
     q: str | None = Query(None, description="Recherche par n° commande ou email"),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
+    from_date: str | None = Query(None, description="YYYY-MM-DD"),
+    to_date: str | None = Query(None, description="YYYY-MM-DD"),
+    min_amount: float | None = Query(None, ge=0),
+    max_amount: float | None = Query(None, ge=0),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_admin),
 ):
+    from datetime import date as _date, datetime as _dt, timedelta, timezone as _tz
+
     stmt = (
         select(Order, User)
         .join(User, User.id == Order.user_id)
@@ -276,6 +283,16 @@ async def list_orders(
         stmt = stmt.where(
             Order.order_number.ilike(pattern) | User.email.ilike(pattern)
         )
+    if from_date:
+        start = _dt.combine(_date.fromisoformat(from_date), _dt.min.time(), tzinfo=_tz.utc)
+        stmt = stmt.where(Order.created_at >= start)
+    if to_date:
+        end = _dt.combine(_date.fromisoformat(to_date) + timedelta(days=1), _dt.min.time(), tzinfo=_tz.utc)
+        stmt = stmt.where(Order.created_at < end)
+    if min_amount is not None:
+        stmt = stmt.where(Order.total_ttc_cents >= int(min_amount * 100))
+    if max_amount is not None:
+        stmt = stmt.where(Order.total_ttc_cents <= int(max_amount * 100))
 
     offset = (page - 1) * per_page
     stmt = stmt.offset(offset).limit(per_page)
@@ -387,3 +404,155 @@ async def update_status(
     await db.commit()
     await db.refresh(order)
     return _order_to_detail(order, user)
+
+
+# ── Note interne admin ─────────────────────────────────────────────
+
+@router.patch("/orders/{order_number}/note", response_model=AdminOrderDetail)
+async def update_note(
+    order_number: str,
+    payload: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    order = await _load_order(order_number, db)
+    user = await db.get(User, order.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Client introuvable")
+    note = (payload.get("admin_note") or "").strip()
+    if len(note) > 2000:
+        raise HTTPException(status_code=422, detail="Note trop longue (2000 max)")
+    order.admin_note = note or None
+    await audit(
+        db, user=admin, action="order.note_update",
+        target_type="order", target_id=order.order_number,
+        payload={"length": len(note)}, request=request,
+    )
+    await db.commit()
+    await db.refresh(order)
+    return _order_to_detail(order, user)
+
+
+# ── Historique audit par commande ──────────────────────────────────
+
+@router.get("/orders/{order_number}/audit")
+async def order_audit(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    from app.models.audit import AuditLog
+    rows = await db.scalars(
+        select(AuditLog)
+        .where(AuditLog.target_type == "order", AuditLog.target_id == order_number)
+        .order_by(AuditLog.created_at.desc())
+        .limit(50)
+    )
+    return [
+        {
+            "id": str(r.id),
+            "actor_email": r.actor_email,
+            "action": r.action,
+            "target_type": r.target_type,
+            "target_id": r.target_id,
+            "payload": r.payload,
+            "ip": r.ip,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+# ── Widget "à traiter / retards" ───────────────────────────────────
+
+@router.get("/orders-attention")
+async def orders_attention(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    from datetime import datetime as _dt, timedelta, timezone as _tz
+    now = _dt.now(_tz.utc)
+
+    # À expédier : paid (paiement OK, pas encore envoyé fournisseur)
+    to_ship_rows = (await db.execute(
+        select(Order, User)
+        .join(User, User.id == Order.user_id)
+        .options(selectinload(Order.items))
+        .where(Order.status == OrderStatus.paid)
+        .order_by(Order.paid_at.asc())
+        .limit(10)
+    )).all()
+
+    # Retards : sent_to_supplier depuis > 48h
+    threshold = now - timedelta(hours=48)
+    late_rows = (await db.execute(
+        select(Order, User)
+        .join(User, User.id == Order.user_id)
+        .options(selectinload(Order.items))
+        .where(
+            Order.status == OrderStatus.sent_to_supplier,
+            Order.paid_at < threshold,
+        )
+        .order_by(Order.paid_at.asc())
+        .limit(10)
+    )).all()
+
+    def serialize(rows):
+        return [
+            {
+                "order_number": o.order_number,
+                "status": o.status.value,
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+                "total_ttc": (o.total_ttc_cents or 0) / 100,
+                "item_count": sum(i.quantity for i in o.items),
+                "customer_email": u.email,
+                "customer_name": " ".join(filter(None, [u.first_name, u.last_name])) or None,
+            }
+            for o, u in rows
+        ]
+
+    return {
+        "to_ship": serialize(to_ship_rows),
+        "late": serialize(late_rows),
+    }
+
+
+# ── Sparkline 30 jours ─────────────────────────────────────────────
+
+@router.get("/stats/sparkline")
+async def stats_sparkline(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    from datetime import datetime as _dt, timedelta, timezone as _tz
+    from sqlalchemy import cast, Date as _Date
+
+    now = _dt.now(_tz.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = now - timedelta(days=29)
+
+    paid = [
+        OrderStatus.paid, OrderStatus.sent_to_supplier,
+        OrderStatus.shipped, OrderStatus.delivered,
+    ]
+    rows = (await db.execute(
+        select(
+            cast(Order.created_at, _Date).label("day"),
+            func.count(Order.id).label("cnt"),
+            func.sum(Order.total_ttc_cents).label("rev"),
+        )
+        .where(Order.created_at >= start, Order.status.in_(paid))
+        .group_by("day")
+    )).all()
+    by_day = {r.day.isoformat(): (r.cnt or 0, (r.rev or 0) / 100) for r in rows}
+
+    days = []
+    revenue = []
+    orders = []
+    for i in range(30):
+        d = (start + timedelta(days=i)).date().isoformat()
+        days.append(d)
+        cnt, rev = by_day.get(d, (0, 0))
+        revenue.append(rev)
+        orders.append(cnt)
+    return {"days": days, "revenue": revenue, "orders": orders}

@@ -131,6 +131,7 @@ class AdminOrderDetail(OrderDetail):
     customer_email: str
     customer_name: str | None = None
     allowed_transitions: list[str]
+    admin_note: str | None = None
 
 
 class StatusUpdateIn(BaseModel):

@@ -21,6 +21,29 @@ async def get_profile(user: User = Depends(get_current_user)):
     return user
 
 
+@router.post("/password", status_code=204)
+async def change_password(
+    payload: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change le mot de passe du compte courant.
+    Vérifie l'ancien mot de passe avant d'appliquer le nouveau."""
+    from app.core.security import hash_password, verify_password
+
+    old_pwd = payload.get("old_password") or ""
+    new_pwd = payload.get("new_password") or ""
+    if len(new_pwd) < 8:
+        raise HTTPException(status_code=422, detail="Mot de passe trop court (8 caractères minimum)")
+    if len(new_pwd) > 128:
+        raise HTTPException(status_code=422, detail="Mot de passe trop long")
+    if not verify_password(old_pwd, user.password_hash):
+        raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect")
+    user.password_hash = hash_password(new_pwd)
+    await db.commit()
+    return None
+
+
 @router.get("/addresses", response_model=list[AddressOut])
 async def list_addresses(
     user: User = Depends(get_current_user),

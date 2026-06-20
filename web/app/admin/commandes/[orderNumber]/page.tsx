@@ -2,8 +2,12 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { adminApi, downloadAdminInvoice, type AdminOrderDetail } from "@/lib/admin";
-import { STATUS_COLOR, STATUS_LABEL } from "@/lib/orderStatus";
+import { adminApi, downloadAdminInvoice, type AdminOrderDetail, type AuditEntry } from "@/lib/admin";
+import { STATUS_LABEL } from "@/lib/orderStatus";
+import { StatusBadge } from "@/components/admin/StatusBadge";
+import { CopyButton } from "@/components/admin/CopyButton";
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
+import { useToast } from "@/components/admin/Toast";
 
 const TRANSITION_LABEL: Record<string, string> = {
   sent_to_supplier: "Transmise au fournisseur",
@@ -16,6 +20,7 @@ const TRANSITION_LABEL: Record<string, string> = {
 export default function AdminOrderDetail() {
   const { orderNumber } = useParams<{ orderNumber: string }>();
   const router = useRouter();
+  const { toast } = useToast();
 
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +35,29 @@ export default function AdminOrderDetail() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  // Note admin
+  const [note, setNote] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+
+  // Audit history
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[] | null>(null);
+
+  // Confirmation actions destructives
+  const [confirmDestructive, setConfirmDestructive] = useState<null | (() => void)>(null);
+
+  async function saveNote() {
+    setNoteSaving(true);
+    try {
+      const updated = await adminApi.updateNote(orderNumber, note);
+      setOrder(updated);
+      toast("Note enregistrée", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   async function handleDownload() {
     setPdfLoading(true);
     try { await downloadAdminInvoice(orderNumber); }
@@ -38,13 +66,15 @@ export default function AdminOrderDetail() {
 
   useEffect(() => {
     adminApi.getOrder(orderNumber)
-      .then(setOrder)
+      .then((o) => {
+        setOrder(o);
+        setNote((o as AdminOrderDetail & { admin_note?: string }).admin_note ?? "");
+      })
       .catch((e) => setError(e instanceof Error ? e.message : "Erreur"));
+    adminApi.listAudit(orderNumber).then(setAuditEntries).catch(() => setAuditEntries([]));
   }, [orderNumber]);
 
-  async function submitStatus(e: React.FormEvent) {
-    e.preventDefault();
-    if (!targetStatus || !order) return;
+  async function doUpdateStatus() {
     setUpdating(true);
     setUpdateError(null);
     try {
@@ -57,14 +87,25 @@ export default function AdminOrderDetail() {
       });
       setOrder(updated);
       setTargetStatus("");
-      setTracking("");
-      setCarrier("");
-      setTrackingUrl("");
-      setCancelReason("");
+      setTracking(""); setCarrier(""); setTrackingUrl(""); setCancelReason("");
+      toast("Statut mis à jour", "success");
+      adminApi.listAudit(orderNumber).then(setAuditEntries).catch(() => {});
     } catch (e) {
       setUpdateError(e instanceof Error ? e.message : "Erreur");
+      toast(e instanceof Error ? e.message : "Erreur", "error");
     } finally {
       setUpdating(false);
+    }
+  }
+
+  function submitStatus(e: React.FormEvent) {
+    e.preventDefault();
+    if (!targetStatus || !order) return;
+    if (targetStatus === "cancelled" || targetStatus === "refunded") {
+      // Confirmation pour actions destructives
+      setConfirmDestructive(() => doUpdateStatus);
+    } else {
+      doUpdateStatus();
     }
   }
 
@@ -89,7 +130,10 @@ export default function AdminOrderDetail() {
       {/* En-tête */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-black text-ink">{order.order_number}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-3xl font-black text-ink">{order.order_number}</h1>
+            <CopyButton value={order.order_number} />
+          </div>
           {order.invoice_number && (
             <p className="mt-0.5 text-sm font-semibold text-signal">
               Facture {`FAC-${new Date(order.paid_at!).getFullYear()}-${String(order.invoice_number).padStart(6, "0")}`}
@@ -107,9 +151,7 @@ export default function AdminOrderDetail() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`inline-block rounded-full px-4 py-1.5 text-sm font-bold ${STATUS_COLOR[order.status] ?? "bg-paper-dim text-ink-soft"}`}>
-            {STATUS_LABEL[order.status] ?? order.status}
-          </span>
+          <StatusBadge status={order.status} />
           <button
             onClick={handleDownload}
             disabled={pdfLoading}
@@ -264,10 +306,77 @@ export default function AdminOrderDetail() {
               </p>
             </Section>
           )}
+
+          {/* Note interne admin */}
+          <Section title="Note interne (non visible client)">
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={4}
+              placeholder="Ex : client a appelé, retard accepté…"
+              className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-signal"
+            />
+            <button
+              onClick={saveNote}
+              disabled={noteSaving}
+              className="mt-2 rounded-lg bg-ink px-4 py-1.5 text-xs font-bold text-paper hover:bg-signal disabled:opacity-60"
+            >
+              {noteSaving ? "Enregistrement…" : "Enregistrer la note"}
+            </button>
+          </Section>
+
+          {/* Historique audit */}
+          <Section title="Historique">
+            {auditEntries === null ? (
+              <p className="text-xs text-ink-muted">Chargement…</p>
+            ) : auditEntries.length === 0 ? (
+              <p className="text-xs text-ink-muted">Aucune modification enregistrée.</p>
+            ) : (
+              <ul className="space-y-2 text-xs">
+                {auditEntries.map((e) => (
+                  <li key={e.id} className="border-l-2 border-line pl-3">
+                    <p className="font-semibold text-ink">{labelizeAction(e.action)}</p>
+                    <p className="text-ink-muted">
+                      {e.actor_email ?? "—"} · {new Date(e.created_at).toLocaleString("fr-FR")}
+                    </p>
+                    {e.payload && Object.keys(e.payload).length > 0 && (
+                      <p className="mt-0.5 text-ink-muted">
+                        {Object.entries(e.payload)
+                          .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                          .map(([k, v]) => `${k}: ${String(v)}`)
+                          .join(" · ")}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDestructive !== null}
+        title={targetStatus === "cancelled" ? "Annuler la commande ?" : "Rembourser la commande ?"}
+        message={
+          targetStatus === "cancelled"
+            ? "Cette action déclenche un email d'annulation au client et ne peut pas être annulée."
+            : "Cette action déclenche un email au client. Assurez-vous d'avoir traité le remboursement bancaire."
+        }
+        confirmLabel={targetStatus === "cancelled" ? "Annuler la commande" : "Rembourser"}
+        danger
+        onClose={() => setConfirmDestructive(null)}
+        onConfirm={() => { confirmDestructive?.(); setConfirmDestructive(null); }}
+      />
     </div>
   );
+}
+
+function labelizeAction(action: string): string {
+  return {
+    "order.status_change": "Changement de statut",
+    "order.note_update": "Note modifiée",
+  }[action] ?? action;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
