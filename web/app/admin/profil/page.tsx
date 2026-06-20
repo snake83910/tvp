@@ -6,7 +6,7 @@ import { useToast } from "@/components/admin/Toast";
 
 const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
   const t = typeof window !== "undefined" ? sessionStorage.getItem("tvp_access") : null;
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
