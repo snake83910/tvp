@@ -28,6 +28,18 @@ export function OrderTable({
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [dense, setDense] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("tvp_admin_dense") === "1";
+  });
+
+  function toggleDense() {
+    const next = !dense;
+    setDense(next);
+    if (typeof window !== "undefined") localStorage.setItem("tvp_admin_dense", next ? "1" : "0");
+  }
+
+  const rowPy = dense ? "py-1.5" : "py-3";
 
   function sort(key: SortKey) {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -56,6 +68,18 @@ export function OrderTable({
 
   return (
     <>
+      {/* Toolbar densité */}
+      <div className="mb-2 hidden justify-end md:flex">
+        <button
+          onClick={toggleDense}
+          className="rounded border border-line bg-paper px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted hover:border-signal hover:text-signal"
+          aria-pressed={dense}
+          title="Basculer densité (compact/aéré)"
+        >
+          {dense ? "▥ Aéré" : "▤ Compact"}
+        </button>
+      </div>
+
       {/* Desktop : tableau */}
       <div className="hidden overflow-hidden rounded-xl border border-line bg-paper shadow-card md:block">
         <table className="w-full text-sm">
@@ -84,7 +108,7 @@ export function OrderTable({
             {sorted.map((o) => (
               <tr key={o.order_number} className="border-t border-line transition hover:bg-paper-dim">
                 {selectable && (
-                  <td className="px-3 py-3">
+                  <td className={`px-3 ${rowPy}`}>
                     <input
                       type="checkbox"
                       checked={selected?.has(o.order_number) ?? false}
@@ -93,31 +117,31 @@ export function OrderTable({
                     />
                   </td>
                 )}
-                <td className="px-4 py-3">
+                <td className={`px-4 ${rowPy}`}>
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono font-bold text-ink">{o.order_number}</span>
                     <CopyButton value={o.order_number} />
                   </div>
                 </td>
-                <td className="px-4 py-3">
+                <td className={`px-4 ${rowPy}`}>
                   <p className="text-ink">{o.customer_name ?? "—"}</p>
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs text-ink-muted">{o.customer_email}</p>
                     <CopyButton value={o.customer_email} label="Copier email" />
                   </div>
                 </td>
-                <td className="px-4 py-3 text-ink-soft">
+                <td className={`px-4 ${rowPy} text-ink-soft`}>
                   {new Date(o.created_at).toLocaleDateString("fr-FR", {
                     day: "2-digit", month: "2-digit", year: "numeric",
                   })}
                 </td>
-                <td className="px-4 py-3">
+                <td className={`px-4 ${rowPy}`}>
                   <StatusBadge status={o.status} />
                 </td>
-                <td className="px-4 py-3 text-right font-display font-black text-ink">
+                <td className={`px-4 ${rowPy} text-right font-display font-black text-ink`}>
                   {o.total_ttc.toFixed(2).replace(".", ",")} €
                 </td>
-                <td className="relative px-4 py-3 text-right">
+                <td className={`relative px-4 ${rowPy} text-right`}>
                   <button
                     onClick={() => setMenuOpen(menuOpen === o.order_number ? null : o.order_number)}
                     className="rounded p-1 text-ink-muted hover:bg-paper-dim hover:text-signal"

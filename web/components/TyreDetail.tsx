@@ -3,6 +3,7 @@ import type { TyreResult } from "@/lib/api";
 import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
 import { EuLabel } from "@/components/EuLabel";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 const SEASON: Record<string, string> = {
   ete: "Été", hiver: "Hiver", "4saisons": "4 saisons", inconnu: "Non précisé",
@@ -42,6 +43,12 @@ export function TyreDetail({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
       />
       <main className="mx-auto max-w-6xl px-6 py-10">
+        <Breadcrumbs items={[
+          { label: "Accueil", href: "/" },
+          { label: "Pneus", href: "/recherche" },
+          { label: tyre.dimension, href: `/recherche?width=${tyre.width}&ratio=${tyre.aspect_ratio}&diameter=${tyre.diameter}` },
+          { label: `${tyre.brand} ${tyre.model}` },
+        ]} />
         <Link href="/recherche" className="text-sm text-ink-muted hover:text-signal">
           ← Retour aux résultats
         </Link>

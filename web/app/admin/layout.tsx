@@ -191,8 +191,10 @@ function AdminShell({
           </div>
         )}
 
-        {/* Contenu */}
-        <main className="flex-1 overflow-auto p-4 pt-16 md:p-8 md:pt-8">{children}</main>
+        {/* Contenu : centré avec max width pour grands écrans */}
+        <main className="flex-1 overflow-auto p-4 pt-16 md:p-8 md:pt-8">
+          <div className="mx-auto max-w-7xl">{children}</div>
+        </main>
       </div>
     </ToastProvider>
   );

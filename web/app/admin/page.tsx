@@ -26,6 +26,10 @@ export default function AdminDashboard() {
   const [spark, setSpark] = useState<Spark | null>(null);
   const [attention, setAttention] = useState<Attention | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Période visualisée pour les sparklines
+  const [sparkPeriod, setSparkPeriod] = useState<7 | 30 | 90>(30);
+  // Nouvelles commandes depuis dernière visite
+  const [newCount, setNewCount] = useState(0);
 
   function loadAll() {
     Promise.all([
@@ -36,8 +40,23 @@ export default function AdminDashboard() {
     ])
       .then(([s, o, sp, att]) => {
         setStats(s); setRecent(o); setSpark(sp as Spark | null); setAttention(att as Attention | null);
+        // Indicateur "nouvelles depuis dernière visite"
+        if (typeof window !== "undefined") {
+          const lastSeen = localStorage.getItem("tvp_admin_last_seen_paid_id");
+          const firstPaid = (att as Attention | null)?.to_ship?.[0];
+          if (lastSeen && firstPaid && firstPaid.order_number !== lastSeen) {
+            const idx = (att as Attention).to_ship.findIndex((o) => o.order_number === lastSeen);
+            setNewCount(idx === -1 ? (att as Attention).to_ship.length : idx);
+          }
+        }
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Erreur"));
+  }
+
+  function markAttentionSeen() {
+    const first = attention?.to_ship?.[0];
+    if (first) localStorage.setItem("tvp_admin_last_seen_paid_id", first.order_number);
+    setNewCount(0);
   }
 
   useEffect(() => {
@@ -60,9 +79,25 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between gap-4">
         <h1 className="font-display text-3xl font-black text-ink">Tableau de bord</h1>
-        <p className="text-xs text-ink-muted">Actualisation auto · 30s</p>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 rounded-lg border border-line bg-paper p-0.5 text-xs">
+            {([7, 30, 90] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setSparkPeriod(p)}
+                className={`rounded px-2.5 py-1 font-semibold transition ${
+                  sparkPeriod === p ? "bg-ink text-paper" : "text-ink-muted hover:text-ink"
+                }`}
+                aria-pressed={sparkPeriod === p}
+              >
+                {p}j
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-ink-muted">Auto · 30s</p>
+        </div>
       </div>
 
       {/* KPI avec sparkline */}
@@ -71,7 +106,7 @@ export default function AdminDashboard() {
           label="CA 30 jours"
           value={stats ? `${(stats.revenue_30d_ttc ?? 0).toFixed(2).replace(".", ",")} €` : "…"}
           sub={stats ? `${stats.orders_30d ?? 0} commande${(stats.orders_30d ?? 0) > 1 ? "s" : ""}` : undefined}
-          spark={spark?.revenue}
+          spark={spark?.revenue?.slice(-sparkPeriod)}
           trend={
             stats && (stats.revenue_prev30_ttc ?? 0) > 0
               ? ((stats.revenue_30d_ttc ?? 0) - (stats.revenue_prev30_ttc ?? 0)) / (stats.revenue_prev30_ttc ?? 1)
@@ -95,12 +130,15 @@ export default function AdminDashboard() {
       {attention && (attention.to_ship.length > 0 || attention.late.length > 0) && (
         <div className="mt-8 grid gap-4 lg:grid-cols-2">
           {attention.to_ship.length > 0 && (
-            <AttentionCard
-              tone="info"
-              title={`${attention.to_ship.length} à expédier`}
-              hint="Paiement confirmé, en attente de transmission fournisseur."
-              orders={attention.to_ship}
-            />
+            <div onClick={markAttentionSeen}>
+              <AttentionCard
+                tone="info"
+                title={`${attention.to_ship.length} à expédier`}
+                hint="Paiement confirmé, en attente de transmission fournisseur."
+                orders={attention.to_ship}
+                badge={newCount > 0 ? newCount : undefined}
+              />
+            </div>
           )}
           {attention.late.length > 0 && (
             <AttentionCard
@@ -204,14 +242,21 @@ function Kpi({
 }
 
 function AttentionCard({
-  tone, title, hint, orders,
-}: { tone: "info" | "warn"; title: string; hint: string; orders: AdminOrderSummary[] }) {
+  tone, title, hint, orders, badge,
+}: { tone: "info" | "warn"; title: string; hint: string; orders: AdminOrderSummary[]; badge?: number }) {
   const border = tone === "warn" ? "border-amber-300" : "border-blue-200";
   const bg = tone === "warn" ? "bg-amber-50" : "bg-blue-50";
   const text = tone === "warn" ? "text-amber-800" : "text-blue-800";
   return (
     <div className={`rounded-2xl border ${border} ${bg} p-5`}>
-      <p className={`font-display text-lg font-black ${text}`}>{title}</p>
+      <div className="flex items-center gap-2">
+        <p className={`font-display text-lg font-black ${text}`}>{title}</p>
+        {badge && badge > 0 && (
+          <span className="rounded-full bg-signal px-2 py-0.5 text-xs font-bold text-white animate-pulse">
+            {badge} nouveau{badge > 1 ? "x" : ""}
+          </span>
+        )}
+      </div>
       <p className={`mt-1 text-xs ${text} opacity-80`}>{hint}</p>
       <ul className="mt-4 space-y-1.5">
         {orders.slice(0, 5).map((o) => (

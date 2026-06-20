@@ -5,6 +5,31 @@
 :root {
   --font-display: "Archivo", system-ui, sans-serif;
   --font-body: "Archivo", system-ui, sans-serif;
+
+  /* Couleurs tokens : exposées pour theming futur (dark mode, marque blanche) */
+  --color-ink: #17181a;
+  --color-ink-soft: #4a4b4d;
+  --color-ink-muted: #7a7a72;
+  --color-paper: #ffffff;
+  --color-paper-dim: #f6f6f4;
+  --color-line: #e3e1d8;
+  --color-signal: #D8232A;
+  --color-signal-dark: #a91b21;
+  --color-signal-light: #fbe9ea;
+  --color-ok: #2f8a3e;
+}
+
+/* View Transitions API : animations natives entre routes Next.js 15+ */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.18s;
+  }
+}
+
+/* Focus ring uniforme et bien visible */
+*:focus-visible {
+  outline-offset: 2px;
 }
 
 html { scroll-behavior: smooth; }
