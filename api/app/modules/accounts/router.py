@@ -319,9 +319,23 @@ async def export_personal_data(
 
 @router.delete("/account", status_code=204)
 async def delete_account(
+    payload: dict | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Re-auth : exige un token frais (obtenu via POST /auth/reauth)
+    from app.core.security import decode_token
+    from jose import JWTError
+    reauth = (payload or {}).get("reauth_token") or ""
+    try:
+        rt = decode_token(reauth)
+        if rt.get("type") != "reauth" or rt.get("sub") != str(user.id):
+            raise ValueError
+    except (JWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Veuillez re-saisir votre mot de passe via /auth/reauth",
+        )
     """Droit à l'effacement (RGPD art. 17).
 
     On anonymise plutôt que supprimer : les commandes/factures doivent

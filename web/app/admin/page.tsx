@@ -72,6 +72,11 @@ export default function AdminDashboard() {
           value={stats ? `${(stats.revenue_30d_ttc ?? 0).toFixed(2).replace(".", ",")} €` : "…"}
           sub={stats ? `${stats.orders_30d ?? 0} commande${(stats.orders_30d ?? 0) > 1 ? "s" : ""}` : undefined}
           spark={spark?.revenue}
+          trend={
+            stats && (stats.revenue_prev30_ttc ?? 0) > 0
+              ? ((stats.revenue_30d_ttc ?? 0) - (stats.revenue_prev30_ttc ?? 0)) / (stats.revenue_prev30_ttc ?? 1)
+              : null
+          }
         />
         <Kpi
           label="CA aujourd'hui"
@@ -172,11 +177,21 @@ export default function AdminDashboard() {
 }
 
 function Kpi({
-  label, value, sub, spark,
-}: { label: string; value: string | number; sub?: string; spark?: number[] }) {
+  label, value, sub, spark, trend,
+}: { label: string; value: string | number; sub?: string; spark?: number[]; trend?: number | null }) {
+  const pct = trend != null ? Math.round(trend * 100) : null;
   return (
     <div className="rounded-xl border border-line bg-paper p-5 shadow-card">
-      <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">{label}</p>
+      <div className="flex items-start justify-between">
+        <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">{label}</p>
+        {pct != null && (
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            pct >= 0 ? "bg-ok/10 text-ok" : "bg-signal-light text-signal-dark"
+          }`}>
+            {pct >= 0 ? "+" : ""}{pct}%
+          </span>
+        )}
+      </div>
       <p className="mt-2 font-display text-2xl font-black text-ink">{value}</p>
       {sub && <p className="mt-1 text-xs text-ink-muted">{sub}</p>}
       {spark && spark.length > 1 && (

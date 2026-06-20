@@ -5,10 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearTokens, useCurrentUser } from "@/lib/auth";
 import { ToastProvider } from "@/components/admin/Toast";
+import { IdleLogout } from "@/components/admin/IdleLogout";
+import { CommandPalette } from "@/components/admin/CommandPalette";
+import { OnboardingTour } from "@/components/admin/OnboardingTour";
 
 const NAV = [
   { href: "/admin", label: "Tableau de bord", icon: "▦" },
   { href: "/admin/commandes", label: "Commandes", icon: "🛒" },
+  { href: "/admin/kanban", label: "Kanban", icon: "▤" },
+  { href: "/admin/calendrier", label: "Calendrier", icon: "📅" },
   { href: "/admin/profil", label: "Mon profil", icon: "👤" },
   { href: "/admin/securite", label: "Sécurité 2FA", icon: "🔐" },
 ];
@@ -88,6 +93,9 @@ function AdminShell({
 
   return (
     <ToastProvider>
+      <IdleLogout />
+      <CommandPalette />
+      <OnboardingTour />
       <div className="flex min-h-screen bg-paper-dim">
         {/* Sidebar desktop */}
         <aside className={`${widthCls} hidden shrink-0 flex-col border-r border-line bg-paper transition-all md:flex`}>

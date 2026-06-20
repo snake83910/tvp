@@ -91,6 +91,41 @@ def send_password_reset(user: User, token: str) -> None:
     )
 
 
+def send_login_alert(user: User, ip: str | None, user_agent: str | None) -> None:
+    """Email d'alerte de connexion admin."""
+    mailer = get_mailer()
+    from datetime import datetime, timezone as _tz
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject="Nouvelle connexion à votre compte admin",
+            template="login_alert.html",
+            civilite=_civilite(user),
+            site_url=_site_url(),
+            login_time=datetime.now(_tz.utc).strftime("%d/%m/%Y à %H:%M UTC"),
+            login_ip=ip or "inconnue",
+            login_ua=(user_agent or "inconnu")[:120],
+        )
+    )
+
+
+def send_email_change_confirm(user: User, new_email: str, token: str) -> None:
+    """Lien de confirmation envoyé sur le NOUVEL email."""
+    mailer = get_mailer()
+    url = f"{_site_url()}/confirmer-email?token={token}"
+    fire_and_forget(
+        mailer.send_template(
+            to=new_email,
+            subject="Confirmez votre nouvelle adresse email",
+            template="email_change_confirm.html",
+            civilite=_civilite(user),
+            site_url=_site_url(),
+            confirm_url=url,
+            new_email=new_email,
+        )
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 # Confirmation de commande (paiement validé)
 # ─────────────────────────────────────────────────────────────────

@@ -152,3 +152,6 @@ class AdminStats(BaseModel):
     revenue_30d_ttc: float = 0.0
     avg_cart_ttc: float = 0.0
     top_products: list[dict] = []  # [{ref, label, qty, revenue_ttc}]
+    # Comparatif période précédente (jours -30..-60)
+    revenue_prev30_ttc: float = 0.0
+    orders_prev30: int = 0

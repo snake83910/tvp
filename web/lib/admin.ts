@@ -36,6 +36,8 @@ export interface AdminStats {
   revenue_30d_ttc?: number;
   avg_cart_ttc?: number;
   top_products?: { ref: string; label: string; qty: number; revenue_ttc: number }[];
+  revenue_prev30_ttc?: number;
+  orders_prev30?: number;
 }
 
 export interface AuditEntry {
@@ -128,4 +130,7 @@ export const adminApi = {
       to_ship: AdminOrderSummary[];
       late: AdminOrderSummary[];
     }>(`/admin/orders-attention`),
+
+  bulkEmail: (order_numbers: string[], subject: string, body: string) =>
+    call<{ sent: number }>(`/admin/bulk-email`, "POST", { order_numbers, subject, body }),
 };

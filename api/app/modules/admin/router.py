@@ -144,6 +144,20 @@ async def get_stats(
     revenue_30d = (row30[1] or 0) / 100
     avg_cart = (revenue_30d / orders_30d) if orders_30d else 0.0
 
+    # 30 jours précédents (jours -60 à -30) pour comparatif
+    prev_start = today - timedelta(days=60)
+    prev_end = today - timedelta(days=30)
+    prev_row = (await db.execute(
+        select(func.count(Order.id), func.sum(Order.total_ttc_cents))
+        .where(
+            Order.created_at >= prev_start,
+            Order.created_at < prev_end,
+            Order.status.in_(paid_statuses),
+        )
+    )).first()
+    orders_prev30 = prev_row[0] or 0
+    revenue_prev30 = (prev_row[1] or 0) / 100
+
     # Top 5 produits sur 30 jours
     from app.models.order import OrderItem
     top_rows = (await db.execute(
@@ -178,6 +192,8 @@ async def get_stats(
         revenue_30d_ttc=revenue_30d,
         avg_cart_ttc=round(avg_cart, 2),
         top_products=top_products,
+        orders_prev30=orders_prev30,
+        revenue_prev30_ttc=revenue_prev30,
     )
 
 
@@ -556,3 +572,55 @@ async def stats_sparkline(
         revenue.append(rev)
         orders.append(cnt)
     return {"days": days, "revenue": revenue, "orders": orders}
+
+
+# ── Bulk email custom ──────────────────────────────────────────────
+
+@router.post("/bulk-email")
+async def bulk_email(
+    payload: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Envoie un email ad-hoc aux clients des commandes sélectionnées.
+
+    Body : {order_numbers: [...], subject: "...", body: "..."}
+    Dedupe par email avant envoi.
+    """
+    from app.modules.mailer import get_mailer
+    from app.modules.mailer.base import fire_and_forget
+
+    nums = payload.get("order_numbers") or []
+    subject = (payload.get("subject") or "").strip()
+    body = (payload.get("body") or "").strip()
+    if not nums or not subject or not body:
+        raise HTTPException(422, "order_numbers + subject + body requis")
+    if len(nums) > 200:
+        raise HTTPException(422, "Trop de destinataires (max 200)")
+
+    rows = (await db.execute(
+        select(Order, User)
+        .join(User, User.id == Order.user_id)
+        .where(Order.order_number.in_(nums))
+    )).all()
+    emails = {u.email for _, u in rows}
+
+    mailer = get_mailer()
+    for em in emails:
+        fire_and_forget(mailer.send_template(
+            to=em, subject=subject,
+            template="bulk_admin.html",
+            civilite="Bonjour",
+            site_url="https://tousvospneus.com",
+            body_text=body,
+        ))
+
+    await audit(
+        db, user=admin, action="bulk.email_sent",
+        target_type="bulk", target_id=None,
+        payload={"recipients": len(emails), "subject": subject},
+        request=request,
+    )
+    await db.commit()
+    return {"sent": len(emails)}

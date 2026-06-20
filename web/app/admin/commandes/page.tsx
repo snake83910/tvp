@@ -49,6 +49,52 @@ export default function AdminOrders() {
 
   // Confirmation bulk action
   const [confirmShip, setConfirmShip] = useState(false);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+
+  // Filtres sauvegardés (localStorage)
+  const [savedViews, setSavedViews] = useState<{ name: string; qs: string }[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("tvp_admin_views");
+      if (raw) setSavedViews(JSON.parse(raw));
+    } catch {}
+  }, []);
+  function saveCurrentView() {
+    const name = prompt("Nom de la vue ?");
+    if (!name) return;
+    const qs = window.location.search.slice(1);
+    const next = [...savedViews.filter((v) => v.name !== name), { name, qs }];
+    setSavedViews(next);
+    localStorage.setItem("tvp_admin_views", JSON.stringify(next));
+    toast("Vue sauvegardée", "success");
+  }
+  function deleteView(name: string) {
+    const next = savedViews.filter((v) => v.name !== name);
+    setSavedViews(next);
+    localStorage.setItem("tvp_admin_views", JSON.stringify(next));
+  }
+
+  async function sendBulkEmail() {
+    if (!emailSubject || !emailBody) {
+      toast("Sujet et message requis", "error");
+      return;
+    }
+    setEmailSending(true);
+    try {
+      const r = await adminApi.bulkEmail(Array.from(selected), emailSubject, emailBody);
+      toast(`Email envoyé à ${r.sent} destinataire${r.sent > 1 ? "s" : ""}`, "success");
+      setBulkEmailOpen(false);
+      setEmailSubject(""); setEmailBody("");
+      setSelected(new Set());
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setEmailSending(false);
+    }
+  }
 
   function fetch_(s: string, st: string, p: number, fd: string, td: string, minA: string, maxA: string) {
     setLoading(true);
@@ -169,6 +215,12 @@ export default function AdminOrders() {
         <h1 className="font-display text-3xl font-black text-ink">Commandes</h1>
         <div className="flex flex-wrap items-end gap-2">
           <button
+            onClick={saveCurrentView}
+            className="h-9 rounded-lg border border-line bg-paper px-3 text-sm font-semibold text-ink-soft hover:border-signal hover:text-signal"
+          >
+            ☆ Sauver vue
+          </button>
+          <button
             onClick={exportCsv}
             disabled={exporting}
             className="h-9 rounded-lg bg-ink px-4 text-sm font-bold text-paper transition hover:bg-signal disabled:opacity-60"
@@ -177,6 +229,19 @@ export default function AdminOrders() {
           </button>
         </div>
       </div>
+
+      {/* Vues sauvegardées */}
+      {savedViews.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Mes vues :</span>
+          {savedViews.map((v) => (
+            <span key={v.name} className="inline-flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-1 text-xs">
+              <a href={`/admin/commandes?${v.qs}`} className="font-semibold text-ink hover:text-signal">{v.name}</a>
+              <button onClick={() => deleteView(v.name)} className="text-ink-muted hover:text-signal" aria-label="Supprimer">×</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Filtres période rapide */}
       <div className="mb-3 flex flex-wrap gap-2">
@@ -266,6 +331,12 @@ export default function AdminOrders() {
               Marquer expédiées
             </button>
             <button
+              onClick={() => setBulkEmailOpen(true)}
+              className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-paper hover:bg-signal"
+            >
+              Envoyer email
+            </button>
+            <button
               onClick={() => setSelected(new Set())}
               className="rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-signal hover:text-signal"
             >
@@ -320,6 +391,57 @@ export default function AdminOrders() {
         onClose={() => setConfirmShip(false)}
         onConfirm={bulkShip}
       />
+
+      {/* Modal envoi email custom */}
+      {bulkEmailOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+          onClick={() => setBulkEmailOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-line bg-paper p-6 shadow-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="font-display text-lg font-black text-ink">
+              Email à {selected.size} client{selected.size > 1 ? "s" : ""}
+            </p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Une seule copie par adresse email (dédupliqué).
+            </p>
+            <div className="mt-4 space-y-3">
+              <input
+                type="text"
+                placeholder="Sujet"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                className="h-10 w-full rounded-lg border border-line bg-paper px-3 outline-none focus:border-signal"
+              />
+              <textarea
+                placeholder="Message…"
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                rows={6}
+                className="w-full rounded-lg border border-line bg-paper px-3 py-2 outline-none focus:border-signal"
+              />
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setBulkEmailOpen(false)}
+                className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink-soft hover:border-signal"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={sendBulkEmail}
+                disabled={emailSending}
+                className="rounded-lg bg-ink px-4 py-2 text-sm font-bold text-paper hover:bg-signal disabled:opacity-60"
+              >
+                {emailSending ? "Envoi…" : "Envoyer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

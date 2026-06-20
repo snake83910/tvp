@@ -80,3 +80,20 @@ def create_pre_2fa_token(user_id: str) -> str:
         sub=user_id, claims={}, expires=timedelta(minutes=5),
         token_type="pre_2fa",
     )
+
+
+def create_email_change_token(user_id: str, new_email: str) -> str:
+    """Token de confirmation de changement d'email (24h)."""
+    return _create_token(
+        sub=user_id, claims={"new_email": new_email}, expires=timedelta(hours=24),
+        token_type="email_change",
+    )
+
+
+def create_reauth_token(user_id: str) -> str:
+    """Token court (5 min) prouvant qu'on vient de re-saisir son mot de passe.
+    Utilisé pour les actions sensibles (delete account, disable 2FA)."""
+    return _create_token(
+        sub=user_id, claims={}, expires=timedelta(minutes=5),
+        token_type="reauth",
+    )

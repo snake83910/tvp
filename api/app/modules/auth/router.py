@@ -17,8 +17,16 @@ from app.core.security import (
 from app.models.user import UserRole
 from app.db.session import get_db
 from app.models.user import User
-from app.modules.auth.service import authenticate, issue_tokens, register_user
+from app.modules.auth.service import (
+    authenticate,
+    issue_token_pair,
+    issue_tokens,
+    register_user,
+    rotate_refresh_token,
+)
 from app.modules.mailer.service import (
+    send_email_change_confirm,
+    send_login_alert,
     send_password_reset,
     send_verify_email,
     send_welcome,
@@ -63,24 +71,20 @@ async def login(
 ):
     # 5 tentatives max / minute / IP : bloque le brute force basique
     await rate_limit(request, "login", max_attempts=5, window_seconds=60)
-    user = await authenticate(db, data.email, data.password)
-    return issue_tokens(user)
+    user = await authenticate(db, data.email, data.password, request)
+    return await issue_token_pair(db, user, request)
 
 
 @router.post("/refresh", response_model=TokenPair)
-async def refresh(data: RefreshIn, db: AsyncSession = Depends(get_db)):
-    try:
-        payload = decode_token(data.refresh_token)
-        if payload.get("type") != "refresh":
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
-        user_id = payload.get("sub")
-    except JWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
-
-    user = await db.get(User, uuid.UUID(user_id))
-    if user is None or not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
-    return issue_tokens(user)
+async def refresh(
+    data: RefreshIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Rotation : le refresh présenté est invalidé, un nouveau est émis.
+    Si on présente un refresh déjà révoqué, toute la chaîne du user est
+    révoquée (réutilisation = vol probable)."""
+    return await rotate_refresh_token(db, data.refresh_token, request)
 
 
 @router.get("/me", response_model=UserOut)
@@ -127,6 +131,16 @@ async def reset_password(
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Compte introuvable")
 
+    # Policy + HIBP
+    from app.core.password_policy import is_pwned, validate_password
+    err = validate_password(data.new_password)
+    if err:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=err)
+    if await is_pwned(data.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Ce mot de passe a été exposé dans une fuite. Choisissez-en un autre.",
+        )
     user.password_hash = hash_password(data.new_password)
     await db.commit()
     return None
@@ -170,7 +184,7 @@ async def admin_login(
     un code TOTP valide.
     """
     await rate_limit(request, "admin_login", max_attempts=5, window_seconds=60)
-    user = await authenticate(db, data.email, data.password)
+    user = await authenticate(db, data.email, data.password, request)
     if user.role != UserRole.admin:
         # Même message qu'un mauvais password : pas d'énumération des admins
         raise HTTPException(
@@ -178,13 +192,19 @@ async def admin_login(
             detail="Email ou mot de passe incorrect",
         )
 
+    # Alerte par email sur toute connexion admin
+    ua = request.headers.get("user-agent", "")[:200]
+    ip = (request.headers.get("x-forwarded-for", "") or
+          (request.client.host if request.client else "")).split(",")[0].strip()
+    send_login_alert(user, ip, ua)
+
     if user.totp_enabled:
         return AdminLoginOut(
             requires_2fa=True,
             pre_2fa_token=create_pre_2fa_token(str(user.id)),
         )
 
-    tokens = issue_tokens(user)
+    tokens = await issue_token_pair(db, user, request)
     return AdminLoginOut(
         requires_2fa=False,
         access_token=tokens["access_token"],
@@ -214,7 +234,88 @@ async def admin_verify_2fa(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "2FA non activé sur ce compte")
 
     import pyotp
-    if not pyotp.TOTP(user.totp_secret).verify(data.code, valid_window=1):
+    code = data.code.strip()
+    ok = pyotp.TOTP(user.totp_secret).verify(code, valid_window=1)
+    # Fallback : code de secours (8 chars alphanum)
+    if not ok and user.totp_backup_codes:
+        import bcrypt
+        remaining = []
+        used = False
+        for hashed in user.totp_backup_codes:
+            if not used and bcrypt.checkpw(code.encode(), hashed.encode()):
+                used = True  # consommé : on ne le re-ajoute pas
+            else:
+                remaining.append(hashed)
+        if used:
+            user.totp_backup_codes = remaining
+            ok = True
+    if not ok:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Code 2FA incorrect")
 
-    return issue_tokens(user)
+    return await issue_token_pair(db, user, request)
+
+
+# ── Re-auth (mot de passe) avant action sensible ──────────────────
+
+@router.post("/reauth")
+async def reauth(
+    payload: dict,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Demande le mot de passe actuel. Retourne un reauth_token court (5 min)."""
+    await rate_limit(request, "reauth", max_attempts=5, window_seconds=60)
+    from app.core.security import create_reauth_token, verify_password
+    pwd = payload.get("password") or ""
+    if not verify_password(pwd, user.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Mot de passe incorrect")
+    return {"reauth_token": create_reauth_token(str(user.id))}
+
+
+# ── Demande de changement d'email ──────────────────────────────────
+
+@router.post("/request-email-change", status_code=204)
+async def request_email_change(
+    payload: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.core.security import create_email_change_token
+    new_email = (payload.get("new_email") or "").lower().strip()
+    if not new_email or "@" not in new_email:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Email invalide")
+    existing = await db.scalar(select(User).where(User.email == new_email))
+    if existing:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Email déjà utilisé")
+    token = create_email_change_token(str(user.id), new_email)
+    send_email_change_confirm(user, new_email, token)
+    return None
+
+
+@router.post("/confirm-email-change", status_code=204)
+async def confirm_email_change(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    token = payload.get("token") or ""
+    try:
+        data = decode_token(token)
+    except JWTError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide ou expiré")
+    if data.get("type") != "email_change":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
+    user = await db.get(User, uuid.UUID(data["sub"]))
+    if user is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Compte introuvable")
+    new_email = data.get("new_email")
+    if not new_email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email manquant")
+    # Vérifier qu'aucun autre compte ne l'a pris entre temps
+    existing = await db.scalar(select(User).where(User.email == new_email))
+    if existing and existing.id != user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Email déjà utilisé")
+    user.email = new_email
+    user.email_verified = True
+    await db.commit()
+    return None

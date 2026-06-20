@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { AdminOrderSummary } from "@/lib/admin";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { EmptyState } from "@/components/admin/EmptyState";
+
+type SortKey = "order_number" | "customer_email" | "created_at" | "status" | "total_ttc";
+type SortDir = "asc" | "desc";
 
 interface Props {
   orders: AdminOrderSummary[];
@@ -21,6 +25,15 @@ export function OrderTable({
   onToggle,
   onToggleAll,
 }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+  function sort(key: SortKey) {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
   if (orders.length === 0) {
     return (
       <EmptyState
@@ -29,6 +42,16 @@ export function OrderTable({
       />
     );
   }
+
+  const sorted = [...orders].sort((a, b) => {
+    const av = a[sortKey] as string | number;
+    const bv = b[sortKey] as string | number;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
   const allSelected = selectable && selected && orders.length > 0 && orders.every((o) => selected.has(o.order_number));
 
   return (
@@ -36,7 +59,7 @@ export function OrderTable({
       {/* Desktop : tableau */}
       <div className="hidden overflow-hidden rounded-xl border border-line bg-paper shadow-card md:block">
         <table className="w-full text-sm">
-          <thead className="border-b border-line bg-paper-dim text-xs font-bold uppercase tracking-wider text-ink-muted">
+          <thead className="sticky top-0 z-10 border-b border-line bg-paper-dim text-xs font-bold uppercase tracking-wider text-ink-muted">
             <tr>
               {selectable && (
                 <th className="w-10 px-3 py-3">
@@ -49,16 +72,16 @@ export function OrderTable({
                   />
                 </th>
               )}
-              <th className="px-4 py-3 text-left">N° commande</th>
-              <th className="px-4 py-3 text-left">Client</th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Statut</th>
-              <th className="px-4 py-3 text-right">Total TTC</th>
+              <SortableTh label="N° commande" col="order_number" sortKey={sortKey} sortDir={sortDir} onSort={sort} />
+              <SortableTh label="Client" col="customer_email" sortKey={sortKey} sortDir={sortDir} onSort={sort} />
+              <SortableTh label="Date" col="created_at" sortKey={sortKey} sortDir={sortDir} onSort={sort} />
+              <SortableTh label="Statut" col="status" sortKey={sortKey} sortDir={sortDir} onSort={sort} />
+              <SortableTh label="Total TTC" col="total_ttc" sortKey={sortKey} sortDir={sortDir} onSort={sort} align="right" />
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
-            {orders.map((o) => (
+            {sorted.map((o) => (
               <tr key={o.order_number} className="border-t border-line transition hover:bg-paper-dim">
                 {selectable && (
                   <td className="px-3 py-3">
@@ -94,13 +117,39 @@ export function OrderTable({
                 <td className="px-4 py-3 text-right font-display font-black text-ink">
                   {o.total_ttc.toFixed(2).replace(".", ",")} €
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/admin/commandes/${o.order_number}`}
-                    className="text-sm font-semibold text-signal hover:underline"
+                <td className="relative px-4 py-3 text-right">
+                  <button
+                    onClick={() => setMenuOpen(menuOpen === o.order_number ? null : o.order_number)}
+                    className="rounded p-1 text-ink-muted hover:bg-paper-dim hover:text-signal"
+                    aria-label="Actions"
                   >
-                    Détail →
-                  </Link>
+                    ⋯
+                  </button>
+                  {menuOpen === o.order_number && (
+                    <div
+                      className="absolute right-4 top-10 z-20 w-48 rounded-lg border border-line bg-paper py-1 shadow-card"
+                      onMouseLeave={() => setMenuOpen(null)}
+                    >
+                      <Link
+                        href={`/admin/commandes/${o.order_number}`}
+                        className="block px-3 py-2 text-sm text-ink hover:bg-paper-dim"
+                      >
+                        Voir le détail
+                      </Link>
+                      <a
+                        href={`mailto:${o.customer_email}`}
+                        className="block px-3 py-2 text-sm text-ink hover:bg-paper-dim"
+                      >
+                        Envoyer un email
+                      </a>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(o.order_number); setMenuOpen(null); }}
+                        className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper-dim"
+                      >
+                        Copier le n°
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -110,7 +159,7 @@ export function OrderTable({
 
       {/* Mobile : cartes */}
       <ul className="space-y-3 md:hidden">
-        {orders.map((o) => (
+        {sorted.map((o) => (
           <li key={o.order_number} className="rounded-xl border border-line bg-paper p-4 shadow-card">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -137,5 +186,31 @@ export function OrderTable({
         ))}
       </ul>
     </>
+  );
+}
+
+function SortableTh({
+  label, col, sortKey, sortDir, onSort, align = "left",
+}: {
+  label: string;
+  col: SortKey;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (k: SortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sortKey === col;
+  return (
+    <th className={`px-4 py-3 text-${align}`}>
+      <button
+        onClick={() => onSort(col)}
+        className={`inline-flex items-center gap-1 transition ${active ? "text-ink" : "hover:text-ink"}`}
+      >
+        {label}
+        <span className={`text-[10px] ${active ? "opacity-100" : "opacity-30"}`}>
+          {active && sortDir === "asc" ? "▲" : "▼"}
+        </span>
+      </button>
+    </th>
   );
 }

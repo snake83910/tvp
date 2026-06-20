@@ -45,6 +45,9 @@ export default function AdminOrderDetail() {
   // Confirmation actions destructives
   const [confirmDestructive, setConfirmDestructive] = useState<null | (() => void)>(null);
 
+  // Onglets sidebar droite
+  const [tab, setTab] = useState<"status" | "note" | "history">("status");
+
   async function saveNote() {
     setNoteSaving(true);
     try {
@@ -231,9 +234,27 @@ export default function AdminOrderDetail() {
           </Section>
         </div>
 
-        {/* Colonne latérale — changement de statut */}
+        {/* Colonne latérale — onglets Statut / Note / Historique */}
         <div className="space-y-4">
-          {order.allowed_transitions.length > 0 ? (
+          <div className="flex rounded-lg border border-line bg-paper p-1 text-sm">
+            {[
+              { k: "status", label: "Statut" },
+              { k: "note", label: "Note" },
+              { k: "history", label: `Audit${auditEntries ? ` (${auditEntries.length})` : ""}` },
+            ].map((t) => (
+              <button
+                key={t.k}
+                onClick={() => setTab(t.k as "status" | "note" | "history")}
+                className={`flex-1 rounded px-2 py-1.5 font-semibold transition ${
+                  tab === t.k ? "bg-ink text-paper" : "text-ink-soft hover:bg-paper-dim"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "status" && (order.allowed_transitions.length > 0 ? (
             <Section title="Changer le statut">
               <form onSubmit={submitStatus} className="space-y-3">
                 <select
@@ -305,53 +326,55 @@ export default function AdminOrderDetail() {
                 Commande en état terminal — aucune transition possible.
               </p>
             </Section>
+          ))}
+
+          {tab === "note" && (
+            <Section title="Note interne (non visible client)">
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={6}
+                placeholder="Ex : client a appelé, retard accepté…"
+                className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-signal"
+              />
+              <button
+                onClick={saveNote}
+                disabled={noteSaving}
+                className="mt-2 rounded-lg bg-ink px-4 py-1.5 text-xs font-bold text-paper hover:bg-signal disabled:opacity-60"
+              >
+                {noteSaving ? "Enregistrement…" : "Enregistrer la note"}
+              </button>
+            </Section>
           )}
 
-          {/* Note interne admin */}
-          <Section title="Note interne (non visible client)">
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={4}
-              placeholder="Ex : client a appelé, retard accepté…"
-              className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-signal"
-            />
-            <button
-              onClick={saveNote}
-              disabled={noteSaving}
-              className="mt-2 rounded-lg bg-ink px-4 py-1.5 text-xs font-bold text-paper hover:bg-signal disabled:opacity-60"
-            >
-              {noteSaving ? "Enregistrement…" : "Enregistrer la note"}
-            </button>
-          </Section>
-
-          {/* Historique audit */}
-          <Section title="Historique">
-            {auditEntries === null ? (
-              <p className="text-xs text-ink-muted">Chargement…</p>
-            ) : auditEntries.length === 0 ? (
-              <p className="text-xs text-ink-muted">Aucune modification enregistrée.</p>
-            ) : (
-              <ul className="space-y-2 text-xs">
-                {auditEntries.map((e) => (
-                  <li key={e.id} className="border-l-2 border-line pl-3">
-                    <p className="font-semibold text-ink">{labelizeAction(e.action)}</p>
-                    <p className="text-ink-muted">
-                      {e.actor_email ?? "—"} · {new Date(e.created_at).toLocaleString("fr-FR")}
-                    </p>
-                    {e.payload && Object.keys(e.payload).length > 0 && (
-                      <p className="mt-0.5 text-ink-muted">
-                        {Object.entries(e.payload)
-                          .filter(([, v]) => v !== null && v !== undefined && v !== "")
-                          .map(([k, v]) => `${k}: ${String(v)}`)
-                          .join(" · ")}
+          {tab === "history" && (
+            <Section title="Historique">
+              {auditEntries === null ? (
+                <p className="text-xs text-ink-muted">Chargement…</p>
+              ) : auditEntries.length === 0 ? (
+                <p className="text-xs text-ink-muted">Aucune modification enregistrée.</p>
+              ) : (
+                <ul className="space-y-2 text-xs">
+                  {auditEntries.map((e) => (
+                    <li key={e.id} className="border-l-2 border-line pl-3">
+                      <p className="font-semibold text-ink">{labelizeAction(e.action)}</p>
+                      <p className="text-ink-muted">
+                        {e.actor_email ?? "—"} · {new Date(e.created_at).toLocaleString("fr-FR")}
                       </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
+                      {e.payload && Object.keys(e.payload).length > 0 && (
+                        <p className="mt-0.5 text-ink-muted">
+                          {Object.entries(e.payload)
+                            .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                            .map(([k, v]) => `${k}: ${String(v)}`)
+                            .join(" · ")}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          )}
         </div>
       </div>
 

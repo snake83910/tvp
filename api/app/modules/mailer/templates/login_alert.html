@@ -1,0 +1,25 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, nouvelle connexion à votre compte admin
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Une connexion à votre compte administrateur vient d'être enregistrée :
+  </p>
+
+  <table role="presentation" cellpadding="8" cellspacing="0" border="0" style="margin:0 0 16px 0;background:#f6f6f4;border-radius:8px;">
+    <tr><td style="font-weight:bold;">Date :</td><td>{{ login_time }}</td></tr>
+    <tr><td style="font-weight:bold;">IP :</td><td>{{ login_ip }}</td></tr>
+    <tr><td style="font-weight:bold;">Appareil :</td><td>{{ login_ua }}</td></tr>
+  </table>
+
+  <p style="margin:0 0 16px 0;">
+    Si c'était bien vous, vous pouvez ignorer cet email.
+  </p>
+
+  <p style="margin:0;color:#D8232A;font-weight:600;">
+    Si ce n'était PAS vous : changez immédiatement votre mot de passe et
+    contactez-nous.
+  </p>
+{% endblock %}

@@ -7,10 +7,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -57,6 +58,11 @@ class User(Base):
     # 2FA TOTP (Google Authenticator / Authy) — utilisé pour les comptes admin
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Backup codes 2FA — 10 codes hash bcrypt en JSON (single-use, on les retire)
+    totp_backup_codes: Mapped[list | None] = mapped_column(JSONB)
+    # Account lockout : verrouille temporairement après trop d'échecs
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -80,17 +80,35 @@ async def enable_totp(
 
 @router.post("/disable", status_code=204)
 async def disable_totp(
-    code: Annotated[str, Body(embed=True)],
+    payload: Annotated[dict, Body()],
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Désactive le 2FA après vérification d'un code valide."""
+    """Désactive le 2FA. Exige : code TOTP valide + reauth_token récent."""
     if not user.totp_enabled or not user.totp_secret:
         raise HTTPException(status_code=400, detail="2FA non activé")
+
+    # Vérifier le reauth_token (preuve qu'on vient de saisir le mdp)
+    reauth = payload.get("reauth_token") or ""
+    from app.core.security import decode_token
+    from jose import JWTError
+    try:
+        rt_payload = decode_token(reauth)
+        if rt_payload.get("type") != "reauth" or rt_payload.get("sub") != str(user.id):
+            raise ValueError
+    except (JWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Veuillez re-saisir votre mot de passe via /auth/reauth",
+        )
+
+    code = (payload.get("code") or "").strip()
     if not pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code incorrect")
+
     user.totp_enabled = False
     user.totp_secret = None
+    user.totp_backup_codes = None
     await db.commit()
     return None
 
@@ -98,4 +116,31 @@ async def disable_totp(
 @router.get("/status")
 async def status_totp(user: User = Depends(get_current_user)):
     """Statut du 2FA pour le user courant."""
-    return {"enabled": user.totp_enabled}
+    backup_count = len(user.totp_backup_codes) if user.totp_backup_codes else 0
+    return {"enabled": user.totp_enabled, "backup_codes_remaining": backup_count}
+
+
+@router.post("/backup-codes/regenerate")
+async def regenerate_backup_codes(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Génère 10 nouveaux codes de secours single-use.
+    Retourne les codes EN CLAIR (visibles 1 seule fois). Hash bcrypt côté DB.
+    """
+    import secrets
+    import string
+    import bcrypt
+
+    if not user.totp_enabled:
+        raise HTTPException(status_code=400, detail="Activez d'abord le 2FA")
+
+    alphabet = string.ascii_lowercase + string.digits
+    codes_plain = ["-".join(
+        "".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(2)
+    ) for _ in range(10)]
+    user.totp_backup_codes = [
+        bcrypt.hashpw(c.encode(), bcrypt.gensalt()).decode() for c in codes_plain
+    ]
+    await db.commit()
+    return {"codes": codes_plain}
