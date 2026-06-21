@@ -54,7 +54,7 @@ export function SiteFooter() {
 
       <div className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-6 py-4 text-xs text-ink-muted sm:flex-row">
-          <p>© {year} Tous Vos Pneus — Tous droits réservés.</p>
+          <p>© {year} tousvospneus.com — Tous droits réservés.</p>
           <p>Paiement sécurisé · Société Générale Sogecommerce</p>
         </div>
       </div>
