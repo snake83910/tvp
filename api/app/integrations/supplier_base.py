@@ -26,6 +26,16 @@ class SupplierTyre:
     price_ht: float            # prix d'ACHAT fournisseur (jamais affiché tel quel)
     image_url: str | None = None
     eu_label: dict = field(default_factory=dict)  # bruit / adhérence / conso
+    # Enrichissements (optionnels, dépendent du fournisseur)
+    ean: str | None = None             # code-barre EAN-13
+    eprel_id: int | None = None        # identifiant étiquette EPREL UE
+    description_html: str | None = None  # description longue HTML
+    is_runflat: bool = False
+    is_xl: bool = False                # renforcé
+    is_3pmsf: bool = False             # symbole montagne + 3 pics (homologué hiver)
+    is_studded: bool = False           # cloutable
+    stock: int | None = None
+    delivery_estimate: str | None = None  # ISO 8601
 
 
 class SupplierConnector(ABC):

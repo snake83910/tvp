@@ -30,6 +30,15 @@ export interface TyreResult {
   price_ttc: number;
   display_price: number;
   display_mode: "HT" | "TTC";
+  ean?: string | null;
+  eprel_id?: number | null;
+  description_html?: string | null;
+  is_runflat?: boolean;
+  is_xl?: boolean;
+  is_3pmsf?: boolean;
+  is_studded?: boolean;
+  stock?: number | null;
+  delivery_estimate?: string | null;
 }
 
 export interface SearchFacets {

@@ -89,6 +89,16 @@ class MaxityreConnector(SupplierConnector):
                 f"{_CDN_IMG}{image_id}.jpg" if image_id else None
             )
 
+            # Stock total (somme des offres) + livraison la plus rapide
+            offers = item.get("offers") or []
+            total_stock = None
+            fastest_delivery = None
+            if offers:
+                total_stock = sum(int(o.get("stock") or 0) for o in offers)
+                deliveries = [o.get("dateDelivery") for o in offers if o.get("dateDelivery")]
+                if deliveries:
+                    fastest_delivery = min(deliveries)
+
             return SupplierTyre(
                 supplier_ref=str(item.get("id") or item.get("articleReference")),
                 brand=marque.get("marque", "") or "",
@@ -104,9 +114,20 @@ class MaxityreConnector(SupplierConnector):
                 image_url=image_url,
                 eu_label={
                     "noise": item.get("noise"),
+                    "noise_class": item.get("noiseClass"),
                     "grip": item.get("grip"),
                     "wet": item.get("wet"),
                 },
+                # Enrichissements
+                ean=str(item.get("ean")) if item.get("ean") else None,
+                eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
+                description_html=((profil.get("extraFields") or {}).get("description")) or None,
+                is_runflat=bool(item.get("runflat")),
+                is_xl=bool(item.get("specifXl") or item.get("renforce")),
+                is_3pmsf=bool(item.get("specifSnow")),
+                is_studded=bool(item.get("specifNorth")),
+                stock=total_stock,
+                delivery_estimate=fastest_delivery,
             )
         except (KeyError, ValueError, TypeError):
             # Un item malformé ne doit pas casser toute la recherche

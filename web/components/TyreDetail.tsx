@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { TyreResult } from "@/lib/api";
 import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
-import { EuLabel } from "@/components/EuLabel";
+import { EprelLabel } from "@/components/EprelLabel";
+import { TyreBadges } from "@/components/TyreBadges";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 const SEASON: Record<string, string> = {
@@ -11,6 +12,23 @@ const SEASON: Record<string, string> = {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
 
+function formatDelivery(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
+  } catch {
+    return null;
+  }
+}
+
+function stockMessage(stock: number | null | undefined): { tone: "ok" | "warn" | "out"; text: string } | null {
+  if (stock == null) return null;
+  if (stock <= 0) return { tone: "out", text: "Indisponible" };
+  if (stock <= 5) return { tone: "warn", text: `Stock limité (${stock} restant${stock > 1 ? "s" : ""})` };
+  return { tone: "ok", text: "En stock — expédition rapide" };
+}
+
 export function TyreDetail({
   tyre,
   canonicalUrl,
@@ -18,7 +36,16 @@ export function TyreDetail({
   tyre: TyreResult;
   canonicalUrl: string;
 }) {
-  const productJsonLd = {
+  const noise = tyre.eu_label?.noise as number | string | null | undefined;
+  const noiseClass = tyre.eu_label?.noise_class as string | null | undefined;
+  const fuel = tyre.eu_label?.grip as string | null | undefined;
+  const wet = tyre.eu_label?.wet as string | null | undefined;
+
+  const delivery = formatDelivery(tyre.delivery_estimate);
+  const stock = stockMessage(tyre.stock);
+
+  // JSON-LD enrichi : ajoute gtin13 (EAN) si disponible
+  const productJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org/",
     "@type": "Product",
     name: `${tyre.brand} ${tyre.model} ${tyre.dimension}`,
@@ -31,10 +58,13 @@ export function TyreDetail({
       url: `${SITE}${canonicalUrl}`,
       priceCurrency: "EUR",
       price: tyre.display_price.toFixed(2),
-      availability: "https://schema.org/InStock",
+      availability: (tyre.stock ?? 1) > 0
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
       itemCondition: "https://schema.org/NewCondition",
     },
   };
+  if (tyre.ean) productJsonLd.gtin13 = tyre.ean;
 
   return (
     <>
@@ -54,6 +84,7 @@ export function TyreDetail({
         </Link>
 
         <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_1fr]">
+          {/* Colonne gauche : visuel + étiquette */}
           <div className="space-y-6">
             <div className="rounded-2xl border border-line bg-paper p-8 shadow-card">
               <TyreImage
@@ -62,18 +93,26 @@ export function TyreDetail({
                 className="mx-auto h-72 w-full"
               />
             </div>
-            <EuLabel
-              fuel={(tyre.eu_label?.grip as string) ?? null}
-              wet={(tyre.eu_label?.wet as string) ?? null}
-              noise={(tyre.eu_label?.noise as string) ?? null}
-            />
+
+            <div className="flex justify-center">
+              <EprelLabel
+                eprelId={tyre.eprel_id}
+                fuel={fuel}
+                wet={wet}
+                noise={typeof noise === "string" ? noise : noise ? String(noise) : null}
+              />
+            </div>
           </div>
 
+          {/* Colonne droite : infos + achat */}
           <div className="space-y-6">
             <div>
-              <span className="inline-block rounded-full bg-paper-dim px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
-                {SEASON[tyre.season] ?? tyre.season}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-block rounded-full bg-paper-dim px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
+                  {SEASON[tyre.season] ?? tyre.season}
+                </span>
+                <TyreBadges tyre={tyre} />
+              </div>
               <h1 className="mt-3 font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">
                 {tyre.brand}
               </h1>
@@ -90,6 +129,27 @@ export function TyreDetail({
                 </p>
                 <span className="text-sm text-ink-muted">/ unité {tyre.display_mode}</span>
               </div>
+
+              {/* Stock + livraison */}
+              {(stock || delivery) && (
+                <div className="mt-3 space-y-1 text-sm">
+                  {stock && (
+                    <p className={`flex items-center gap-1.5 font-semibold ${
+                      stock.tone === "ok" ? "text-ok"
+                      : stock.tone === "warn" ? "text-amber-700"
+                      : "text-signal-dark"
+                    }`}>
+                      <span>●</span> {stock.text}
+                    </p>
+                  )}
+                  {delivery && (
+                    <p className="text-ink-soft">
+                      <span className="font-semibold text-ink">Livraison estimée :</span> {delivery}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <ProductActions tyre={tyre} />
             </div>
 
@@ -103,9 +163,32 @@ export function TyreDetail({
               {tyre.load_index && <Row k="Indice de charge" v={String(tyre.load_index)} />}
               {tyre.speed_rating && <Row k="Indice de vitesse" v={tyre.speed_rating} />}
               <Row k="Saison" v={SEASON[tyre.season] ?? tyre.season} />
+              {/* Bruit en dB + classe */}
+              {noise != null && (
+                <Row
+                  k="Bruit roulement"
+                  v={`${noise} dB${noiseClass ? ` · Classe ${noiseClass}` : ""}`}
+                />
+              )}
+              {fuel && <Row k="Consommation carburant" v={`Classe ${fuel}`} />}
+              {wet && <Row k="Adhérence sur sol mouillé" v={`Classe ${wet}`} />}
+              {tyre.ean && <Row k="EAN" v={tyre.ean} />}
             </dl>
           </div>
         </div>
+
+        {/* Description longue */}
+        {tyre.description_html && (
+          <section className="mt-10 rounded-2xl border border-line bg-paper p-8 shadow-card">
+            <h2 className="mb-4 font-display text-xl font-black tracking-tightest text-ink">
+              À propos de ce pneu
+            </h2>
+            <div
+              className="prose-tvp text-sm leading-relaxed text-ink-soft"
+              dangerouslySetInnerHTML={{ __html: tyre.description_html }}
+            />
+          </section>
+        )}
       </main>
     </>
   );

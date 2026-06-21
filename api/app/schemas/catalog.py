@@ -29,6 +29,16 @@ class TyreResult(BaseModel):
     # Prix mis en avant selon le type de client (pro -> HT, particulier -> TTC)
     display_price: float
     display_mode: str  # "HT" ou "TTC"
+    # Enrichissements (optionnels)
+    ean: str | None = None
+    eprel_id: int | None = None
+    description_html: str | None = None
+    is_runflat: bool = False
+    is_xl: bool = False
+    is_3pmsf: bool = False
+    is_studded: bool = False
+    stock: int | None = None
+    delivery_estimate: str | None = None
 
 
 class SearchFacets(BaseModel):
