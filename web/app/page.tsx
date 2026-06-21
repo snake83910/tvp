@@ -30,7 +30,7 @@ const CONSEILS = [
 const ORG_LD = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "Tous Vos Pneus",
+  name: "tousvospneus.com",
   url: "https://tousvospneus.com",
   logo: "https://tousvospneus.com/logo.png",
   sameAs: [],
@@ -45,7 +45,7 @@ const ORG_LD = {
 const SITE_LD = {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  name: "Tous Vos Pneus",
+  name: "tousvospneus.com",
   url: "https://tousvospneus.com",
   potentialAction: {
     "@type": "SearchAction",
@@ -126,7 +126,7 @@ export default function HomePage() {
                 Livraison <span className="text-signal">offerte</span> dès 2 pneus
               </p>
               <p className="mt-1 text-sm text-paper/70">
-                Sur toutes les commandes de 2 pneus identiques minimum. Sans engagement.
+                Sur toutes les commandes de 2 pneus identiques minimum.
               </p>
             </div>
             <Link
