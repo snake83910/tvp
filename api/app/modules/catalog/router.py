@@ -91,6 +91,7 @@ def _to_priced_tyre(
         price_ttc=priced.sale_ttc,
         display_price=disp,
         display_mode="HT" if account_type == "pro" else "TTC",
+        brand_slug=raw.get("brand_slug"),
         ean=raw.get("ean"),
         eprel_id=raw.get("eprel_id"),
         description_html=raw.get("description_html"),

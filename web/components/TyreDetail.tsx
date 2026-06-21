@@ -4,6 +4,7 @@ import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
 import { EprelLabel } from "@/components/EprelLabel";
 import { TyreBadges } from "@/components/TyreBadges";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 const SEASON: Record<string, string> = {
@@ -113,9 +114,12 @@ export function TyreDetail({
                 </span>
                 <TyreBadges tyre={tyre} />
               </div>
-              <h1 className="mt-3 font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">
-                {tyre.brand}
-              </h1>
+              <div className="mt-3 flex items-center gap-3">
+                <BrandLogo brand={tyre.brand} brandSlug={tyre.brand_slug} className="h-10" />
+                <h1 className="font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">
+                  {tyre.brand}
+                </h1>
+              </div>
               <p className="text-xl text-ink-muted">{tyre.model}</p>
               <p className="mt-3 inline-block rounded-lg bg-ink px-4 py-2 font-mono text-sm font-bold text-paper">
                 {tyre.dimension}

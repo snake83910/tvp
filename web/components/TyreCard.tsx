@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { TyreResult } from "@/lib/api";
 import { useCart } from "@/components/CartProvider";
 import { TyreImage } from "@/components/TyreImage";
+import { BrandLogo } from "@/components/BrandLogo";
 import { productUrl } from "@/lib/slug";
 
 const SEASON: Record<string, string> = {
@@ -79,14 +80,17 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
         />
       </Link>
       <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 h-6">
+            <BrandLogo brand={tyre.brand} brandSlug={tyre.brand_slug} className="h-6" />
+          </div>
           <Link
             href={detailHref}
-            className="font-display text-lg font-bold text-ink hover:text-signal"
+            className="block truncate text-sm font-semibold text-ink hover:text-signal"
+            title={tyre.model}
           >
-            {tyre.brand}
+            {tyre.model}
           </Link>
-          <p className="text-sm text-ink-muted">{tyre.model}</p>
         </div>
         <span className="shrink-0 rounded-full bg-paper-dim px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
           {SEASON[tyre.season] ?? tyre.season}

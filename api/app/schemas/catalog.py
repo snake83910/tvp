@@ -30,6 +30,7 @@ class TyreResult(BaseModel):
     display_price: float
     display_mode: str  # "HT" ou "TTC"
     # Enrichissements (optionnels)
+    brand_slug: str | None = None
     ean: str | None = None
     eprel_id: int | None = None
     description_html: str | None = None

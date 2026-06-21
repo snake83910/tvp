@@ -26,6 +26,7 @@ class SupplierTyre:
     price_ht: float            # prix d'ACHAT fournisseur (jamais affiché tel quel)
     image_url: str | None = None
     eu_label: dict = field(default_factory=dict)  # bruit / adhérence / conso
+    brand_slug: str | None = None  # slug brand pour récupérer le logo CDN
     # Enrichissements (optionnels, dépendent du fournisseur)
     ean: str | None = None             # code-barre EAN-13
     eprel_id: int | None = None        # identifiant étiquette EPREL UE

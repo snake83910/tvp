@@ -30,6 +30,7 @@ export interface TyreResult {
   price_ttc: number;
   display_price: number;
   display_mode: "HT" | "TTC";
+  brand_slug?: string | null;
   ean?: string | null;
   eprel_id?: number | null;
   description_html?: string | null;

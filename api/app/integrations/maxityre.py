@@ -118,6 +118,7 @@ class MaxityreConnector(SupplierConnector):
                     "grip": item.get("grip"),
                     "wet": item.get("wet"),
                 },
+                brand_slug=marque.get("url") or None,
                 # Enrichissements
                 ean=str(item.get("ean")) if item.get("ean") else None,
                 eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
@@ -304,6 +305,7 @@ class MaxityreConnector(SupplierConnector):
                     "grip": item.get("grip"),
                     "wet": item.get("wet"),
                 },
+                brand_slug=marque.get("url") or None,
                 ean=str(item.get("ean")) if item.get("ean") else None,
                 eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
                 description_html=((profil.get("extraFields") or {}).get("description")) or None,
