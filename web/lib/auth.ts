@@ -159,6 +159,20 @@ export const accountApi = {
 
   getOrder: (orderNumber: string) =>
     call<OrderDetail>(`/me/orders/${orderNumber}`, "GET", undefined, true),
+
+  changePassword: (old_password: string, new_password: string) =>
+    call<void>("/me/password", "POST", { old_password, new_password }, true),
+
+  requestEmailChange: (new_email: string) =>
+    call<void>("/auth/request-email-change", "POST", { new_email }, true),
+
+  reauth: (password: string) =>
+    call<{ reauth_token: string }>("/auth/reauth", "POST", { password }, true),
+
+  exportData: () => call<unknown>("/me/export", "GET", undefined, true),
+
+  deleteAccount: (reauth_token: string) =>
+    call<void>("/me/account", "DELETE", { reauth_token }, true),
 };
 
 export interface UserMe {
