@@ -31,7 +31,7 @@ export function EprelLabel({
       href={`https://eprel.ec.europa.eu/screen/product/tyres/${eprelId}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-block rounded-lg border border-line bg-paper p-3 shadow-card transition hover:border-signal"
+      className="inline-block w-full max-w-xs rounded-2xl border border-line bg-paper p-5 shadow-card transition hover:border-signal hover:shadow-lift"
       title="Voir la fiche officielle sur EPREL"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -39,10 +39,10 @@ export function EprelLabel({
         src={`https://eprel.ec.europa.eu/labels/tyres/Label_${eprelId}.svg`}
         alt="Étiquette énergie européenne officielle"
         onError={() => setFailed(true)}
-        className="h-48 w-auto"
+        className="mx-auto h-auto w-full max-w-[260px]"
         loading="lazy"
       />
-      <p className="mt-1 text-center text-[10px] font-semibold text-ink-muted">
+      <p className="mt-3 text-center text-xs font-semibold text-ink-muted">
         Étiquette officielle EPREL ↗
       </p>
     </a>
