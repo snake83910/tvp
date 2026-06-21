@@ -38,9 +38,6 @@ const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   poweredByHeader: false, // masque X-Powered-By: Next.js
-  experimental: {
-    viewTransition: true,
-  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'cdn.maxityre.com' },

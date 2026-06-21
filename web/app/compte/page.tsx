@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   accountApi,
@@ -45,6 +45,23 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 ];
 
 export default function AccountPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <SiteHeader />
+          <main className="mx-auto max-w-5xl px-6 py-12">
+            <PageSkeleton />
+          </main>
+        </>
+      }
+    >
+      <AccountContent />
+    </Suspense>
+  );
+}
+
+function AccountContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const initialTab = (sp.get("tab") as Tab) || "overview";
