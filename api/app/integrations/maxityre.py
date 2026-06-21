@@ -234,9 +234,81 @@ class MaxityreConnector(SupplierConnector):
         return out
 
     async def get_by_ref(self, supplier_ref: str) -> SupplierTyre | None:
-        # L'API Maxityre ne fournit pas de get unitaire fiable côté "site" :
-        # on s'appuiera sur le cache Redis alimenté par la recherche.
-        # Implémentation dédiée à brancher avec l'API officielle.
-        raise NotImplementedError(
-            "get_by_ref : à implémenter avec l'API dropship officielle"
-        )
+        """Fiche produit détaillée via /pneu/{id}.
+
+        L'endpoint de recherche /search/pneus/dimension renvoie une version
+        allégée (sans EAN, EPREL, description, spécificités, stock). Pour
+        afficher la fiche produit complète, on appelle l'endpoint détail.
+        """
+        await self.authenticate()
+        url = f"https://api.maxityre.com/pneu/{supplier_ref}"
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
+            ) as client:
+                resp = await client.get(url, headers=self._headers())
+            if resp.status_code != 200:
+                return None
+            item = resp.json()
+        except (httpx.TimeoutException, httpx.NetworkError):
+            return None
+
+        return self._to_tyre_detailed(item)
+
+    def _to_tyre_detailed(self, item: dict) -> SupplierTyre | None:
+        """Parse la réponse détaillée de /pneu/{id}.
+
+        Structure différente du search : largeur/hauteur/diametre au lieu de
+        dimension parsée, prixHt présent, profil enrichi avec description.
+        """
+        try:
+            profil = item.get("profil") or {}
+            marque = profil.get("marque") or {}
+            raw_dim = item.get("dimension", "") or ""
+
+            price_ht = item.get("prixHt")
+            if price_ht is None:
+                return None
+            price_ht = float(price_ht)
+
+            image_id = item.get("imageB2bId")
+            image_url = f"{_CDN_IMG}{image_id}.jpg" if image_id else None
+
+            offers = item.get("offers") or []
+            total_stock = sum(int(o.get("stock") or 0) for o in offers) if offers else None
+            deliveries = [o.get("dateDelivery") for o in offers if o.get("dateDelivery")]
+            fastest_delivery = min(deliveries) if deliveries else None
+
+            speed = item.get("vitesse") or None
+
+            return SupplierTyre(
+                supplier_ref=str(item.get("id") or item.get("articleReference")),
+                brand=marque.get("marque", "") or "",
+                model=profil.get("profil", "") or "",
+                raw_dimension=raw_dim,
+                width=int(item["largeur"]) if item.get("largeur") else None,
+                aspect_ratio=int(item["hauteur"]) if item.get("hauteur") else None,
+                diameter=int(item["diametre"]) if item.get("diametre") else None,
+                load_index=int(item["charge"]) if item.get("charge") else None,
+                speed_rating=speed,
+                season=map_season(item.get("saison")),
+                price_ht=price_ht,
+                image_url=image_url,
+                eu_label={
+                    "noise": item.get("noise"),
+                    "noise_class": item.get("noiseClass"),
+                    "grip": item.get("grip"),
+                    "wet": item.get("wet"),
+                },
+                ean=str(item.get("ean")) if item.get("ean") else None,
+                eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
+                description_html=((profil.get("extraFields") or {}).get("description")) or None,
+                is_runflat=bool(item.get("runflat")),
+                is_xl=bool(item.get("specifXl") or item.get("renforce")),
+                is_3pmsf=bool(item.get("specifSnow")),
+                is_studded=bool(item.get("specifNorth")),
+                stock=total_stock,
+                delivery_estimate=fastest_delivery,
+            )
+        except (KeyError, ValueError, TypeError):
+            return None

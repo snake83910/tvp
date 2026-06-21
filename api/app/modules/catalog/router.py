@@ -318,6 +318,28 @@ async def get_product(
             status_code=404,
             detail="Référence introuvable pour cette dimension",
         )
+
+    # Enrichissement fiche détaillée (EAN, EPREL, description, stock...)
+    # via /pneu/{id}. Caché en Redis pour éviter un appel par visite.
+    detail_cache_key = f"maxityre:detail:{ref}"
+    detail = await cache_get(detail_cache_key)
+    if detail is None:
+        try:
+            full = await _connector.get_by_ref(ref)
+            if full is not None:
+                detail = full.__dict__
+                await cache_set(detail_cache_key, detail, settings.maxityre_cache_ttl)
+        except Exception:
+            detail = None
+
+    if detail:
+        # On fusionne : enrichissements de la fiche par-dessus le résumé,
+        # mais on garde price_ht de la liste (peut différer ; on privilégie
+        # la version qu'on a utilisée pour calculer le prix client)
+        merged = {**match, **{k: v for k, v in detail.items() if v is not None}}
+        merged["price_ht"] = match["price_ht"]
+        match = merged
+
     account_type, price_tier = await _resolve_account(db, user)
     rules = await load_active_rules(db)
     return _to_priced_tyre(match, rules, account_type, price_tier)
