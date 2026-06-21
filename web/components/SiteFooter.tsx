@@ -6,7 +6,7 @@ export function SiteFooter() {
     <footer className="mt-16 border-t border-line bg-paper">
       <div className="mx-auto grid max-w-7xl gap-8 px-6 py-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <p className="font-display text-lg font-black text-ink">Tous Vos Pneus</p>
+          <p className="font-display text-lg font-black text-ink">tousvospneus.com</p>
           <p className="mt-2 text-sm text-ink-muted">
             Pneus au meilleur prix, livrés chez vous ou montés chez nos
             partenaires.
