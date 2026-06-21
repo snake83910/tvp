@@ -249,7 +249,11 @@ class MaxityreConnector(SupplierConnector):
                 resp = await client.get(url, headers=self._headers())
             if resp.status_code != 200:
                 return None
-            item = resp.json()
+            body = resp.json()
+            # L'API enveloppe la fiche dans {"tyre": {...}}
+            item = body.get("tyre") if isinstance(body, dict) else None
+            if not item:
+                return None
         except (httpx.TimeoutException, httpx.NetworkError):
             return None
 
