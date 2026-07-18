@@ -161,6 +161,29 @@ async def add_item(
             CartItem.supplier_ref == supplier_ref,
         )
     )
+
+    # Même cache Redis que la recherche : le client vient de voir ce pneu
+    # dans les résultats, inutile de re-paginer Maxityre pour le retrouver.
+    raw_items = await load_dimension_catalog(width, ratio, diameter)
+    match = next(
+        (t for t in raw_items if t.get("supplier_ref") == supplier_ref),
+        None,
+    )
+    if match is None:
+        raise ValueError("Référence introuvable chez le fournisseur")
+
+    # STOCK : refuser de mettre au panier plus que le disponible
+    # fournisseur (cumul ligne existante + ajout). Sans ce contrôle,
+    # « 1 restant » n'empêchait pas de commander 2 pneus.
+    stock = match.get("stock")
+    already = existing.quantity if existing is not None else 0
+    if stock is not None and already + quantity > stock:
+        raise ValueError(
+            f"Stock insuffisant : il ne reste que {stock} pneu"
+            f"{'s' if stock > 1 else ''} pour cette référence"
+            + (f" (vous en avez déjà {already} dans le panier)" if already else "")
+        )
+
     if existing is not None:
         existing.quantity += quantity
         await db.commit()
@@ -174,16 +197,6 @@ async def add_item(
             select(ProProfile).where(ProProfile.user_id == user.id)
         )
         price_tier = prof.price_tier if prof else None
-
-    # Même cache Redis que la recherche : le client vient de voir ce pneu
-    # dans les résultats, inutile de re-paginer Maxityre pour le retrouver.
-    raw_items = await load_dimension_catalog(width, ratio, diameter)
-    match = next(
-        (t for t in raw_items if t.get("supplier_ref") == supplier_ref),
-        None,
-    )
-    if match is None:
-        raise ValueError("Référence introuvable chez le fournisseur")
 
     priced = await compute_price(
         db,
@@ -246,6 +259,23 @@ async def update_item_quantity(
         if not session_token or cart.session_token != session_token:
             raise ValueError("Article introuvable dans le panier")
 
+    # STOCK : borne aussi les hausses de quantité depuis le panier
+    pd = item.product_data or {}
+    if pd.get("width") and new_quantity > item.quantity:
+        raw_items = await load_dimension_catalog(
+            pd["width"], pd["ratio"], pd["diameter"]
+        )
+        m = next(
+            (t for t in raw_items if t.get("supplier_ref") == item.supplier_ref),
+            None,
+        )
+        stock = m.get("stock") if m else None
+        if stock is not None and new_quantity > stock:
+            raise ValueError(
+                f"Stock insuffisant : il ne reste que {stock} pneu"
+                f"{'s' if stock > 1 else ''} pour cette référence"
+            )
+
     item.quantity = new_quantity
     await db.commit()
     reloaded = await _load_cart_with_items(db, cart.id)
@@ -294,10 +324,12 @@ async def checkout(
     user: User,
     address_id: uuid.UUID,
     delivery_mode: str = "home",
+    promo_code: str | None = None,
 ) -> tuple[Order | None, list[PriceChange]]:
     """
     Transforme le panier en commande.
-    - Revalide chaque prix contre Maxityre (anti-litige).
+    - Revalide chaque prix ET le stock contre Maxityre (anti-litige).
+    - Applique le code promo (revalidé ici, source de vérité).
     - Calcule les frais de port selon les quantités PAR LIGNE :
       gratuit seulement si toutes les références sont >= 2.
     - Fige l'adresse de livraison dans la commande.
@@ -357,6 +389,14 @@ async def checkout(
                 )
             )
             continue
+
+        # STOCK frais : dernier verrou avant création de la commande
+        if match.stock is not None and it.quantity > match.stock:
+            raise ValueError(
+                f"Stock insuffisant pour « {it.label_snapshot} » : "
+                f"{match.stock} restant{'s' if match.stock > 1 else ''}. "
+                "Ajustez la quantité dans votre panier."
+            )
 
         priced = await compute_price(
             db,
@@ -436,8 +476,21 @@ async def checkout(
     line_quantities = [it.quantity for it, _, _ in revalidated]
     ship = compute_home_shipping(line_quantities)
 
-    total_ht = articles_ht + ship.ht_cents
-    total_ttc = articles_ttc + ship.ttc_cents
+    # Code promo : revalidation faisant foi (l'aperçu /cart/promo/validate
+    # n'engage rien). ValueError -> 400 avec message affichable.
+    promo_code_final: str | None = None
+    discount_ttc = 0
+    discount_ht = 0
+    if promo_code and promo_code.strip():
+        from app.modules.promo.service import split_discount, validate_promo
+        promo, discount_ttc = await validate_promo(
+            db, promo_code, user.id, articles_ttc
+        )
+        promo_code_final = promo.code
+        discount_ht, _ = split_discount(discount_ttc)
+
+    total_ht = articles_ht - discount_ht + ship.ht_cents
+    total_ttc = articles_ttc - discount_ttc + ship.ttc_cents
 
     n = (await db.execute(text("SELECT nextval('order_number_seq')"))).scalar()
     year = datetime.now(timezone.utc).year
@@ -446,6 +499,8 @@ async def checkout(
         user_id=user.id,
         status=OrderStatus.pending_payment,
         account_type_snapshot=account_type,
+        promo_code=promo_code_final,
+        discount_ttc_cents=discount_ttc,
         delivery_mode=ship.mode,
         shipping_address={
             "label": address.label,

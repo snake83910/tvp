@@ -11,14 +11,21 @@ const MAX_QTY = 20;
 
 export function ProductActions({ tyre }: { tyre: TyreResult }) {
   const { add } = useCart();
-  const [qty, setQty] = useState(DEFAULT_QTY);
+  // Quantité bornée au stock fournisseur (le backend refuse aussi)
+  const maxQty =
+    tyre.stock != null ? Math.min(MAX_QTY, Math.max(tyre.stock, 0)) : MAX_QTY;
+  const outOfStock = maxQty < 1;
+  const [qty, setQty] = useState(
+    Math.max(MIN_QTY, Math.min(DEFAULT_QTY, maxQty)),
+  );
   const [state, setState] = useState<
     "idle" | "adding" | "done" | "error"
   >("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   function clamp(n: number) {
-    if (Number.isNaN(n)) return DEFAULT_QTY;
-    return Math.max(MIN_QTY, Math.min(MAX_QTY, Math.floor(n)));
+    if (Number.isNaN(n)) return Math.min(DEFAULT_QTY, maxQty);
+    return Math.max(MIN_QTY, Math.min(maxQty, Math.floor(n)));
   }
 
   async function handleAdd() {
@@ -31,6 +38,7 @@ export function ProductActions({ tyre }: { tyre: TyreResult }) {
       return;
     }
     setState("adding");
+    setErrorMsg(null);
     try {
       await add({
         supplier_ref: tyre.supplier_ref,
@@ -40,7 +48,8 @@ export function ProductActions({ tyre }: { tyre: TyreResult }) {
         quantity: qty,
       });
       setState("done");
-    } catch {
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : null);
       setState("error");
     }
   }
@@ -63,7 +72,7 @@ export function ProductActions({ tyre }: { tyre: TyreResult }) {
         <input
           type="number"
           min={MIN_QTY}
-          max={MAX_QTY}
+          max={maxQty}
           value={qty}
           onChange={(e) => setQty(clamp(parseInt(e.target.value, 10)))}
           className="w-14 border-x border-line bg-transparent py-2 text-center font-bold text-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -72,7 +81,7 @@ export function ProductActions({ tyre }: { tyre: TyreResult }) {
         <button
           type="button"
           onClick={() => setQty(clamp(qty + 1))}
-          disabled={qty >= MAX_QTY}
+          disabled={qty >= maxQty}
           className="px-4 py-2 text-ink-soft transition hover:text-signal disabled:opacity-30"
           aria-label="Augmenter la quantité"
         >
@@ -96,15 +105,22 @@ export function ProductActions({ tyre }: { tyre: TyreResult }) {
       ) : (
         <button
           onClick={handleAdd}
-          disabled={state === "adding"}
+          disabled={state === "adding" || outOfStock}
           className="w-full rounded-full bg-signal py-3 font-display font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark disabled:opacity-60"
         >
-          {state === "adding"
-            ? "Ajout…"
-            : state === "error"
-              ? "Erreur, réessayer"
-              : `Ajouter ${qty} pneu${qty > 1 ? "s" : ""} au panier`}
+          {outOfStock
+            ? "Indisponible"
+            : state === "adding"
+              ? "Ajout…"
+              : state === "error"
+                ? "Erreur, réessayer"
+                : `Ajouter ${qty} pneu${qty > 1 ? "s" : ""} au panier`}
         </button>
+      )}
+      {errorMsg && (
+        <p className="mt-2 rounded-lg bg-signal-light px-3 py-2 text-xs text-signal-dark">
+          {errorMsg}
+        </p>
       )}
     </div>
   );

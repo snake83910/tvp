@@ -21,6 +21,7 @@ export default function CartPage() {
   // de F5).
   const { cart, refresh, updateQty, removeItem } = useCart();
   const [busy, setBusy] = useState<string | null>(null);
+  const [qtyError, setQtyError] = useState<string | null>(null);
 
   useEffect(() => {
     refresh();
@@ -29,8 +30,12 @@ export default function CartPage() {
   async function changeQty(itemId: string, q: number) {
     if (q < 1) return;
     setBusy(itemId);
+    setQtyError(null);
     try {
       await updateQty(itemId, q);
+    } catch (e) {
+      // Ex. « Stock insuffisant : il ne reste que 1 pneu... »
+      setQtyError(e instanceof Error ? e.message : "Erreur");
     } finally {
       setBusy(null);
     }
@@ -73,6 +78,11 @@ export default function CartPage() {
         ) : (
           <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
             <div className="space-y-4">
+              {qtyError && (
+                <p className="rounded-lg border border-signal/40 bg-signal-light px-4 py-3 text-sm text-signal-dark">
+                  {qtyError}
+                </p>
+              )}
               {cart.items.map((it) => (
                 <div
                   key={it.id}
