@@ -1,0 +1,29 @@
+"""Accès partagé au catalogue fournisseur (connecteur + cache Redis).
+
+Extrait du router catalogue pour que le panier (add_item) profite du
+même cache : avant ça, chaque ajout au panier relançait une recherche
+Maxityre complète (jusqu'à MAXITYRE_MAX_PAGES pages) pour retrouver
+UNE référence déjà présente dans le cache de la recherche.
+"""
+from app.core.cache import cache_get, cache_set
+from app.core.config import settings
+from app.integrations.maxityre import MaxityreConnector
+
+connector = MaxityreConnector()
+
+
+async def load_dimension_catalog(
+    width: int, ratio: int, diameter: int
+) -> list[dict]:
+    """Catalogue brut d'une dimension : cache Redis sinon Maxityre.
+
+    Centralisé pour que tous les endpoints partagent la même source
+    (et donc le même cache : zéro appel Maxityre redondant).
+    """
+    cache_key = f"maxityre:dim:{width}:{ratio}:{diameter}"
+    raw_items = await cache_get(cache_key)
+    if raw_items is None:
+        tyres = await connector.search_by_dimension(width, ratio, diameter)
+        raw_items = [t.__dict__ for t in tyres]
+        await cache_set(cache_key, raw_items, settings.maxityre_cache_ttl)
+    return raw_items

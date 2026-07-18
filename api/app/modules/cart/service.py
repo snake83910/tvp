@@ -14,6 +14,7 @@ Choix actés :
   _serialize(cart) qui itère cart.items, et en SQLAlchemy async un lazy
   load après commit lève MissingGreenlet.
 """
+import asyncio
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -23,13 +24,12 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.integrations.maxityre import MaxityreConnector
 from app.models.order import Cart, CartItem, Order, OrderItem, OrderStatus
 from app.models.user import Address, ProProfile, User
+from app.modules.catalog.service import connector as _connector
+from app.modules.catalog.service import load_dimension_catalog
 from app.modules.pricing.engine import compute_price
 from app.modules.shipping.rules import compute_home_shipping
-
-_connector = MaxityreConnector()
 
 
 def new_session_token() -> str:
@@ -174,26 +174,32 @@ async def add_item(
         )
         price_tier = prof.price_tier if prof else None
 
-    tyres = await _connector.search_by_dimension(width, ratio, diameter)
+    # Même cache Redis que la recherche : le client vient de voir ce pneu
+    # dans les résultats, inutile de re-paginer Maxityre pour le retrouver.
+    raw_items = await load_dimension_catalog(width, ratio, diameter)
     match = next(
-        (t for t in tyres if t.supplier_ref == supplier_ref), None
+        (t for t in raw_items if t.get("supplier_ref") == supplier_ref),
+        None,
     )
     if match is None:
         raise ValueError("Référence introuvable chez le fournisseur")
 
     priced = await compute_price(
         db,
-        purchase_ht=match.price_ht,
+        purchase_ht=match["price_ht"],
         account_type=account_type,
         price_tier=price_tier,
-        brand=match.brand,
+        brand=match.get("brand", ""),
     )
 
     db.add(
         CartItem(
             cart_id=cart.id,
             supplier_ref=supplier_ref,
-            label_snapshot=f"{match.brand} {match.model} {match.raw_dimension}",
+            label_snapshot=(
+                f"{match.get('brand', '')} {match.get('model', '')} "
+                f"{match.get('raw_dimension', '')}"
+            ).strip(),
             quantity=quantity,
             price_ht_snapshot=priced.sale_ht,
             price_ttc_snapshot=priced.sale_ttc,
@@ -201,7 +207,7 @@ async def add_item(
                 "width": width,
                 "ratio": ratio,
                 "diameter": diameter,
-                "brand": match.brand,
+                "brand": match.get("brand", ""),
             },
         )
     )
@@ -320,11 +326,22 @@ async def checkout(
     changes: list[PriceChange] = []
     revalidated: list[tuple[CartItem, float, float]] = []
 
+    # Revalidation FRAÎCHE (pas le cache Redis : anti-litige, on veut le
+    # prix fournisseur du moment). Une seule recherche par dimension
+    # distincte, lancées en parallèle — pas une par ligne en série.
+    dims = list({
+        (it.product_data["width"], it.product_data["ratio"],
+         it.product_data["diameter"])
+        for it in cart.items
+    })
+    results = await asyncio.gather(
+        *[_connector.search_by_dimension(w, r, d) for w, r, d in dims]
+    )
+    tyres_by_dim = dict(zip(dims, results))
+
     for it in cart.items:
         pd = it.product_data
-        tyres = await _connector.search_by_dimension(
-            pd["width"], pd["ratio"], pd["diameter"]
-        )
+        tyres = tyres_by_dim[(pd["width"], pd["ratio"], pd["diameter"])]
         match = next(
             (t for t in tyres if t.supplier_ref == it.supplier_ref), None
         )

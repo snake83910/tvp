@@ -21,9 +21,12 @@ from app.core.cache import cache_get, cache_set
 from app.core.config import settings
 from app.core.deps import get_current_user_optional
 from app.db.session import get_db
-from app.integrations.maxityre import MaxityreConnector
 from app.models.catalog import PricingRule
 from app.models.user import ProProfile, User
+from app.modules.catalog.service import connector as _connector
+from app.modules.catalog.service import (
+    load_dimension_catalog as _load_dimension_catalog,
+)
 from app.modules.pricing.engine import compute_price_sync, load_active_rules
 from app.schemas.catalog import (
     SearchFacets,
@@ -34,26 +37,7 @@ from app.schemas.catalog import (
 
 router = APIRouter(prefix="/search", tags=["catalog"])
 
-_connector = MaxityreConnector()
-
 SORTS = {"price_asc", "price_desc", "brand"}
-
-
-async def _load_dimension_catalog(
-    width: int, ratio: int, diameter: int
-) -> list[dict]:
-    """Catalogue brut d'une dimension : cache Redis sinon Maxityre.
-
-    Centralisé pour que tous les endpoints partagent la même source
-    (et donc le même cache : zéro appel Maxityre redondant).
-    """
-    cache_key = f"maxityre:dim:{width}:{ratio}:{diameter}"
-    raw_items = await cache_get(cache_key)
-    if raw_items is None:
-        tyres = await _connector.search_by_dimension(width, ratio, diameter)
-        raw_items = [t.__dict__ for t in tyres]
-        await cache_set(cache_key, raw_items, settings.maxityre_cache_ttl)
-    return raw_items
 
 
 def _to_priced_tyre(

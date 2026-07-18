@@ -22,6 +22,27 @@ from app.modules.catalog.normalize import map_season, parse_dimension
 
 _CDN_IMG = "https://cdn.maxityre.com/assets/img/tyre/big/"
 
+# Client httpx PARTAGÉ : les connexions TCP/TLS sont réutilisées entre
+# les appels (une recherche = des dizaines de pages, un handshake TLS
+# par page coûterait cher). Fermé proprement au shutdown (main.lifespan).
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)
+        )
+    return _client
+
+
+async def aclose_shared_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
+
 
 class MaxityreConnector(SupplierConnector):
     name = "maxityre"
@@ -44,18 +65,17 @@ class MaxityreConnector(SupplierConnector):
             )
 
         url = f"{settings.maxityre_base_url}/fr_FR/login_check"
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)) as client:
-            resp = await client.post(
-                url,
-                headers={
-                    "ad-tyres-site": settings.maxityre_site_id,
-                    "content-type": "application/x-www-form-urlencoded",
-                },
-                data={
-                    "_username": settings.maxityre_username,
-                    "_password": settings.maxityre_password,
-                },
-            )
+        resp = await _get_client().post(
+            url,
+            headers={
+                "ad-tyres-site": settings.maxityre_site_id,
+                "content-type": "application/x-www-form-urlencoded",
+            },
+            data={
+                "_username": settings.maxityre_username,
+                "_password": settings.maxityre_password,
+            },
+        )
         resp.raise_for_status()
         data = resp.json()
         token = data.get("token")
@@ -194,38 +214,38 @@ class MaxityreConnector(SupplierConnector):
 
         import asyncio
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)) as client:
-            first = await self._fetch_page(
-                client, url, width, height, diameter, 1
-            )
-            if not first:
-                return []
+        client = _get_client()
+        first = await self._fetch_page(
+            client, url, width, height, diameter, 1
+        )
+        if not first:
+            return []
 
-            details = first.get("details") or {}
-            items = list(first.get("items") or [])
+        details = first.get("details") or {}
+        items = list(first.get("items") or [])
 
-            nb_results = int(details.get("nbResults") or len(items))
-            limit = int(details.get("limit") or len(items) or 20)
-            if limit <= 0:
-                limit = 20
+        nb_results = int(details.get("nbResults") or len(items))
+        limit = int(details.get("limit") or len(items) or 20)
+        if limit <= 0:
+            limit = 20
 
-            # Nombre total de pages, borné par sécurité
-            total_pages = (nb_results + limit - 1) // limit
-            total_pages = min(total_pages, settings.maxityre_max_pages)
+        # Nombre total de pages, borné par sécurité
+        total_pages = (nb_results + limit - 1) // limit
+        total_pages = min(total_pages, settings.maxityre_max_pages)
 
-            if total_pages > 1:
-                # Pages 2..N en parallèle
-                tasks = [
-                    self._fetch_page(
-                        client, url, width, height, diameter, p
-                    )
-                    for p in range(2, total_pages + 1)
-                ]
-                for res in await asyncio.gather(
-                    *tasks, return_exceptions=True
-                ):
-                    if isinstance(res, dict) and res:
-                        items.extend(res.get("items") or [])
+        if total_pages > 1:
+            # Pages 2..N en parallèle
+            tasks = [
+                self._fetch_page(
+                    client, url, width, height, diameter, p
+                )
+                for p in range(2, total_pages + 1)
+            ]
+            for res in await asyncio.gather(
+                *tasks, return_exceptions=True
+            ):
+                if isinstance(res, dict) and res:
+                    items.extend(res.get("items") or [])
 
         out: list[SupplierTyre] = []
         for it in items:
@@ -242,12 +262,9 @@ class MaxityreConnector(SupplierConnector):
         afficher la fiche produit complète, on appelle l'endpoint détail.
         """
         await self.authenticate()
-        url = f"https://api.maxityre.com/pneu/{supplier_ref}"
+        url = f"{settings.maxityre_base_url}/pneu/{supplier_ref}"
         try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
-            ) as client:
-                resp = await client.get(url, headers=self._headers())
+            resp = await _get_client().get(url, headers=self._headers())
             if resp.status_code != 200:
                 return None
             body = resp.json()

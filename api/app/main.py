@@ -65,6 +65,8 @@ def _setup_sentry() -> None:
 _setup_sentry()
 
 
+from contextlib import asynccontextmanager
+
 from app.modules.accounts.router import router as accounts_router
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
@@ -74,10 +76,19 @@ from app.modules.catalog.router import router as catalog_router
 from app.modules.cron.router import router as cron_router
 from app.modules.orders.payment_router import router as payment_router
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    yield
+    # Fermeture propre du client httpx partagé (connexions keep-alive)
+    from app.integrations.maxityre import aclose_shared_client
+    await aclose_shared_client()
+
+
 app = FastAPI(
     title="tousvospneus.com API",
     version="0.1.0",
     description="Backend e-commerce pneus — dropshipping B2C + B2B",
+    lifespan=_lifespan,
 )
 
 # CORS : le navigateur charge le site depuis une origine (ex.
