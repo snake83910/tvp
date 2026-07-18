@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import {
+  PasswordField,
+  passwordMeetsRules,
+} from "@/components/PasswordField";
 import { auth } from "@/lib/auth";
 
 export default function RegisterPage() {
@@ -25,8 +29,11 @@ export default function RegisterPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (form.password.length < 8) {
-      setError("Le mot de passe doit faire au moins 8 caractères.");
+    // Mêmes règles que le backend : évite un aller-retour pour rien
+    if (!passwordMeetsRules(form.password)) {
+      setError(
+        "Le mot de passe ne respecte pas encore toutes les règles ci-dessous.",
+      );
       return;
     }
     setBusy(true);
@@ -68,13 +75,12 @@ export default function RegisterPage() {
             <F label="Nom" v={form.last_name} k="last_name" up={up} />
           </div>
           <F label="Email" type="email" v={form.email} k="email" up={up} />
-          <F
+          <PasswordField
             label="Mot de passe"
-            type="password"
-            v={form.password}
-            k="password"
-            up={up}
-            hint="8 caractères minimum"
+            value={form.password}
+            onChange={(v) => up("password", v)}
+            autoComplete="new-password"
+            showChecklist
           />
           <F label="Téléphone" v={form.phone} k="phone" up={up} />
           <button

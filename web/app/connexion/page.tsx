@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { PasswordField } from "@/components/PasswordField";
 import { auth } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -71,12 +72,11 @@ function LoginForm() {
           value={email}
           onChange={setEmail}
         />
-        <Field
+        <PasswordField
           label="Mot de passe"
-          type="password"
-          autoComplete="current-password"
           value={password}
           onChange={setPassword}
+          autoComplete="current-password"
         />
         <button
           type="submit"
