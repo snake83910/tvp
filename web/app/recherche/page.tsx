@@ -13,6 +13,7 @@ type SP = {
   diameter?: string;
   brand?: string;
   season?: string;
+  three_pmsf?: string;
   min_price?: string;
   max_price?: string;
   sort?: string;
@@ -38,6 +39,7 @@ export default async function SearchPage({
         diameter: Number(diameter),
         brand: searchParams.brand,
         season: searchParams.season,
+        threePmsf: searchParams.three_pmsf === "1",
         minPrice: searchParams.min_price
           ? Number(searchParams.min_price)
           : undefined,

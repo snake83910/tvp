@@ -47,6 +47,9 @@ class SearchFacets(BaseModel):
     dynamiquement la barre de filtres cote frontend."""
 
     brands: list[str]
+    # Nombre de pneus par marque (avant filtre marque) : permet au front
+    # d'afficher "Michelin (12)" dans les cases à cocher.
+    brand_counts: dict[str, int] = {}
     seasons: list[str]
     price_min: float
     price_max: float

@@ -109,8 +109,14 @@ async def search_by_dimensions(
     width: int = Query(..., ge=100, le=400, examples=[205]),
     ratio: int = Query(..., ge=20, le=100, examples=[55]),
     diameter: int = Query(..., ge=10, le=30, examples=[16]),
-    brand: str | None = Query(None, examples=["Michelin"]),
+    brand: str | None = Query(
+        None, examples=["Michelin"],
+        description="Une ou plusieurs marques séparées par des virgules",
+    ),
     season: str | None = Query(None, examples=["ete"]),
+    three_pmsf: bool | None = Query(
+        None, description="true = uniquement les pneus homologués 3PMSF (Loi Montagne)"
+    ),
     min_price: float | None = Query(None, ge=0),
     max_price: float | None = Query(None, ge=0),
     sort: str = Query("price_asc"),
@@ -138,8 +144,14 @@ async def search_by_dimensions(
         for it in raw_items
     ]
 
+    brand_counts: dict[str, int] = {}
+    for t in priced_all:
+        if t.brand:
+            brand_counts[t.brand] = brand_counts.get(t.brand, 0) + 1
+
     facets = SearchFacets(
-        brands=sorted({t.brand for t in priced_all if t.brand}),
+        brands=sorted(brand_counts),
+        brand_counts=brand_counts,
         seasons=sorted({t.season for t in priced_all if t.season}),
         price_min=round(
             min((t.display_price for t in priced_all), default=0), 2
@@ -151,9 +163,13 @@ async def search_by_dimensions(
 
     filtered = priced_all
     if brand:
-        filtered = [t for t in filtered if t.brand == brand]
+        # Multi-sélection : "Michelin,Continental"
+        wanted = {b.strip() for b in brand.split(",") if b.strip()}
+        filtered = [t for t in filtered if t.brand in wanted]
     if season:
         filtered = [t for t in filtered if t.season == season]
+    if three_pmsf:
+        filtered = [t for t in filtered if t.is_3pmsf]
     if min_price is not None:
         filtered = [t for t in filtered if t.display_price >= min_price]
     if max_price is not None:

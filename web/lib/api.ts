@@ -44,6 +44,7 @@ export interface TyreResult {
 
 export interface SearchFacets {
   brands: string[];
+  brand_counts?: Record<string, number>;
   seasons: string[];
   price_min: number;
   price_max: number;
@@ -128,6 +129,7 @@ export const api = {
       diameter: number;
       brand?: string;
       season?: string;
+      threePmsf?: boolean;
       minPrice?: number;
       maxPrice?: number;
       sort?: string;
@@ -142,6 +144,7 @@ export const api = {
     });
     if (params.brand) q.set("brand", params.brand);
     if (params.season) q.set("season", params.season);
+    if (params.threePmsf) q.set("three_pmsf", "true");
     if (params.minPrice != null)
       q.set("min_price", String(params.minPrice));
     if (params.maxPrice != null)

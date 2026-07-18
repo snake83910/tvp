@@ -19,6 +19,30 @@ const DEFAULT_QTY = 2; // métier pneu : par essieu
 const MIN_QTY = 1;
 const MAX_QTY = 20;
 
+const GRADE_COLOR: Record<string, string> = {
+  A: "bg-ok",
+  B: "bg-ok/80",
+  C: "bg-yellow-500",
+  D: "bg-orange-500",
+  E: "bg-signal",
+};
+
+/** Mini-pastille de note européenne (A→E) pour les cartes résultats. */
+function GradeDot({ label, value, title }: { label: string; value: unknown; title: string }) {
+  const grade = String(value ?? "").toUpperCase();
+  if (!GRADE_COLOR[grade]) return null;
+  return (
+    <span className="inline-flex items-center gap-1" title={title}>
+      <span className="text-[10px] uppercase tracking-wide text-ink-muted">{label}</span>
+      <span
+        className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black text-white ${GRADE_COLOR[grade]}`}
+      >
+        {grade}
+      </span>
+    </span>
+  );
+}
+
 export function TyreCard({ tyre }: { tyre: TyreResult }) {
   const { add } = useCart();
   const [qty, setQty] = useState(DEFAULT_QTY);
@@ -97,11 +121,11 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
         </span>
       </div>
 
-      <p className="mb-4 font-mono text-sm text-ink-soft">
+      <p className="mb-3 font-mono text-sm text-ink-soft">
         {tyre.dimension}
       </p>
 
-      <div className="mb-5 flex gap-3 text-xs text-ink-muted">
+      <div className="mb-2 flex gap-3 text-xs text-ink-muted">
         {tyre.load_index && (
           <span>
             Charge{" "}
@@ -119,6 +143,49 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
           </span>
         )}
       </div>
+
+      {/* Étiquette EU compacte + homologation hiver : critères de choix,
+          affichés dès les résultats au lieu d'attendre la fiche */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <GradeDot
+          label="Conso"
+          value={tyre.eu_label?.grip}
+          title="Efficacité carburant (résistance au roulement)"
+        />
+        <GradeDot
+          label="Pluie"
+          value={tyre.eu_label?.wet}
+          title="Adhérence sur sol mouillé"
+        />
+        {tyre.is_3pmsf && (
+          <span
+            className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-800"
+            title="Symbole montagne + 3 pics : conforme Loi Montagne"
+          >
+            ❄ 3PMSF
+          </span>
+        )}
+      </div>
+
+      {/* Disponibilité */}
+      {tyre.stock != null && (
+        <p
+          className={`mb-2 text-xs font-semibold ${
+            tyre.stock <= 0
+              ? "text-signal"
+              : tyre.stock <= 5
+                ? "text-amber-700"
+                : "text-ok"
+          }`}
+        >
+          ●{" "}
+          {tyre.stock <= 0
+            ? "Indisponible"
+            : tyre.stock <= 5
+              ? `Stock limité (${tyre.stock} restants)`
+              : "En stock"}
+        </p>
+      )}
 
       <div className="mt-auto border-t border-line pt-4">
         <div className="mb-3 flex items-end justify-between">
@@ -178,6 +245,17 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
           {state === "idle" &&
             `Ajouter ${qty} pneu${qty > 1 ? "s" : ""}`}
         </button>
+
+        {/* Règle métier : livraison offerte dès 2 pneus par référence */}
+        <p
+          className={`mt-2 text-center text-[11px] font-semibold ${
+            qty >= 2 ? "text-ok" : "text-ink-muted"
+          }`}
+        >
+          {qty >= 2
+            ? "✓ Livraison offerte"
+            : "Livraison offerte dès 2 pneus"}
+        </p>
       </div>
     </article>
   );
