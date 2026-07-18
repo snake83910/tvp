@@ -24,6 +24,7 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import get_redis
 from app.models.order import Cart, CartItem, Order, OrderItem, OrderStatus
 from app.models.user import Address, ProProfile, User
 from app.modules.catalog.service import connector as _connector
@@ -401,6 +402,28 @@ async def checkout(
                 )
             )
         await db.commit()
+
+        # Le cache catalogue est PROUVÉ périmé pour ces dimensions (la
+        # revalidation vient de trouver un autre prix) : on l'invalide
+        # pour que la recherche et les fiches produit affichent
+        # immédiatement les nouveaux prix, sans attendre le TTL.
+        all_changed = changed_refs | unavailable
+        stale_keys = [
+            f"maxityre:detail:{ref}" for ref in all_changed
+        ]
+        stale_keys += [
+            f"maxityre:dim:{pd['width']}:{pd['ratio']}:{pd['diameter']}"
+            for it in cart.items
+            if it.supplier_ref in all_changed
+            for pd in [it.product_data or {}]
+            if pd.get("width")
+        ]
+        if stale_keys:
+            try:
+                await get_redis().delete(*set(stale_keys))
+            except Exception:
+                pass  # cache indisponible : non bloquant, le TTL fera foi
+
         return None, changes
 
     articles_ht = sum(

@@ -64,7 +64,11 @@ class Settings(BaseSettings):
     maxityre_site_id: str = "4"
     maxityre_username: str = ""
     maxityre_password: str = ""
-    maxityre_cache_ttl: int = 7200  # 2h : prix peu volatils + revalidés au checkout
+    # 30 min : compromis fraîcheur des prix affichés / volume d'appels
+    # Maxityre. Les prix bougent réellement en journée (constaté), et le
+    # checkout revalide toujours en direct + invalide le cache des
+    # dimensions dont le prix a changé. Ajustable via MAXITYRE_CACHE_TTL.
+    maxityre_cache_ttl: int = 1800
     maxityre_max_pages: int = 100   # garde-fou anti-boucle (100 pages = 2000 pneus)
 
     # Paiement : "simulated" (dev) ou "sogecommerce" (prod, contrat actif)
