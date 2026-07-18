@@ -3,14 +3,13 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { adminApi, type AdminOrderSummary } from "@/lib/admin";
-import { getToken } from "@/lib/auth";
+import { authFetch } from "@/lib/auth";
 import { STATUS_LABEL } from "@/lib/orderStatus";
 import { OrderTable } from "@/components/admin/OrderTable";
 import { SkeletonList } from "@/components/Skeleton";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { useToast } from "@/components/admin/Toast";
 
-const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const STATUSES = [
   "paid", "sent_to_supplier", "shipped", "delivered",
@@ -150,8 +149,8 @@ export default function AdminOrders() {
       const params = new URLSearchParams();
       if (fromDate) params.set("from_date", fromDate);
       if (toDate) params.set("to_date", toDate);
-      const url = `${BROWSER_API}/admin/orders/export.csv${params.size ? `?${params}` : ""}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const url = `/admin/orders/export.csv${params.size ? `?${params}` : ""}`;
+      const res = await authFetch(url);
       if (!res.ok) throw new Error(`Erreur ${res.status}`);
       const blob = await res.blob();
       const a = document.createElement("a");

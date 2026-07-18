@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
-import { getToken, useCurrentUser } from "@/lib/auth";
-
-const BROWSER_API =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { authFetch, useCurrentUser } from "@/lib/auth";
 
 // Endpoint Sogecommerce (identique à la variable d'env backend)
 const SOGE_ENDPOINT =
@@ -47,10 +44,7 @@ export default function PaymentPage({
   // 1. Initialise le paiement côté serveur → récupère formToken + publicKey
   useEffect(() => {
     if (!user) return;
-    fetch(`${BROWSER_API}/payment/init/${params.orderNumber}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
+    authFetch(`/payment/init/${params.orderNumber}`, { method: "POST" })
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json()).detail ?? "Erreur");
         return r.json();
@@ -110,12 +104,9 @@ export default function PaymentPage({
           const krAnswer: string = paymentData.rawClientAnswer ?? JSON.stringify(paymentData.clientAnswer);
           const krHash: string = paymentData.hash;
           // fire-and-forget : on navigue sans attendre la réponse backend
-          fetch(`${BROWSER_API}/payment/verify-kr-answer/${params.orderNumber}`, {
+          authFetch(`/payment/verify-kr-answer/${params.orderNumber}`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${getToken()}`,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ kr_answer: krAnswer, kr_hash: krHash }),
           }).catch(() => {});
           router.push(`/paiement/retour?cmd=${params.orderNumber}`);
@@ -155,12 +146,9 @@ export default function PaymentPage({
     if (!init) return;
     setSimBusy(true);
     try {
-      const res = await fetch(
-        `${BROWSER_API}/payment/simulate/${params.orderNumber}`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${getToken()}` },
-        }
+      const res = await authFetch(
+        `/payment/simulate/${params.orderNumber}`,
+        { method: "POST" }
       );
       if (res.ok) {
         router.push(`/commande/${params.orderNumber}`);

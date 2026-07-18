@@ -1,9 +1,6 @@
 "use client";
 
-import { getToken } from "@/lib/auth";
-
-const BROWSER_API =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { authFetch, getToken } from "@/lib/auth";
 
 const CART_SESSION_KEY = "tvp_cart_session";
 
@@ -50,11 +47,11 @@ async function call<T>(
     "Content-Type": "application/json",
   };
   const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
   const session = getCartSession();
   if (session) headers["X-Cart-Session"] = session;
 
-  const res = await fetch(`${BROWSER_API}${path}`, {
+  // authFetch ajoute l'Authorization et rafraîchit la session sur 401
+  const res = await authFetch(path, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,

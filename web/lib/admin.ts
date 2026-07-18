@@ -1,19 +1,12 @@
 "use client";
 
-import { getToken } from "@/lib/auth";
+import { authFetch } from "@/lib/auth";
 import type { OrderDetail } from "@/lib/auth";
 
-const BROWSER_API =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 async function call<T>(path: string, method = "GET", body?: unknown): Promise<T> {
-  const token = getToken();
-  const res = await fetch(`${BROWSER_API}${path}`, {
+  const res = await authFetch(path, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -68,11 +61,7 @@ export interface AdminOrderDetail extends OrderDetail {
 }
 
 export async function downloadAdminInvoice(orderNumber: string): Promise<void> {
-  const token = getToken();
-  const res = await fetch(
-    `${BROWSER_API}/admin/orders/${orderNumber}/invoice`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-  );
+  const res = await authFetch(`/admin/orders/${orderNumber}/invoice`);
   if (!res.ok) throw new Error("Impossible de télécharger la facture");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

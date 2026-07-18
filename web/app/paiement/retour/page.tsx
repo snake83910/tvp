@@ -3,9 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
-import { getToken } from "@/lib/auth";
-
-const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { authFetch } from "@/lib/auth";
 
 export default function PaiementRetourPage() {
   return (
@@ -44,13 +42,7 @@ function RetourContent() {
     async function syncAndRedirect() {
       setSyncing(true);
       try {
-        const res = await fetch(
-          `${BROWSER_API}/payment/sync/${orderNumber}`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${getToken()}` },
-          }
-        );
+        await authFetch(`/payment/sync/${orderNumber}`, { method: "POST" });
         // 200 → synced ou already_processed, on continue
         // On ignore les erreurs de sync (PSP_100 si Order/Get pas activé)
         // L'IPN serveur ou le webhook mettra à jour le statut

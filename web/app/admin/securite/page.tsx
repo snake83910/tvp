@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getToken } from "@/lib/auth";
-
-const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { authFetch } from "@/lib/auth";
 
 interface SetupData {
   secret: string;
@@ -12,13 +10,9 @@ interface SetupData {
 }
 
 async function call(path: string, method = "GET", body?: object) {
-  const token = getToken();
-  const res = await fetch(`${BROWSER_API}${path}`, {
+  const res = await authFetch(path, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {

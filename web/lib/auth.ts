@@ -9,10 +9,11 @@ const TOKEN_KEY = "tvp_access";
 const REFRESH_KEY = "tvp_refresh";
 
 export function saveTokens(access: string, refresh: string) {
-  // Stockage en mémoire de session navigateur (pas localStorage en SSR)
+  // localStorage (et pas sessionStorage) : la session survit à un
+  // nouvel onglet — sinon "ouvrir dans un nouvel onglet" = déconnecté.
   if (typeof window !== "undefined") {
-    sessionStorage.setItem(TOKEN_KEY, access);
-    sessionStorage.setItem(REFRESH_KEY, refresh);
+    localStorage.setItem(TOKEN_KEY, access);
+    localStorage.setItem(REFRESH_KEY, refresh);
     // Notifie les composants qui écoutent (ex: useCurrentUser)
     window.dispatchEvent(new Event("tvp:auth-changed"));
   }
@@ -20,17 +21,84 @@ export function saveTokens(access: string, refresh: string) {
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_KEY);
 }
 
 export function clearTokens() {
   if (typeof window !== "undefined") {
-    sessionStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     // Nettoyer aussi le panier : éviter qu'un utilisateur suivant
     // qui se connecte sur le même navigateur voie l'ancien panier
     localStorage.removeItem("tvp_cart_session");
+    window.dispatchEvent(new Event("tvp:auth-changed"));
   }
+}
+
+// ── Refresh automatique ─────────────────────────────────────────────
+// L'access token expire au bout de 30 min. Plutôt que de déconnecter
+// silencieusement l'utilisateur (potentiellement en plein checkout),
+// on échange le refresh token contre une nouvelle paire sur le premier
+// 401, puis on rejoue la requête. Single-flight : si N requêtes
+// échouent en même temps, un seul appel /auth/refresh part (le backend
+// révoque toute la chaîne si un refresh est présenté deux fois).
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refresh = getRefreshToken();
+      if (!refresh) return false;
+      try {
+        const res = await fetch(`${BROWSER_API}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refresh }),
+        });
+        if (!res.ok) return false;
+        const b = await res.json();
+        saveTokens(b.access_token, b.refresh_token);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    refreshPromise.finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+/**
+ * fetch avec Authorization + refresh automatique sur 401.
+ * À utiliser pour TOUT appel authentifié (lib/cart.ts, lib/admin.ts…)
+ * pour que la session soit rafraîchie partout de la même façon.
+ */
+export async function authFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const doFetch = () => {
+    const headers = new Headers(init.headers);
+    const t = getToken();
+    if (t) headers.set("Authorization", `Bearer ${t}`);
+    return fetch(`${BROWSER_API}${path}`, { ...init, headers });
+  };
+  let res = await doFetch();
+  if (res.status === 401 && getRefreshToken()) {
+    if (await tryRefresh()) {
+      res = await doFetch();
+    } else {
+      clearTokens();
+    }
+  }
+  return res;
 }
 
 async function call<T>(
@@ -39,18 +107,14 @@ async function call<T>(
   body?: unknown,
   auth = false,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (auth) {
-    const t = getToken();
-    if (t) headers.Authorization = `Bearer ${t}`;
-  }
-  const res = await fetch(`${BROWSER_API}${path}`, {
+  const init: RequestInit = {
     method,
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
-  });
+  };
+  const res = auth
+    ? await authFetch(path, init)
+    : await fetch(`${BROWSER_API}${path}`, init);
   if (!res.ok) {
     let detail = `Erreur ${res.status}`;
     try {
@@ -124,11 +188,7 @@ export interface OrderDetail {
 }
 
 export async function downloadInvoice(orderNumber: string): Promise<void> {
-  const token = getToken();
-  const res = await fetch(
-    `${BROWSER_API}/me/orders/${orderNumber}/invoice`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-  );
+  const res = await authFetch(`/me/orders/${orderNumber}/invoice`);
   if (!res.ok) throw new Error("Impossible de télécharger la facture");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -233,11 +293,19 @@ export function useCurrentUser() {
         .finally(() => { if (!cancelled) setLoading(false); });
     }
 
+    // "storage" : déclenché quand un AUTRE onglet modifie localStorage
+    // (login/logout ailleurs) — garde tous les onglets synchronisés.
+    function onStorage(e: StorageEvent) {
+      if (e.key === TOKEN_KEY || e.key === null) refresh();
+    }
+
     refresh();
     window.addEventListener("tvp:auth-changed", refresh);
+    window.addEventListener("storage", onStorage);
     return () => {
       cancelled = true;
       window.removeEventListener("tvp:auth-changed", refresh);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 

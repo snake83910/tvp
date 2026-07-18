@@ -1,15 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useCurrentUser } from "@/lib/auth";
+import { authFetch, useCurrentUser } from "@/lib/auth";
 import { useToast } from "@/components/admin/Toast";
-
-const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-function authHeaders(): Record<string, string> {
-  const t = typeof window !== "undefined" ? sessionStorage.getItem("tvp_access") : null;
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
 
 export default function AdminProfilPage() {
   const { user } = useCurrentUser();
@@ -28,9 +21,9 @@ export default function AdminProfilPage() {
     }
     setBusy(true);
     try {
-      const res = await fetch(`${BROWSER_API}/me/password`, {
+      const res = await authFetch(`/me/password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
       });
       if (!res.ok) {
@@ -54,9 +47,9 @@ export default function AdminProfilPage() {
     }
     setBusy(true);
     try {
-      const res = await fetch(`${BROWSER_API}/auth/request-email-change`, {
+      const res = await authFetch(`/auth/request-email-change`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_email: newEmail }),
       });
       if (!res.ok) {
