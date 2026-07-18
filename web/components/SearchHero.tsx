@@ -1,8 +1,38 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type VehicleDimension } from "@/lib/api";
+
+// Valeurs standard du marché : un <select> élimine les fautes de frappe
+// (« 2055 »), les recherches vides, et donne une roue native sur mobile.
+const WIDTHS = Array.from({ length: 24 }, (_, i) => 125 + i * 10); // 125→355
+const RATIOS = Array.from({ length: 13 }, (_, i) => 25 + i * 5); // 25→85
+const DIAMETERS = Array.from({ length: 13 }, (_, i) => 12 + i); // 12→24
+
+const LAST_DIM_KEY = "tvp_last_dim";
+
+type LastDim = { w: string; h: string; d: string };
+
+function readLastDim(): LastDim | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LAST_DIM_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as LastDim;
+    return v.w && v.h && v.d ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastDim(dim: LastDim) {
+  try {
+    localStorage.setItem(LAST_DIM_KEY, JSON.stringify(dim));
+  } catch {
+    /* stockage plein / bloqué : non bloquant */
+  }
+}
 
 export function SearchHero() {
   const router = useRouter();
@@ -11,20 +41,34 @@ export function SearchHero() {
   const [w, setW] = useState("");
   const [h, setH] = useState("");
   const [d, setD] = useState("");
+  const [lastDim, setLastDim] = useState<LastDim | null>(null);
 
   const [plate, setPlate] = useState("");
   const [plateLoading, setPlateLoading] = useState(false);
   const [plateError, setPlateError] = useState<string | null>(null);
   const [plateDims, setPlateDims] = useState<VehicleDimension[] | null>(null);
 
+  // Un client revient tous les 2-3 ans (ou compare sur plusieurs jours) :
+  // on pré-remplit sa dernière dimension pour lui éviter la re-saisie.
+  useEffect(() => {
+    const last = readLastDim();
+    if (last) {
+      setLastDim(last);
+      setW((prev) => prev || last.w);
+      setH((prev) => prev || last.h);
+      setD((prev) => prev || last.d);
+    }
+  }, []);
+
+  function goSearch(width: string, ratio: string, diameter: string) {
+    saveLastDim({ w: width, h: ratio, d: diameter });
+    const q = new URLSearchParams({ width, ratio, diameter });
+    router.push(`/recherche?${q.toString()}`);
+  }
+
   function submitDim(e: React.FormEvent) {
     e.preventDefault();
-    const q = new URLSearchParams({
-      width: w,
-      ratio: h,
-      diameter: d,
-    });
-    router.push(`/recherche?${q.toString()}`);
+    if (w && h && d) goSearch(w, h, d);
   }
 
   async function submitPlate(e: React.FormEvent) {
@@ -58,12 +102,7 @@ export function SearchHero() {
   }
 
   function goToDim(dim: VehicleDimension) {
-    const q = new URLSearchParams({
-      width: String(dim.width),
-      ratio: String(dim.height),
-      diameter: String(dim.diameter),
-    });
-    router.push(`/recherche?${q.toString()}`);
+    goSearch(String(dim.width), String(dim.height), String(dim.diameter));
   }
 
   return (
@@ -157,63 +196,138 @@ export function SearchHero() {
             )}
           </div>
         ) : (
-          <form
-            onSubmit={submitDim}
-            className="flex flex-col gap-4 md:flex-row md:items-end"
-          >
-            <Dim label="Largeur" ph="205" value={w} set={setW} />
-            <span className="hidden pb-3 text-2xl text-ink-muted md:block">
-              /
-            </span>
-            <Dim label="Hauteur" ph="55" value={h} set={setH} />
-            <span className="hidden pb-3 text-2xl text-ink-muted md:block">
-              R
-            </span>
-            <Dim label="Diamètre" ph="16" value={d} set={setD} />
-            <button
-              type="submit"
-              className="rounded-lg bg-signal px-8 py-3 font-display text-base font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
+          <div>
+            {lastDim && (
+              <button
+                type="button"
+                onClick={() => goSearch(lastDim.w, lastDim.h, lastDim.d)}
+                className="mb-4 inline-flex items-center gap-2 rounded-full border border-signal/40 bg-signal/5 px-4 py-2 text-sm font-semibold text-signal transition hover:bg-signal hover:text-white"
+              >
+                <span aria-hidden>↺</span>
+                Reprendre ma dernière recherche&nbsp;:{" "}
+                <span className="font-mono font-bold">
+                  {lastDim.w}/{lastDim.h} R{lastDim.d}
+                </span>
+              </button>
+            )}
+
+            <form
+              onSubmit={submitDim}
+              className="flex flex-col gap-4 md:flex-row md:items-end"
             >
-              Rechercher
-            </button>
-          </form>
-        )}
-        {tab === "dim" && (
-          <p className="mt-4 text-center text-xs text-ink-muted md:text-left">
-            Exemple : pneu marqué{" "}
-            <span className="font-semibold text-ink">205/55 R16</span> →
-            largeur 205, hauteur 55, diamètre 16.
-          </p>
+              <DimSelect label="Largeur" value={w} set={setW} options={WIDTHS} ph="205" />
+              <span className="hidden pb-3 text-2xl text-ink-muted md:block">/</span>
+              <DimSelect label="Hauteur" value={h} set={setH} options={RATIOS} ph="55" />
+              <span className="hidden pb-3 text-2xl text-ink-muted md:block">R</span>
+              <DimSelect label="Diamètre" value={d} set={setD} options={DIAMETERS} ph="16" />
+              <button
+                type="submit"
+                className="rounded-lg bg-signal px-8 py-3 font-display text-base font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
+              >
+                Rechercher
+              </button>
+            </form>
+
+            <SidewallHelp />
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function Dim({
+function DimSelect({
   label,
-  ph,
   value,
   set,
+  options,
+  ph,
 }: {
   label: string;
-  ph: string;
   value: string;
   set: (v: string) => void;
+  options: number[];
+  ph: string;
 }) {
   return (
     <div className="flex-1">
       <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-ink-muted">
         {label}
       </label>
-      <input
-        type="number"
+      <select
         required
-        placeholder={ph}
         value={value}
         onChange={(e) => set(e.target.value)}
-        className="h-12 w-full rounded-lg border border-line bg-paper px-3 text-ink outline-none transition focus:border-signal"
-      />
+        className={`h-12 w-full rounded-lg border border-line bg-paper px-3 outline-none transition focus:border-signal ${
+          value ? "text-ink" : "text-ink-muted"
+        }`}
+      >
+        <option value="" disabled>
+          Ex. {ph}
+        </option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Aide dépliable : où lire « 205/55 R16 » sur le flanc du pneu.
+ * Décomposition colorée du marquage — LE point de friction des novices.
+ */
+function SidewallHelp() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="text-sm font-semibold text-signal hover:underline"
+      >
+        {open ? "▾" : "▸"} Où lire mes dimensions&nbsp;?
+      </button>
+      {open && (
+        <div className="mt-3 rounded-xl border border-line bg-paper-dim p-5">
+          <p className="mb-4 text-sm text-ink-soft">
+            La dimension est inscrite sur le flanc (côté) de vos pneus
+            actuels, par exemple&nbsp;:
+          </p>
+          <p className="mb-4 select-none font-mono text-2xl font-black tracking-wider md:text-3xl">
+            <span className="border-b-4 border-signal text-ink">205</span>
+            <span className="text-ink-muted">/</span>
+            <span className="border-b-4 border-amber-500 text-ink">55</span>
+            <span className="text-ink-muted"> R</span>
+            <span className="border-b-4 border-blue-500 text-ink">16</span>
+            <span className="text-ink-muted"> 91V</span>
+          </p>
+          <ul className="space-y-1.5 text-sm">
+            <li>
+              <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-signal align-middle" />
+              <strong className="text-ink">205</strong>
+              <span className="text-ink-muted"> — largeur du pneu en millimètres</span>
+            </li>
+            <li>
+              <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-amber-500 align-middle" />
+              <strong className="text-ink">55</strong>
+              <span className="text-ink-muted"> — hauteur du flanc (en % de la largeur)</span>
+            </li>
+            <li>
+              <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-blue-500 align-middle" />
+              <strong className="text-ink">16</strong>
+              <span className="text-ink-muted"> — diamètre de la jante en pouces</span>
+            </li>
+            <li className="pt-1 text-ink-muted">
+              <span className="mr-2 inline-block h-3 w-3 align-middle" />
+              91V — indices de charge et de vitesse (facultatifs pour la recherche)
+            </li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
