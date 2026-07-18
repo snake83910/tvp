@@ -271,6 +271,21 @@ export default function PaymentPage({
             )}
           </>
         )}
+
+        {/* Porte de sortie explicite : si le client quitte cette page,
+            la commande reste en attente — on lui dit quoi en faire au
+            lieu de le laisser découvrir une commande « bloquée » */}
+        <p className="mt-8 text-center text-xs text-ink-muted">
+          Vous préférez régler plus tard ? Retrouvez cette commande dans{" "}
+          <Link
+            href="/compte?tab=orders"
+            className="font-semibold text-signal hover:underline"
+          >
+            Mes commandes
+          </Link>{" "}
+          — vous pourrez la payer ou l&apos;annuler à tout moment
+          (annulation automatique sans paiement sous 7 jours).
+        </p>
       </main>
     </>
   );

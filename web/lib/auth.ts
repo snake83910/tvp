@@ -220,6 +220,14 @@ export const accountApi = {
   getOrder: (orderNumber: string) =>
     call<OrderDetail>(`/me/orders/${orderNumber}`, "GET", undefined, true),
 
+  cancelOrder: (orderNumber: string) =>
+    call<{ status: string }>(
+      `/me/orders/${orderNumber}/cancel`,
+      "POST",
+      undefined,
+      true,
+    ),
+
   changePassword: (old_password: string, new_password: string) =>
     call<void>("/me/password", "POST", { old_password, new_password }, true),
 

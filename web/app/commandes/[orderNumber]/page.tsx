@@ -42,6 +42,28 @@ export default function OrderDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  async function handleCancel() {
+    if (
+      !confirm(
+        "Annuler cette commande ? Cette action est définitive — vous pourrez repasser commande à tout moment.",
+      )
+    )
+      return;
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      await accountApi.cancelOrder(params.orderNumber);
+      const updated = await accountApi.getOrder(params.orderNumber);
+      setOrder(updated);
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   async function handleDownload() {
     setPdfLoading(true);
@@ -170,6 +192,41 @@ export default function OrderDetailPage({
             <p className="text-xs text-signal">{pdfError}</p>
           )}
         </div>
+
+        {/* Commande en attente : proposer de payer maintenant ou d'annuler,
+            plutôt que de la laisser bloquée jusqu'à l'annulation auto J+7 */}
+        {order.status === "pending_payment" && (
+          <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5">
+            <p className="font-semibold text-amber-900">
+              Cette commande attend son paiement.
+            </p>
+            <p className="mt-1 text-sm text-amber-800">
+              Vous pouvez la régler maintenant, ou l&apos;annuler si vous
+              avez changé d&apos;avis. Sans paiement, elle sera annulée
+              automatiquement sous 7 jours.
+            </p>
+            {cancelError && (
+              <p className="mt-2 rounded-lg bg-paper px-3 py-2 text-xs text-signal-dark">
+                {cancelError}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                href={`/paiement/${order.order_number}`}
+                className="rounded-full bg-signal px-5 py-2.5 text-sm font-bold text-white transition hover:bg-signal-dark"
+              >
+                Payer maintenant — {order.total_ttc.toFixed(2).replace(".", ",")} €
+              </Link>
+              <button
+                onClick={handleCancel}
+                disabled={cancelBusy}
+                className="rounded-full border border-line bg-paper px-5 py-2.5 text-sm font-semibold text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
+              >
+                {cancelBusy ? "Annulation…" : "Annuler la commande"}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_320px]">
           {/* Articles */}

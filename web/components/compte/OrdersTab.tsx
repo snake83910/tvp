@@ -87,6 +87,14 @@ export function OrdersTab({ orders }: { orders: OrderSummary[] | null }) {
                   {o.total_ttc.toFixed(2).replace(".", ",")} €
                 </td>
                 <td className="px-4 py-3 text-right">
+                  {o.status === "pending_payment" && (
+                    <Link
+                      href={`/paiement/${o.order_number}`}
+                      className="mr-3 rounded-full bg-signal px-3 py-1 text-xs font-bold text-white hover:bg-signal-dark"
+                    >
+                      Payer
+                    </Link>
+                  )}
                   <Link
                     href={`/commandes/${o.order_number}`}
                     className="text-sm font-semibold text-signal hover:underline"
@@ -117,12 +125,22 @@ export function OrdersTab({ orders }: { orders: OrderSummary[] | null }) {
               <p className="font-display text-lg font-black text-ink">
                 {o.total_ttc.toFixed(2).replace(".", ",")} €
               </p>
-              <Link
-                href={`/commandes/${o.order_number}`}
-                className="text-sm font-semibold text-signal"
-              >
-                Voir →
-              </Link>
+              <div className="flex items-center gap-3">
+                {o.status === "pending_payment" && (
+                  <Link
+                    href={`/paiement/${o.order_number}`}
+                    className="rounded-full bg-signal px-3 py-1 text-xs font-bold text-white"
+                  >
+                    Payer
+                  </Link>
+                )}
+                <Link
+                  href={`/commandes/${o.order_number}`}
+                  className="text-sm font-semibold text-signal"
+                >
+                  Voir →
+                </Link>
+              </div>
             </div>
           </li>
         ))}

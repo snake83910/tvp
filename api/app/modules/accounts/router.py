@@ -238,6 +238,42 @@ async def get_my_order(
     )
 
 
+@router.post("/orders/{order_number}/cancel")
+async def cancel_my_order(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Annule une commande EN ATTENTE DE PAIEMENT (et uniquement ce
+    statut : une commande payée passe par le SAV / remboursement).
+
+    Cas d'usage : le client a quitté la page de paiement (retour
+    navigateur) — sans ce bouton, la commande restait bloquée en
+    attente jusqu'à l'annulation automatique à J+7.
+    """
+    from app.models.order import OrderStatus
+    from app.modules.mailer.service import send_order_cancelled
+
+    order = await db.scalar(
+        select(Order).where(Order.order_number == order_number)
+    )
+    if order is None or order.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+    if order.status != OrderStatus.pending_payment:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Seule une commande en attente de paiement peut être "
+                f"annulée ici (statut actuel : {order.status.value})"
+            ),
+        )
+
+    order.transition_to(OrderStatus.cancelled)
+    await db.commit()
+    send_order_cancelled(order, user, "Annulée à votre demande")
+    return {"status": "cancelled", "order_number": order.order_number}
+
+
 @router.get("/orders/{order_number}/invoice")
 async def download_invoice(
     order_number: str,
