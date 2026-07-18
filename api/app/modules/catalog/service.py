@@ -27,3 +27,20 @@ async def load_dimension_catalog(
         raw_items = [t.__dict__ for t in tyres]
         await cache_set(cache_key, raw_items, settings.maxityre_cache_ttl)
     return raw_items
+
+
+async def load_detail(supplier_ref: str) -> dict | None:
+    """Fiche détaillée d'une référence (cache Redis sinon /pneu/{id}).
+
+    La recherche liste ne renvoie PAS les offres/stock ; la fiche
+    détaillée si. Utilisée par la fiche produit ET par les contrôles
+    de stock du panier."""
+    cache_key = f"maxityre:detail:{supplier_ref}"
+    detail = await cache_get(cache_key)
+    if detail is None:
+        full = await connector.get_by_ref(supplier_ref)
+        if full is None:
+            return None
+        detail = full.__dict__
+        await cache_set(cache_key, detail, settings.maxityre_cache_ttl)
+    return detail

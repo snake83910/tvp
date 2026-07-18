@@ -25,6 +25,9 @@ from app.models.catalog import PricingRule
 from app.models.user import ProProfile, User
 from app.modules.catalog.service import connector as _connector
 from app.modules.catalog.service import (
+    load_detail as _load_detail,
+)
+from app.modules.catalog.service import (
     load_dimension_catalog as _load_dimension_catalog,
 )
 from app.modules.pricing.engine import compute_price_sync, load_active_rules
@@ -322,16 +325,10 @@ async def get_product(
 
     # Enrichissement fiche détaillée (EAN, EPREL, description, stock...)
     # via /pneu/{id}. Caché en Redis pour éviter un appel par visite.
-    detail_cache_key = f"maxityre:detail:{ref}"
-    detail = await cache_get(detail_cache_key)
-    if detail is None:
-        try:
-            full = await _connector.get_by_ref(ref)
-            if full is not None:
-                detail = full.__dict__
-                await cache_set(detail_cache_key, detail, settings.maxityre_cache_ttl)
-        except Exception:
-            detail = None
+    try:
+        detail = await _load_detail(ref)
+    except Exception:
+        detail = None
 
     if detail:
         # On fusionne : enrichissements de la fiche par-dessus le résumé,

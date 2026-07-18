@@ -28,13 +28,31 @@ from app.core.cache import get_redis
 from app.models.order import Cart, CartItem, Order, OrderItem, OrderStatus
 from app.models.user import Address, ProProfile, User
 from app.modules.catalog.service import connector as _connector
-from app.modules.catalog.service import load_dimension_catalog
+from app.modules.catalog.service import load_detail, load_dimension_catalog
 from app.modules.pricing.engine import compute_price
 from app.modules.shipping.rules import compute_home_shipping
 
 
 def new_session_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+async def _resolve_stock(match: dict) -> int | None:
+    """Stock d'une référence : celui de la liste si présent, sinon
+    celui de la fiche détaillée (la recherche liste Maxityre ne renvoie
+    pas toujours les offres — sans ce fallback, stock inconnu = aucun
+    contrôle et « 1 restant » laissait commander 2 pneus)."""
+    stock = match.get("stock")
+    if stock is not None:
+        return stock
+    ref = match.get("supplier_ref")
+    if not ref:
+        return None
+    try:
+        detail = await load_detail(str(ref))
+    except Exception:
+        return None  # fiche indisponible : on ne bloque pas la vente
+    return detail.get("stock") if detail else None
 
 
 async def _load_cart_with_items(
@@ -175,7 +193,7 @@ async def add_item(
     # STOCK : refuser de mettre au panier plus que le disponible
     # fournisseur (cumul ligne existante + ajout). Sans ce contrôle,
     # « 1 restant » n'empêchait pas de commander 2 pneus.
-    stock = match.get("stock")
+    stock = await _resolve_stock(match)
     already = existing.quantity if existing is not None else 0
     if stock is not None and already + quantity > stock:
         raise ValueError(
@@ -269,7 +287,7 @@ async def update_item_quantity(
             (t for t in raw_items if t.get("supplier_ref") == item.supplier_ref),
             None,
         )
-        stock = m.get("stock") if m else None
+        stock = await _resolve_stock(m) if m else None
         if stock is not None and new_quantity > stock:
             raise ValueError(
                 f"Stock insuffisant : il ne reste que {stock} pneu"
@@ -390,11 +408,20 @@ async def checkout(
             )
             continue
 
-        # STOCK frais : dernier verrou avant création de la commande
-        if match.stock is not None and it.quantity > match.stock:
+        # STOCK frais : dernier verrou avant création de la commande.
+        # La recherche liste ne renvoie pas toujours le stock : on
+        # interroge alors la fiche détaillée en direct.
+        stock = match.stock
+        if stock is None:
+            try:
+                full = await _connector.get_by_ref(it.supplier_ref)
+                stock = full.stock if full else None
+            except Exception:
+                stock = None  # fiche indisponible : on ne bloque pas
+        if stock is not None and it.quantity > stock:
             raise ValueError(
                 f"Stock insuffisant pour « {it.label_snapshot} » : "
-                f"{match.stock} restant{'s' if match.stock > 1 else ''}. "
+                f"{stock} restant{'s' if stock > 1 else ''}. "
                 "Ajustez la quantité dans votre panier."
             )
 
