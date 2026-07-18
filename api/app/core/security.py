@@ -57,9 +57,14 @@ def decode_token(token: str) -> dict:
 
 
 def create_password_reset_token(user_id: str) -> str:
-    """Token courte durée pour le reset password (15 min)."""
+    """Token courte durée pour le reset password (15 min).
+
+    Porte un jti unique : le endpoint reset-password le marque consommé
+    dans Redis pour interdire la réutilisation du même lien."""
+    import uuid as _uuid
     return _create_token(
-        sub=user_id, claims={}, expires=timedelta(minutes=15),
+        sub=user_id, claims={"jti": _uuid.uuid4().hex},
+        expires=timedelta(minutes=15),
         token_type="password_reset",
     )
 

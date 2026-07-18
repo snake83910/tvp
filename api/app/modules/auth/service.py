@@ -4,6 +4,7 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.net import client_ip
 from app.core.password_policy import is_pwned, validate_password
 from app.core.security import (
     create_access_token,
@@ -22,12 +23,7 @@ LOCKOUT_DURATION = timedelta(minutes=15)
 def _client_meta(request: Request | None) -> tuple[str | None, str | None]:
     if request is None:
         return None, None
-    ip = None
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        ip = fwd.split(",")[0].strip()
-    elif request.client:
-        ip = request.client.host
+    ip = client_ip(request)
     ua = request.headers.get("user-agent", "")[:500] or None
     return ip, ua
 
@@ -172,15 +168,15 @@ async def issue_token_pair(
     }
 
 
-def issue_tokens(user: User) -> dict:
-    """Version compat (sans tracking DB) — utilisée par les anciens endpoints."""
-    return {
-        "access_token": create_access_token(
-            str(user.id), user.account_type.value, user.role.value
-        ),
-        "refresh_token": create_refresh_token(str(user.id)),
-        "token_type": "bearer",
-    }
+async def revoke_all_refresh_tokens(db: AsyncSession, user_id) -> None:
+    """Révoque toutes les sessions d'un user. À appeler après tout
+    changement de mot de passe : une session volée ne doit pas survivre
+    au reset. Ne commit pas (l'appelant commit avec le reste)."""
+    await db.execute(
+        RefreshToken.__table__.update()
+        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(timezone.utc))
+    )
 
 
 async def rotate_refresh_token(
@@ -225,7 +221,11 @@ async def rotate_refresh_token(
             "Token déjà utilisé. Tous vos tokens ont été révoqués pour votre sécurité.",
         )
 
-    user = await db.get(User, uuid.UUID(payload["sub"]))
+    try:
+        uid = uuid.UUID(payload["sub"])
+    except (KeyError, ValueError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
+    user = await db.get(User, uid)
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Compte invalide")
 

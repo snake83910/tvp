@@ -17,11 +17,12 @@ from app.core.security import (
 from app.models.user import UserRole
 from app.db.session import get_db
 from app.models.user import User
+from app.core.cache import get_redis
 from app.modules.auth.service import (
     authenticate,
     issue_token_pair,
-    issue_tokens,
     register_user,
+    revoke_all_refresh_tokens,
     rotate_refresh_token,
 )
 from app.modules.mailer.service import (
@@ -118,7 +119,11 @@ async def reset_password(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Applique le nouveau mot de passe si le token est valide."""
+    """Applique le nouveau mot de passe si le token est valide.
+
+    Le token est à USAGE UNIQUE (jti marqué consommé dans Redis) et le
+    reset révoque toutes les sessions : un refresh token volé avant le
+    reset ne survit pas."""
     await rate_limit(request, "reset", max_attempts=10, window_seconds=600)
     try:
         payload = decode_token(data.token)
@@ -126,6 +131,11 @@ async def reset_password(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide")
     if payload.get("type") != "password_reset":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
+
+    jti = payload.get("jti")
+    used_key = f"pwreset:used:{jti}" if jti else None
+    if used_key and await get_redis().get(used_key):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien déjà utilisé")
 
     user = await db.get(User, uuid.UUID(payload["sub"]))
     if user is None or not user.is_active:
@@ -142,7 +152,12 @@ async def reset_password(
             detail="Ce mot de passe a été exposé dans une fuite. Choisissez-en un autre.",
         )
     user.password_hash = hash_password(data.new_password)
+    await revoke_all_refresh_tokens(db, user.id)
     await db.commit()
+    if used_key:
+        # TTL aligné sur la durée de vie du token : après expiration du
+        # JWT, la clé Redis n'a plus d'utilité.
+        await get_redis().set(used_key, "1", ex=15 * 60)
     return None
 
 
@@ -193,10 +208,9 @@ async def admin_login(
         )
 
     # Alerte par email sur toute connexion admin
+    from app.core.net import client_ip
     ua = request.headers.get("user-agent", "")[:200]
-    ip = (request.headers.get("x-forwarded-for", "") or
-          (request.client.host if request.client else "")).split(",")[0].strip()
-    send_login_alert(user, ip, ua)
+    send_login_alert(user, client_ip(request) or "", ua)
 
     if user.totp_enabled:
         return AdminLoginOut(

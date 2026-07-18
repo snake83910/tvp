@@ -7,6 +7,7 @@ le brute force basique.
 from fastapi import HTTPException, Request, status
 
 from app.core.cache import get_redis
+from app.core.net import client_ip
 
 
 async def rate_limit(
@@ -20,11 +21,7 @@ async def rate_limit(
     Le compteur est incrémenté à chaque appel ; quand il dépasse le seuil,
     on refuse pendant la durée restante de la fenêtre.
     """
-    ip = request.client.host if request.client else "unknown"
-    # X-Forwarded-For si derrière reverse proxy (Apache, nginx)
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        ip = fwd.split(",")[0].strip()
+    ip = client_ip(request) or "unknown"
 
     redis_key = f"rl:{key_prefix}:{ip}"
     redis = get_redis()

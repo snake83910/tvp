@@ -40,6 +40,10 @@ async def change_password(
     if not verify_password(old_pwd, user.password_hash):
         raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect")
     user.password_hash = hash_password(new_pwd)
+    # Toute autre session (autre appareil, token volé) est déconnectée :
+    # changer son mot de passe doit invalider l'existant.
+    from app.modules.auth.service import revoke_all_refresh_tokens
+    await revoke_all_refresh_tokens(db, user.id)
     await db.commit()
     return None
 

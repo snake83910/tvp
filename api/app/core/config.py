@@ -1,8 +1,28 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def _no_dev_defaults_in_production(self) -> "Settings":
+        """Refus de démarrer en production avec des valeurs de dev.
+        Même principe que le garde-fou CORS_ORIGINS=* plus bas."""
+        if self.environment != "production":
+            return self
+        if self.jwt_secret == "CHANGE_ME":
+            raise ValueError(
+                "JWT_SECRET est resté sur sa valeur par défaut. "
+                "Génère un secret via : openssl rand -hex 32"
+            )
+        if self.payment_provider == "simulated":
+            raise ValueError(
+                "PAYMENT_PROVIDER=simulated est interdit en production : "
+                "n'importe quel client pourrait valider ses commandes. "
+                "Configurer PAYMENT_PROVIDER=sogecommerce."
+            )
+        return self
 
     # Base de données
     database_url: str = "postgresql+asyncpg://tvp:changeme_dev@postgres:5432/tvp"

@@ -30,10 +30,12 @@ async def get_current_user(
         user_id = payload.get("sub")
         if user_id is None:
             raise _credentials_exc
-    except JWTError:
+        # ValueError : sub non-UUID -> 401, pas 500
+        uid = uuid.UUID(user_id)
+    except (JWTError, ValueError):
         raise _credentials_exc
 
-    user = await db.get(User, uuid.UUID(user_id))
+    user = await db.get(User, uid)
     if user is None or not user.is_active:
         raise _credentials_exc
     return user
@@ -69,9 +71,10 @@ async def get_current_user_optional(
         user_id = payload.get("sub")
         if user_id is None:
             return None
-    except JWTError:
+        uid = uuid.UUID(user_id)
+    except (JWTError, ValueError):
         return None
-    user = await db.get(User, uuid.UUID(user_id))
+    user = await db.get(User, uid)
     if user is None or not user.is_active:
         return None
     return user

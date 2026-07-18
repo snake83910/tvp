@@ -1,10 +1,16 @@
 import re
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import AccountType, UserRole
+
+# Email normalisé en minuscules dès la validation : la connexion cherche
+# en lowercase (auth.service), donc un compte créé avec des majuscules
+# serait introuvable au login. À utiliser sur toutes les ENTRÉES email.
+NormalizedEmail = Annotated[EmailStr, AfterValidator(str.lower)]
 
 
 # ---------- Inscription / connexion ----------
@@ -13,11 +19,16 @@ def _validate_siret_luhn(siret: str) -> bool:
     """Algorithme de Luhn appliqué au SIRET (14 chiffres)."""
     if not siret.isdigit() or len(siret) != 14:
         return False
+    # Tout-zéro passe le Luhn (somme = 0) mais n'est pas un SIRET réel
+    if siret == "0" * 14:
+        return False
     total = 0
     for i, ch in enumerate(siret):
         n = int(ch)
-        # Position paire (1-indexée) = doublée. Position 1 = pas doublée.
-        if i % 2 == 1:
+        # Luhn : on double un chiffre sur deux EN PARTANT DE LA DROITE
+        # (l'avant-dernier, puis tous les deux). Sur 14 chiffres, cela
+        # correspond aux indices pairs depuis la gauche.
+        if i % 2 == 0:
             n *= 2
             if n > 9:
                 n -= 9
@@ -27,7 +38,10 @@ def _validate_siret_luhn(siret: str) -> bool:
 
 class ProInfo(BaseModel):
     company_name: str = Field(min_length=2, max_length=255)
-    siret: str | None = Field(default=None, max_length=14)
+    # max_length > 14 : un SIRET saisi avec des espaces ("732 829 320 00074")
+    # doit passer la validation de longueur AVANT que le validator ne
+    # retire les espaces et vérifie les 14 chiffres.
+    siret: str | None = Field(default=None, max_length=20)
     vat_number: str | None = Field(default=None, max_length=20)
 
     @field_validator("siret")
@@ -42,7 +56,7 @@ class ProInfo(BaseModel):
 
 
 class RegisterIn(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     password: str = Field(min_length=8, max_length=128)
     account_type: AccountType = AccountType.particulier
     first_name: str | None = None
@@ -53,7 +67,7 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     password: str
 
 
@@ -68,7 +82,7 @@ class RefreshIn(BaseModel):
 
 
 class ForgotPasswordIn(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class ResetPasswordIn(BaseModel):
