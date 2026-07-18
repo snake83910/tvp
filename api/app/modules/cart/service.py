@@ -63,11 +63,19 @@ async def _load_cart_with_items(
     À utiliser après chaque commit qui modifie le panier, avant de le
     renvoyer à la route : sans ça, _serialize() itère cart.items en
     lazy load et plante avec MissingGreenlet en async.
+
+    populate_existing : OBLIGATOIRE. La session est en
+    expire_on_commit=False ; sans cette option, le SELECT renvoie
+    l'objet déjà présent dans l'identity map avec sa collection items
+    PÉRIMÉE (l'item ajouté via db.add(CartItem(...)) n'est pas dans la
+    relation). Symptôme réel : le 2e article ajouté n'apparaissait pas
+    dans la réponse — panier et total figés sur le 1er article.
     """
     return await db.scalar(
         select(Cart)
         .where(Cart.id == cart_id)
         .options(selectinload(Cart.items))
+        .execution_options(populate_existing=True)
     )
 
 
