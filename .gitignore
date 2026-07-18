@@ -39,3 +39,7 @@ node_modules/
 web/node_modules/
 web/.next/
 *.tsbuildinfo
+
+# Env local dev (URLs API locales, aucun secret)
+web/.env.local
+.claude/

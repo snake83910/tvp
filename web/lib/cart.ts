@@ -72,9 +72,11 @@ async function call<T>(
   const data = (await res.json()) as T & {
     session_token?: string | null;
   };
-  // Mémorise le token de panier anonyme renvoyé par le backend
+  // Mémorise TOUJOURS le token de panier renvoyé par le backend :
+  // c'est LA vérité sur le panier que l'API a réellement utilisé.
+  // (L'ancienne condition « seulement si non connecté » perdait le
+  // panier quand un token d'auth expiré traînait en localStorage.)
   if (
-    !token &&
     data &&
     typeof data === "object" &&
     "session_token" in data &&

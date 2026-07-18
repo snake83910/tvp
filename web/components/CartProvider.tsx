@@ -50,7 +50,12 @@ export function CartProvider({
       diameter: number;
       quantity: number;
     }) => {
-      const c = await cartApi.addItem(item);
+      let c = await cartApi.addItem(item);
+      if (!c.items?.length) {
+        // Réponse incohérente (proxy/cache intermédiaire) : le panier
+        // re-fetché fait foi — jamais de toast « 0 pneu, 0 € »
+        c = (await cartApi.get()) ?? c;
+      }
       setCart(c);
       // Mini-panier : confirme l'ajout avec le total et un CTA panier
       const line = c.items.find(
