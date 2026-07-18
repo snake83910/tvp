@@ -376,6 +376,31 @@ async def checkout(
         revalidated.append((it, priced.sale_ht, priced.sale_ttc))
 
     if changes:
+        # ALIGNER le panier sur les nouveaux prix avant de retourner les
+        # écarts. Sans ça, les snapshots gardaient l'ancien prix : chaque
+        # nouvelle tentative re-détectait les mêmes écarts et le checkout
+        # bloquait en boucle infinie. L'anti-litige est préservé : la
+        # commande n'est PAS créée à ce tour, le client voit le tableau
+        # avant/après et doit re-valider explicitement aux nouveaux prix.
+        changed_refs = {c.supplier_ref for c in changes}
+        for it, ht, ttc in revalidated:
+            if it.supplier_ref in changed_refs:
+                it.price_ht_snapshot = ht
+                it.price_ttc_snapshot = ttc
+        # Références devenues introuvables chez le fournisseur
+        # (new_ttc == 0) : on les retire du panier, sinon elles
+        # bloqueraient définitivement le checkout.
+        unavailable = {
+            c.supplier_ref for c in changes if c.new_ttc == 0.0
+        }
+        if unavailable:
+            await db.execute(
+                delete(CartItem).where(
+                    CartItem.cart_id == cart.id,
+                    CartItem.supplier_ref.in_(unavailable),
+                )
+            )
+        await db.commit()
         return None, changes
 
     articles_ht = sum(
