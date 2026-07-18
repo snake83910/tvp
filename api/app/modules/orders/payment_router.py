@@ -52,15 +52,19 @@ async def init_payment(
     init = await provider.init_payment(
         str(order.id), order.total_ttc_cents
     )
-    db.add(
-        Payment(
-            order_id=order.id,
-            provider=init.provider,
-            provider_ref=init.provider_ref,
-            amount_cents=init.amount_cents,
-            status="initialised",
-        )
+    # Un seul Payment par commande : si un init précédent existe (retour
+    # arrière, double-clic), on le met à jour au lieu d'empiler des lignes
+    # (les lookups par order_id prendraient une ligne arbitraire).
+    payment = await db.scalar(
+        select(Payment).where(Payment.order_id == order.id)
     )
+    if payment is None:
+        payment = Payment(order_id=order.id)
+        db.add(payment)
+    payment.provider = init.provider
+    payment.provider_ref = init.provider_ref
+    payment.amount_cents = init.amount_cents
+    payment.status = "initialised"
     await db.commit()
     return PaymentInitOut(
         provider=init.provider,
@@ -114,6 +118,20 @@ async def payment_ipn(
     order = await db.get(Order, payment.order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="Commande introuvable")
+
+    # Un IPN "PAID" dont le montant ne correspond pas au total de la
+    # commande (paiement partiel, montant altéré côté PSP) ne doit
+    # JAMAIS valider la commande.
+    if result.success and result.amount_cents != order.total_ttc_cents:
+        payment.status = "amount_mismatch"
+        await db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Montant IPN ({result.amount_cents}) différent du total "
+                f"commande ({order.total_ttc_cents})"
+            ),
+        )
 
     newly_paid = False
     if result.success:
@@ -248,7 +266,18 @@ async def sync_payment(
             "order_status": order.status.value,
         }
 
-    transactions = answer.get("transactions") or []
+    # Même règle que l'IPN : montant payé == total commande, sinon refus.
+    transactions = answer.get("transactions") or [{}]
+    paid_amount = int(transactions[0].get("amount") or 0)
+    if paid_amount != order.total_ttc_cents:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Montant payé ({paid_amount}) différent du total "
+                f"commande ({order.total_ttc_cents})"
+            ),
+        )
+
     payment.status = "captured"
     payment.ipn_signature_ok = True
     payment.ipn_payload = answer
@@ -301,14 +330,37 @@ async def verify_kr_answer(
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="kr-answer malformé")
 
-    if answer.get("orderStatus") != "PAID":
-        return {"status": "not_paid", "order_status": answer.get("orderStatus")}
-
     order = await db.scalar(
         select(Order).where(Order.order_number == order_number)
     )
     if order is None or order.user_id != user.id:
         raise HTTPException(status_code=404, detail="Commande introuvable")
+
+    # ANTI-REJEU : le kr-answer est signé, mais il faut vérifier qu'il
+    # concerne BIEN cette commande. Sans ce contrôle, le kr-answer d'une
+    # commande payée à 50 € pourrait valider n'importe quelle autre
+    # commande en attente. L'orderId Sogecommerce = notre UUID interne.
+    answer_order_id = (answer.get("orderDetails") or {}).get("orderId")
+    if answer_order_id != str(order.id):
+        raise HTTPException(
+            status_code=400,
+            detail="kr-answer ne correspond pas à cette commande",
+        )
+
+    if answer.get("orderStatus") != "PAID":
+        return {"status": "not_paid", "order_status": answer.get("orderStatus")}
+
+    # Montant payé == total commande, sinon refus (paiement partiel/altéré).
+    txns = answer.get("transactions") or [{}]
+    paid_amount = int(txns[0].get("amount") or 0)
+    if paid_amount != order.total_ttc_cents:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Montant payé ({paid_amount}) différent du total "
+                f"commande ({order.total_ttc_cents})"
+            ),
+        )
 
     if order.status == OrderStatus.paid:
         return {"status": "already_paid", "order_status": order.status.value}
