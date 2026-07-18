@@ -183,6 +183,12 @@ def generate_invoice_pdf(order: Order, user: User) -> bytes:
     shipping_ttc = (order.shipping_ht_cents + order.shipping_vat_cents) / 100
 
     total_row("Total articles HT :", _eur(articles_ht))
+    if getattr(order, "discount_ttc_cents", 0):
+        code = order.promo_code or "PROMO"
+        total_row(
+            f"Remise ({code}) TTC :",
+            f"-{_eur(order.discount_ttc_cents / 100)}",
+        )
     if shipping_ht > 0:
         total_row("Livraison HT :",     _eur(shipping_ht))
     else:

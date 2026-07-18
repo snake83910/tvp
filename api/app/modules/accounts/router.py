@@ -224,6 +224,8 @@ async def get_my_order(
         delivery_mode=order.delivery_mode,
         shipping_address=order.shipping_address,
         invoice_number=order.invoice_number,
+        promo_code=order.promo_code,
+        discount_ttc=order.discount_ttc_cents / 100,
         tracking_number=order.tracking_number,
         carrier=order.carrier,
         tracking_url=order.tracking_url,

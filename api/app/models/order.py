@@ -167,6 +167,10 @@ class Order(Base):
     total_ttc_cents: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = mapped_column(String(3), default="EUR")
 
+    # Code promo appliqué (figé) et remise TTC en centimes
+    promo_code: Mapped[str | None] = mapped_column(String(40), index=True)
+    discount_ttc_cents: Mapped[int] = mapped_column(Integer, default=0)
+
     invoice_number: Mapped[int | None] = mapped_column(Integer, unique=True)
     tracking_number: Mapped[str | None] = mapped_column(String(120))
     carrier: Mapped[str | None] = mapped_column(String(80))

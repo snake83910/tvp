@@ -20,6 +20,8 @@ from app.schemas.order import (
     CartOut,
     CheckoutIn,
     CheckoutResult,
+    PromoValidateIn,
+    PromoValidateOut,
     UpdateQtyIn,
 )
 
@@ -149,6 +151,41 @@ async def merge_cart(
     return _serialize(cart)
 
 
+@router.post("/promo/validate", response_model=PromoValidateOut)
+async def validate_promo_code(
+    data: PromoValidateIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Aperçu de la remise d'un code promo sur le panier actuel.
+
+    Purement informatif (UX) : le checkout re-valide de son côté.
+    Renvoie toujours 200, avec valid=False + raison si refus."""
+    cart = await db.scalar(
+        select(Cart).where(Cart.user_id == user.id)
+        .options(selectinload(Cart.items))
+    )
+    if cart is None or not cart.items:
+        return PromoValidateOut(valid=False, reason="Panier vide")
+
+    articles_ttc_cents = sum(
+        round(i.price_ttc_snapshot * 100) * i.quantity for i in cart.items
+    )
+    from app.modules.promo.service import validate_promo
+    try:
+        promo, discount = await validate_promo(
+            db, data.code, user.id, articles_ttc_cents
+        )
+    except ValueError as e:
+        return PromoValidateOut(valid=False, reason=str(e))
+    return PromoValidateOut(
+        valid=True,
+        code=promo.code,
+        description=promo.description,
+        discount_ttc=discount / 100,
+    )
+
+
 @router.post("/checkout", response_model=CheckoutResult)
 async def checkout(
     data: CheckoutIn,
@@ -172,7 +209,8 @@ async def checkout(
         )
     try:
         order, changes = await service.checkout(
-            db, user, data.address_id, data.delivery_mode
+            db, user, data.address_id, data.delivery_mode,
+            promo_code=data.promo_code,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -104,10 +104,20 @@ export const cartApi = {
 
   merge: () => call<Cart>("/cart/merge", "POST"),
 
-checkout: (
+  validatePromo: (code: string) =>
+    call<{
+      valid: boolean;
+      reason: string | null;
+      code: string | null;
+      description: string | null;
+      discount_ttc: number;
+    }>("/cart/promo/validate", "POST", { code }),
+
+  checkout: (
     addressId: string,
     acceptTerms: boolean,
     deliveryMode = "home",
+    promoCode?: string | null,
   ) =>
     call<{
       order_number: string | null;
@@ -123,5 +133,6 @@ checkout: (
       address_id: addressId,
       delivery_mode: deliveryMode,
       accept_terms: acceptTerms,
-    }),  
+      promo_code: promoCode || null,
+    }),
 };

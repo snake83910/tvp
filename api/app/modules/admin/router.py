@@ -7,6 +7,7 @@ Endpoints :
   GET  /admin/orders/{order_number}         Détail + infos client
   PATCH /admin/orders/{order_number}/status Changement de statut + email auto
 """
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +21,7 @@ from fastapi import Request
 from app.core.audit import audit
 from app.core.deps import get_db, require_role
 from app.models.order import ALLOWED_TRANSITIONS, Order, OrderStatus
+from app.models.promo import PromoCode
 from app.models.user import User, UserRole
 from app.modules.mailer.service import (
     send_order_cancelled,
@@ -31,6 +33,9 @@ from app.schemas.order import (
     AdminOrderSummary,
     AdminStats,
     OrderItemDetail,
+    PromoCodeIn,
+    PromoCodeOut,
+    PromoCodeUpdate,
     StatusUpdateIn,
 )
 
@@ -74,6 +79,8 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
         delivery_mode=order.delivery_mode,
         shipping_address=order.shipping_address,
         invoice_number=order.invoice_number,
+        promo_code=order.promo_code,
+        discount_ttc=order.discount_ttc_cents / 100,
         tracking_number=order.tracking_number,
         carrier=order.carrier,
         tracking_url=order.tracking_url,
@@ -624,3 +631,105 @@ async def bulk_email(
     )
     await db.commit()
     return {"sent": len(emails)}
+
+
+# ── Codes promo ────────────────────────────────────────────────────
+
+@router.get("/promo-codes", response_model=list[PromoCodeOut])
+async def list_promo_codes(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Liste des codes promo avec leur nombre d'utilisations
+    (commandes non annulées portant le code)."""
+    promos = list(await db.scalars(
+        select(PromoCode).order_by(PromoCode.created_at.desc())
+    ))
+    uses_rows = await db.execute(
+        select(Order.promo_code, func.count())
+        .where(
+            Order.promo_code.is_not(None),
+            Order.status != OrderStatus.cancelled,
+        )
+        .group_by(Order.promo_code)
+    )
+    uses = dict(uses_rows.all())
+    out = []
+    for p in promos:
+        item = PromoCodeOut.model_validate(p)
+        item.uses = uses.get(p.code, 0)
+        out.append(item)
+    return out
+
+
+@router.post("/promo-codes", response_model=PromoCodeOut, status_code=201)
+async def create_promo_code(
+    data: PromoCodeIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    existing = await db.scalar(
+        select(PromoCode).where(PromoCode.code == data.code)
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Ce code existe déjà")
+
+    promo = PromoCode(**data.model_dump())
+    db.add(promo)
+    await audit(
+        db, user=admin, action="promo.created",
+        target_type="promo_code", target_id=data.code,
+        payload=data.model_dump(mode="json"),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(promo)
+    return PromoCodeOut.model_validate(promo)
+
+
+@router.patch("/promo-codes/{promo_id}", response_model=PromoCodeOut)
+async def update_promo_code(
+    promo_id: uuid.UUID,
+    data: PromoCodeUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    promo = await db.get(PromoCode, promo_id)
+    if promo is None:
+        raise HTTPException(status_code=404, detail="Code promo introuvable")
+
+    changes = data.model_dump(exclude_unset=True)
+    for k, v in changes.items():
+        setattr(promo, k, v)
+    await audit(
+        db, user=admin, action="promo.updated",
+        target_type="promo_code", target_id=promo.code,
+        payload={k: (str(v) if v is not None else None) for k, v in changes.items()},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(promo)
+    return PromoCodeOut.model_validate(promo)
+
+
+@router.delete("/promo-codes/{promo_id}", status_code=204)
+async def delete_promo_code(
+    promo_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    promo = await db.get(PromoCode, promo_id)
+    if promo is None:
+        raise HTTPException(status_code=404, detail="Code promo introuvable")
+    code = promo.code
+    await db.delete(promo)
+    await audit(
+        db, user=admin, action="promo.deleted",
+        target_type="promo_code", target_id=code,
+        request=request,
+    )
+    await db.commit()
+    return None

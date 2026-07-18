@@ -334,6 +334,16 @@ export default function OrderDetailPage({
                 Récapitulatif
               </p>
               <Row k="Articles" v={order.articles_ttc} />
+              {(order.discount_ttc ?? 0) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-ok">
+                    Remise{order.promo_code ? ` (${order.promo_code})` : ""}
+                  </span>
+                  <span className="font-semibold text-ok">
+                    −{(order.discount_ttc ?? 0).toFixed(2).replace(".", ",")} €
+                  </span>
+                </div>
+              )}
               <Row
                 k="Livraison"
                 v={order.shipping_ttc}

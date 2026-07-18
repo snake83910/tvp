@@ -46,6 +46,40 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([]);
 
+  // Code promo : aperçu validé par l'API, re-vérifié au checkout
+  const [promoInput, setPromoInput] = useState("");
+  const [promo, setPromo] = useState<{
+    code: string;
+    discount_ttc: number;
+    description: string | null;
+  } | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoBusy, setPromoBusy] = useState(false);
+
+  async function applyPromo(e: React.FormEvent) {
+    e.preventDefault();
+    if (!promoInput.trim()) return;
+    setPromoBusy(true);
+    setPromoError(null);
+    try {
+      const res = await cartApi.validatePromo(promoInput);
+      if (res.valid && res.code) {
+        setPromo({
+          code: res.code,
+          discount_ttc: res.discount_ttc,
+          description: res.description,
+        });
+        setPromoInput("");
+      } else {
+        setPromoError(res.reason ?? "Code promo invalide");
+      }
+    } catch (err) {
+      setPromoError(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setPromoBusy(false);
+    }
+  }
+
   // Redirection si pas connecté
   useEffect(() => {
     if (!loading && !user) router.push("/connexion?next=/checkout");
@@ -69,7 +103,8 @@ export default function CheckoutPage() {
 
   const articlesTtc = cart?.total_ttc ?? 0;
   const shippingTtc = isFreeShipping ? 0 : SHIP_FLAT_TTC;
-  const grandTotal = +(articlesTtc + shippingTtc).toFixed(2);
+  const discountTtc = promo?.discount_ttc ?? 0;
+  const grandTotal = +(articlesTtc - discountTtc + shippingTtc).toFixed(2);
 
   async function handleSubmit() {
     setError(null);
@@ -93,7 +128,9 @@ export default function CheckoutPage() {
         setBusy(false);
         return;
       }
-      const res = await cartApi.checkout(addressId, true);
+      const res = await cartApi.checkout(
+        addressId, true, "home", promo?.code ?? null,
+      );
       if (res.price_changes.length > 0) {
         // Prix fournisseur modifiés : tableau avant/après explicite
         setPriceChanges(res.price_changes);
@@ -318,12 +355,65 @@ export default function CheckoutPage() {
                 </div>
               ))}
             </div>
+            {/* Code promo */}
+            {promo ? (
+              <div className="flex items-center justify-between rounded-lg border border-ok/40 bg-ok/5 px-3 py-2 text-sm">
+                <span className="font-semibold text-ok">
+                  🏷 {promo.code}
+                  {promo.description && (
+                    <span className="block text-xs font-normal">
+                      {promo.description}
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={() => setPromo(null)}
+                  className="text-xs text-ink-muted hover:text-signal"
+                  title="Retirer le code"
+                >
+                  Retirer ✕
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={applyPromo} className="flex gap-2">
+                <input
+                  value={promoInput}
+                  onChange={(e) => {
+                    setPromoInput(e.target.value.toUpperCase());
+                    setPromoError(null);
+                  }}
+                  placeholder="Code promo"
+                  className="h-10 min-w-0 flex-1 rounded-lg border border-line bg-paper px-3 font-mono text-sm uppercase outline-none focus:border-signal"
+                />
+                <button
+                  type="submit"
+                  disabled={promoBusy || !promoInput.trim()}
+                  className="rounded-lg border border-line px-4 text-sm font-semibold text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
+                >
+                  {promoBusy ? "…" : "Appliquer"}
+                </button>
+              </form>
+            )}
+            {promoError && (
+              <p className="rounded-lg bg-signal-light px-3 py-2 text-xs text-signal-dark">
+                {promoError}
+              </p>
+            )}
+
             <div className="flex justify-between text-sm">
               <span className="text-ink-soft">Sous-total</span>
               <span className="font-semibold text-ink">
                 {articlesTtc.toFixed(2).replace(".", ",")} €
               </span>
             </div>
+            {promo && (
+              <div className="flex justify-between text-sm">
+                <span className="text-ok">Remise ({promo.code})</span>
+                <span className="font-semibold text-ok">
+                  −{discountTtc.toFixed(2).replace(".", ",")} €
+                </span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-ink-soft">Livraison</span>
               <span className="font-semibold text-ink">

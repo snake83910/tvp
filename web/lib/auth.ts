@@ -174,6 +174,8 @@ export interface OrderDetail {
     country?: string;
   };
   invoice_number: number | null;
+  promo_code?: string | null;
+  discount_ttc?: number;
   tracking_number: string | null;
   carrier: string | null;
   tracking_url: string | null;
