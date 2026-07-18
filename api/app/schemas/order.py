@@ -22,6 +22,11 @@ class CartItemOut(BaseModel):
     quantity: int
     price_ht: float
     price_ttc: float
+    # Enrichissements d'affichage (depuis product_data ; None pour les
+    # lignes créées avant que le snapshot ne les stocke)
+    dimension: str | None = None
+    image_url: str | None = None
+    season: str | None = None
 
 
 class CartOut(BaseModel):

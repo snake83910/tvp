@@ -208,6 +208,9 @@ async def add_item(
                 "ratio": ratio,
                 "diameter": diameter,
                 "brand": match.get("brand", ""),
+                # Affichage panier : vignette + saison sans re-fetch
+                "image_url": match.get("image_url"),
+                "season": match.get("season"),
             },
         )
     )

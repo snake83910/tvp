@@ -3,8 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { TyreImage } from "@/components/TyreImage";
 import { useCart } from "@/components/CartProvider";
 import { getToken } from "@/lib/auth";
+import { SHIP_FLAT_TTC, isFreeShipping } from "@/lib/shipping";
+
+const SEASON: Record<string, string> = {
+  ete: "Été",
+  hiver: "Hiver",
+  "4saisons": "4 saisons",
+};
 
 export default function CartPage() {
   // On passe désormais par les méthodes du CartProvider : elles mettent
@@ -39,6 +47,11 @@ export default function CartPage() {
 
   const isEmpty = !cart || cart.items.length === 0;
 
+  const quantities = cart?.items.map((i) => i.quantity) ?? [];
+  const freeShipping = isFreeShipping(quantities);
+  const shipTtc = freeShipping ? 0 : SHIP_FLAT_TTC;
+  const singles = cart?.items.filter((i) => i.quantity === 1) ?? [];
+
   return (
     <>
       <SiteHeader />
@@ -63,52 +76,86 @@ export default function CartPage() {
               {cart.items.map((it) => (
                 <div
                   key={it.id}
-                  className="flex items-center justify-between gap-4 rounded-xl border border-line bg-paper p-5 shadow-card"
+                  className="rounded-xl border border-line bg-paper p-5 shadow-card"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-display font-bold text-ink">
-                      {it.label}
-                    </p>
-                    <p className="text-sm text-ink-muted">
-                      {it.price_ttc.toFixed(2).replace(".", ",")} €
-                      l&apos;unité
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center rounded-lg border border-line">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-4">
+                      <TyreImage
+                        src={it.image_url ?? null}
+                        alt={it.label}
+                        className="hidden h-16 w-16 shrink-0 rounded-lg sm:block"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-display font-bold text-ink">
+                          {it.label}
+                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+                          {it.dimension && (
+                            <span className="font-mono">{it.dimension}</span>
+                          )}
+                          {it.season && SEASON[it.season] && (
+                            <span className="rounded-full bg-paper-dim px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
+                              {SEASON[it.season]}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-sm text-ink-muted">
+                          {it.price_ttc.toFixed(2).replace(".", ",")} €
+                          l&apos;unité
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center rounded-lg border border-line">
+                        <button
+                          onClick={() => changeQty(it.id, it.quantity - 1)}
+                          disabled={busy === it.id}
+                          className="px-3 py-1.5 text-ink-soft hover:text-signal disabled:opacity-40"
+                          aria-label="Diminuer la quantité"
+                        >
+                          −
+                        </button>
+                        <span className="w-8 text-center text-sm font-bold">
+                          {it.quantity}
+                        </span>
+                        <button
+                          onClick={() => changeQty(it.id, it.quantity + 1)}
+                          disabled={busy === it.id}
+                          className="px-3 py-1.5 text-ink-soft hover:text-signal disabled:opacity-40"
+                          aria-label="Augmenter la quantité"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <p className="w-24 text-right font-display font-black text-ink">
+                        {(it.price_ttc * it.quantity)
+                          .toFixed(2)
+                          .replace(".", ",")}{" "}
+                        €
+                      </p>
                       <button
-                        onClick={() => changeQty(it.id, it.quantity - 1)}
+                        onClick={() => handleRemove(it.id)}
                         disabled={busy === it.id}
-                        className="px-3 py-1.5 text-ink-soft hover:text-signal disabled:opacity-40"
+                        className="text-sm text-ink-muted hover:text-signal disabled:opacity-40"
+                        title="Retirer"
                       >
-                        −
-                      </button>
-                      <span className="w-8 text-center text-sm font-bold">
-                        {it.quantity}
-                      </span>
-                      <button
-                        onClick={() => changeQty(it.id, it.quantity + 1)}
-                        disabled={busy === it.id}
-                        className="px-3 py-1.5 text-ink-soft hover:text-signal disabled:opacity-40"
-                      >
-                        +
+                        ✕
                       </button>
                     </div>
-                    <p className="w-24 text-right font-display font-black text-ink">
-                      {(it.price_ttc * it.quantity)
-                        .toFixed(2)
-                        .replace(".", ",")}{" "}
-                      €
-                    </p>
-                    <button
-                      onClick={() => handleRemove(it.id)}
-                      disabled={busy === it.id}
-                      className="text-sm text-ink-muted hover:text-signal disabled:opacity-40"
-                      title="Retirer"
-                    >
-                      ✕
-                    </button>
                   </div>
+
+                  {/* Upsell métier : les pneus se montent par 2, et la
+                      livraison est offerte quand chaque référence >= 2 */}
+                  {it.quantity === 1 && (
+                    <button
+                      onClick={() => changeQty(it.id, 2)}
+                      disabled={busy === it.id}
+                      className="mt-3 w-full rounded-lg border border-ok/40 bg-ok/5 px-4 py-2 text-left text-sm font-semibold text-ok transition hover:bg-ok/10 disabled:opacity-50"
+                    >
+                      + Passez à 2 pneus — les pneus se remplacent par
+                      essieu, et la livraison devient offerte
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -118,15 +165,33 @@ export default function CartPage() {
                 Récapitulatif
               </p>
               <div className="flex justify-between text-sm text-ink-soft">
-                <span>Total HT</span>
-                <span>
-                  {cart.total_ht.toFixed(2).replace(".", ",")} €
-                </span>
-              </div>
-              <div className="mt-2 flex justify-between border-t border-line pt-3 font-display text-xl font-black text-ink">
-                <span>Total TTC</span>
+                <span>Articles TTC</span>
                 <span>
                   {cart.total_ttc.toFixed(2).replace(".", ",")} €
+                </span>
+              </div>
+              <div className="mt-2 flex justify-between text-sm text-ink-soft">
+                <span>Livraison estimée</span>
+                <span className={freeShipping ? "font-bold text-ok" : ""}>
+                  {freeShipping
+                    ? "Offerte"
+                    : `${SHIP_FLAT_TTC.toFixed(2).replace(".", ",")} €`}
+                </span>
+              </div>
+              {!freeShipping && singles.length > 0 && (
+                <p className="mt-2 rounded-lg bg-ok/5 px-3 py-2 text-xs text-ok">
+                  💡 Passez chaque référence à 2 pneus et la livraison
+                  est <strong>offerte</strong> (−
+                  {SHIP_FLAT_TTC.toFixed(2).replace(".", ",")} €).
+                </p>
+              )}
+              <div className="mt-3 flex justify-between border-t border-line pt-3 font-display text-xl font-black text-ink">
+                <span>Total TTC</span>
+                <span>
+                  {(cart.total_ttc + shipTtc)
+                    .toFixed(2)
+                    .replace(".", ",")}{" "}
+                  €
                 </span>
               </div>
 
@@ -144,6 +209,9 @@ export default function CartPage() {
                   panier sera conservé.
                 </p>
               )}
+              <p className="mt-4 text-center text-[11px] text-ink-muted">
+                🔒 Paiement sécurisé Société Générale · Rétractation 14 jours
+              </p>
             </aside>
           </div>
         )}

@@ -4,18 +4,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { CheckoutSteps } from "@/components/CheckoutSteps";
 import { useCart } from "@/components/CartProvider";
 import { cartApi } from "@/lib/cart";
 import {
   accountApi,
-  getToken,
   useCurrentUser,
   type Address,
 } from "@/lib/auth";
+import {
+  SHIP_FLAT_HT,
+  SHIP_FLAT_TTC,
+  isFreeShipping as computeFreeShipping,
+} from "@/lib/shipping";
 
-// Mêmes constantes que côté backend (transparence pour le client)
-const SHIP_FLAT_HT = 6.9;
-const VAT_RATE = 0.2;
+interface PriceChange {
+  supplier_ref: string;
+  label: string;
+  old_ttc: number;
+  new_ttc: number;
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -36,6 +44,7 @@ export default function CheckoutPage() {
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [priceChanges, setPriceChanges] = useState<PriceChange[]>([]);
 
   // Redirection si pas connecté
   useEffect(() => {
@@ -56,18 +65,15 @@ export default function CheckoutPage() {
 
   // Règle métier : livraison gratuite SEULEMENT si toutes les lignes >= 2
   const lineQuantities = cart?.items.map((i) => i.quantity) ?? [];
-  const isFreeShipping =
-    lineQuantities.length > 0 &&
-    lineQuantities.every((q) => q >= 2);
+  const isFreeShipping = computeFreeShipping(lineQuantities);
 
   const articlesTtc = cart?.total_ttc ?? 0;
-  const shippingHt = isFreeShipping ? 0 : SHIP_FLAT_HT;
-  const shippingTtc =
-    shippingHt > 0 ? +(shippingHt * (1 + VAT_RATE)).toFixed(2) : 0;
+  const shippingTtc = isFreeShipping ? 0 : SHIP_FLAT_TTC;
   const grandTotal = +(articlesTtc + shippingTtc).toFixed(2);
 
   async function handleSubmit() {
     setError(null);
+    setPriceChanges([]);
     if (!acceptTerms) {
       setError("Vous devez accepter les CGV pour continuer.");
       return;
@@ -89,14 +95,8 @@ export default function CheckoutPage() {
       }
       const res = await cartApi.checkout(addressId, true);
       if (res.price_changes.length > 0) {
-        // Détails des changements
-        const changes = res.price_changes
-          .map(c => `• ${c.label} : ${c.old_ttc.toFixed(2)}€ → ${c.new_ttc.toFixed(2)}€`)
-          .join("\n");
-        setError(
-          `Le prix de certains articles a changé :\n${changes}\n\nVotre panier a été mis à jour, veuillez vérifier avant de valider.`,
-        );
-        // Rafraîchir le panier pour afficher les nouveaux prix
+        // Prix fournisseur modifiés : tableau avant/après explicite
+        setPriceChanges(res.price_changes);
         await refresh();
         setBusy(false);
         return;
@@ -145,9 +145,10 @@ export default function CheckoutPage() {
     <>
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <h1 className="mb-8 font-display text-3xl font-black tracking-tightest text-ink">
+        <h1 className="mb-4 font-display text-3xl font-black tracking-tightest text-ink">
           Finaliser ma commande
         </h1>
+        <CheckoutSteps current={2} />
 
         <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
@@ -336,6 +337,47 @@ export default function CheckoutPage() {
               <span>{grandTotal.toFixed(2).replace(".", ",")} €</span>
             </div>
 
+            {priceChanges.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                <p className="mb-2 text-sm font-bold text-amber-800">
+                  Le prix fournisseur de certains articles a changé :
+                </p>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {priceChanges.map((c) => (
+                      <tr key={c.supplier_ref}>
+                        <td className="truncate py-1 pr-2 text-amber-900" title={c.label}>
+                          {c.label}
+                        </td>
+                        <td className="whitespace-nowrap py-1 text-right">
+                          <span className="text-amber-700 line-through">
+                            {c.old_ttc.toFixed(2).replace(".", ",")} €
+                          </span>{" "}
+                          <span
+                            className={`font-bold ${
+                              c.new_ttc === 0
+                                ? "text-signal"
+                                : c.new_ttc > c.old_ttc
+                                  ? "text-signal"
+                                  : "text-ok"
+                            }`}
+                          >
+                            {c.new_ttc === 0
+                              ? "indisponible"
+                              : `${c.new_ttc.toFixed(2).replace(".", ",")} €`}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-xs text-amber-800">
+                  Votre panier a été mis à jour — vérifiez les montants
+                  puis validez à nouveau.
+                </p>
+              </div>
+            )}
+
             {error && (
               <p className="rounded-lg bg-signal-light px-3 py-2 text-sm font-medium text-signal-dark">
                 {error}
@@ -349,9 +391,10 @@ export default function CheckoutPage() {
             >
               {busy ? "Validation…" : "Procéder au paiement"}
             </button>
-            <p className="text-center text-[11px] text-ink-muted">
-              Paiement sécurisé par Sogecommerce
-            </p>
+            <div className="space-y-1 text-center text-[11px] text-ink-muted">
+              <p>🔒 Paiement sécurisé Société Générale (Sogecommerce)</p>
+              <p>↩ Rétractation 14 jours · Garantie constructeur</p>
+            </div>
           </aside>
         </div>
       </main>

@@ -27,6 +27,10 @@ router = APIRouter(prefix="/cart", tags=["cart"])
 
 
 def _serialize(cart: Cart) -> CartOut:
+    def _dimension(pd: dict) -> str | None:
+        w, r, d = pd.get("width"), pd.get("ratio"), pd.get("diameter")
+        return f"{w}/{r} R{d}" if w and r and d else None
+
     items = [
         CartItemOut(
             id=i.id,
@@ -35,6 +39,9 @@ def _serialize(cart: Cart) -> CartOut:
             quantity=i.quantity,
             price_ht=i.price_ht_snapshot,
             price_ttc=i.price_ttc_snapshot,
+            dimension=_dimension(i.product_data or {}),
+            image_url=(i.product_data or {}).get("image_url"),
+            season=(i.product_data or {}).get("season"),
         )
         for i in cart.items
     ]

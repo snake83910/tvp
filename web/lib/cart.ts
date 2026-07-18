@@ -28,6 +28,9 @@ export interface CartItem {
   quantity: number;
   price_ht: number;
   price_ttc: number;
+  dimension?: string | null;
+  image_url?: string | null;
+  season?: string | null;
 }
 
 export interface Cart {

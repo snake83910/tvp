@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { CheckoutSteps } from "@/components/CheckoutSteps";
 import { authFetch, useCurrentUser } from "@/lib/auth";
 
 // Endpoint Sogecommerce (identique à la variable d'env backend)
@@ -176,9 +177,10 @@ export default function PaymentPage({
     <>
       <SiteHeader />
       <main className="mx-auto max-w-2xl px-6 py-12">
-        <h1 className="font-display text-3xl font-black tracking-tightest text-ink">
+        <h1 className="mb-4 font-display text-3xl font-black tracking-tightest text-ink">
           Paiement
         </h1>
+        <CheckoutSteps current={3} />
         <p className="mt-2 text-sm text-ink-muted">
           Commande {params.orderNumber}
         </p>
