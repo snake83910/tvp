@@ -50,7 +50,10 @@ class PaymentProvider(ABC):
 
     @abstractmethod
     async def init_payment(
-        self, order_id: str, amount_cents: int
+        self,
+        order_id: str,
+        amount_cents: int,
+        customer_email: str | None = None,
     ) -> PaymentInit:
         ...
 
@@ -71,7 +74,10 @@ class SimulatedPayment(PaymentProvider):
     name = "simulated"
 
     async def init_payment(
-        self, order_id: str, amount_cents: int
+        self,
+        order_id: str,
+        amount_cents: int,
+        customer_email: str | None = None,
     ) -> PaymentInit:
         ref = f"SIM-{uuid.uuid4().hex[:12]}"
         return PaymentInit(
@@ -135,7 +141,10 @@ class SogecommercePayment(PaymentProvider):
         return f"Basic {token}"
 
     async def init_payment(
-        self, order_id: str, amount_cents: int
+        self,
+        order_id: str,
+        amount_cents: int,
+        customer_email: str | None = None,
     ) -> PaymentInit:
         # orderId Sogecommerce = notre référence commande (pas l'UUID interne)
         payload = {
@@ -145,6 +154,11 @@ class SogecommercePayment(PaymentProvider):
             "formAction": "PAYMENT",
             "ipnTargetUrl": settings.sogecommerce_ipn_url,
         }
+        # Email transmis au formToken : le smartForm ne redemande pas au
+        # client une info qu'on connaît déjà (champ E-mail masqué), et le
+        # Back Office rattache la transaction au bon acheteur.
+        if customer_email:
+            payload["customer"] = {"email": customer_email}
         async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)) as client:
             resp = await client.post(
                 self._API,

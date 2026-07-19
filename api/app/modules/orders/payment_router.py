@@ -50,7 +50,7 @@ async def init_payment(
 
     provider = get_payment_provider()
     init = await provider.init_payment(
-        str(order.id), order.total_ttc_cents
+        str(order.id), order.total_ttc_cents, customer_email=user.email
     )
     # Un seul Payment par commande : si un init précédent existe (retour
     # arrière, double-clic), on le met à jour au lieu d'empiler des lignes

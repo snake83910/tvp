@@ -138,21 +138,25 @@ test("tunnel : produit → panier → connexion → checkout → paiement simul�
     await page.waitForURL(/\/paiement\/CMD-/, { timeout: 30_000 });
   }
 
-  // ── Page paiement : montant + formulaire selon le provider ───────
-  await expect(page.getByText("Montant à régler")).toBeVisible();
+  // ── Page paiement : récap + formulaire selon le provider ─────────
+  await expect(page.getByText("Paiement sécurisé")).toBeVisible();
+  await expect(page.getByText("Total TTC")).toBeVisible();
   const orderNumber = page.url().match(/\/paiement\/(CMD-[\d-]+)/)?.[1];
   expect(orderNumber, "numéro de commande dans l'URL").toBeTruthy();
 
   const simulateBtn = page.getByRole("button", {
     name: /simuler un paiement réussi/i,
   });
-  const sogeSection = page.getByText(
-    "Paiement 100% sécurisé — Société Générale Sogecommerce",
-  );
-  // provider "simulated" (dev) OU "sogecommerce" (mode TEST) : dans les
-  // deux cas l'init serveur a réussi et la page propose le paiement.
-  await expect(simulateBtn.or(sogeSection).first()).toBeVisible({
-    timeout: 30_000,
+  // provider "sogecommerce" : le conteneur smartForm ne devient visible
+  // qu'au KR.onFormReady — attendre sa visibilité valide que le
+  // formulaire bancaire (thème néon) s'est réellement chargé.
+  const sogeForm = page.locator("#soge-smartform");
+  await expect(simulateBtn.or(sogeForm).first()).toBeVisible({
+    timeout: 45_000,
+  });
+  await page.screenshot({
+    path: "test-results/paiement.png",
+    fullPage: true,
   });
 
   // Statut serveur : la commande existe et attend le paiement
