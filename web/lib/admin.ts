@@ -70,6 +70,18 @@ export interface AdminCustomer {
   orders_count: number;
   revenue_ttc: number;
   last_order_at: string | null;
+  // Adresse du carnet marquée par défaut (à défaut, la plus ancienne).
+  // Distincte de celle figée dans une commande, que le client a pu
+  // modifier depuis.
+  address: {
+    label: string | null;
+    line1: string;
+    line2: string | null;
+    postal_code: string;
+    city: string;
+    country: string;
+  } | null;
+  addresses_count: number;
 }
 
 export interface AdminOrderDetail extends OrderDetail {

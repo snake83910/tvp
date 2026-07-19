@@ -21,7 +21,7 @@ from app.core.audit import audit
 from app.core.deps import get_db, require_role
 from app.models.order import ALLOWED_TRANSITIONS, Order, OrderStatus
 from app.models.promo import PromoCode
-from app.models.user import AccountType, ProProfile, User, UserRole
+from app.models.user import AccountType, Address, ProProfile, User, UserRole
 from app.modules.mailer.service import (
     send_order_cancelled,
     send_order_delivered,
@@ -29,6 +29,7 @@ from app.modules.mailer.service import (
 )
 from app.schemas.order import (
     AdminCustomer,
+    AdminCustomerAddress,
     AdminOrderDetail,
     AdminOrderSummary,
     AdminStats,
@@ -670,6 +671,45 @@ _CUSTOMER_SORTS = {
 }
 
 
+async def _default_addresses(
+    user_ids: set[uuid.UUID], db: AsyncSession
+) -> dict[uuid.UUID, tuple[AdminCustomerAddress | None, int]]:
+    """Adresse à afficher pour chaque client, et son nombre d'adresses.
+
+    « À afficher » = celle marquée par défaut ; à défaut la plus ancienne,
+    car un client peut très bien n'avoir jamais coché la case.
+    """
+    if not user_ids:
+        return {}
+
+    rows = await db.scalars(
+        select(Address)
+        .where(Address.user_id.in_(user_ids))
+        .order_by(
+            Address.user_id,
+            Address.is_default.desc(),
+            Address.created_at.asc(),
+        )
+    )
+
+    out: dict[uuid.UUID, tuple[AdminCustomerAddress | None, int]] = {}
+    for a in rows:
+        current, count = out.get(a.user_id, (None, 0))
+        out[a.user_id] = (
+            # L'ordre du tri garantit que la première vue est la bonne.
+            current or AdminCustomerAddress(
+                label=a.label,
+                line1=a.line1,
+                line2=a.line2,
+                postal_code=a.postal_code,
+                city=a.city,
+                country=a.country,
+            ),
+            count + 1,
+        )
+    return out
+
+
 @router.get("/customers", response_model=list[AdminCustomer])
 async def list_customers(
     q: str | None = Query(None, description="Recherche : email, nom, société"),
@@ -730,6 +770,12 @@ async def list_customers(
             ) from None
 
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+    rows = (await db.execute(stmt)).all()
+
+    # Adresses en UNE requête séparée pour la page courante. Les joindre
+    # à la requête agrégée ci-dessus multiplierait les lignes par le
+    # nombre d'adresses et fausserait count() et sum().
+    addresses = await _default_addresses({u.id for u, *_ in rows}, db)
 
     return [
         AdminCustomer(
@@ -745,8 +791,10 @@ async def list_customers(
             orders_count=count or 0,
             revenue_ttc=(rev or 0) / 100,
             last_order_at=last,
+            address=addresses.get(u.id, (None, 0))[0],
+            addresses_count=addresses.get(u.id, (None, 0))[1],
         )
-        for u, company, count, rev, last in (await db.execute(stmt)).all()
+        for u, company, count, rev, last in rows
     ]
 
 

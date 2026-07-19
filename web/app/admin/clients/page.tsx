@@ -141,10 +141,11 @@ export default function AdminCustomers() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-line bg-paper shadow-card">
-          <table className="w-full min-w-[840px] text-sm">
+          <table className="w-full min-w-[1040px] text-sm">
             <thead className="border-b border-line text-xs font-bold uppercase tracking-wider text-ink-muted">
               <tr>
                 <th className="px-4 py-3 text-left">Client</th>
+                <th className="px-4 py-3 text-left">Adresse</th>
                 <th className="px-4 py-3 text-left">Type</th>
                 <th className="px-4 py-3 text-right">Commandes</th>
                 <th className="px-4 py-3 text-right">CA TTC</th>
@@ -180,13 +181,45 @@ export default function AdminCustomers() {
                     </div>
                     <a
                       href={`mailto:${c.email}`}
-                      className="text-xs text-ink-muted hover:text-signal"
+                      className="block text-xs text-ink-muted hover:text-signal"
                     >
                       {c.email}
                     </a>
-                    {c.phone && (
-                      <span className="ml-2 text-xs text-ink-muted">
+                    {c.phone ? (
+                      <a
+                        href={`tel:${c.phone.replace(/\s/g, "")}`}
+                        className="block text-xs font-medium text-ink-soft hover:text-signal"
+                      >
                         {c.phone}
+                      </a>
+                    ) : (
+                      <span className="block text-xs text-ink-muted">
+                        Pas de téléphone
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {c.address ? (
+                      <div className="text-xs leading-relaxed text-ink-soft">
+                        <p>
+                          {c.address.line1}
+                          {c.address.line2 ? `, ${c.address.line2}` : ""}
+                        </p>
+                        <p>
+                          {c.address.postal_code} {c.address.city}
+                          {c.address.country !== "FR" && ` (${c.address.country})`}
+                        </p>
+                        {c.addresses_count > 1 && (
+                          <p className="text-ink-muted">
+                            +{c.addresses_count - 1} autre
+                            {c.addresses_count > 2 ? "s" : ""} adresse
+                            {c.addresses_count > 2 ? "s" : ""}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-ink-muted">
+                        Aucune adresse
                       </span>
                     )}
                   </td>

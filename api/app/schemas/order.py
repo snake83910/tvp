@@ -274,6 +274,18 @@ class AdminStats(BaseModel):
     orders_prev30: int = 0
 
 
+class AdminCustomerAddress(BaseModel):
+    """Adresse par défaut d'un client, telle qu'enregistrée dans son
+    carnet — à ne pas confondre avec l'adresse figée dans une commande,
+    que le client a pu modifier depuis."""
+    label: str | None = None
+    line1: str
+    line2: str | None = None
+    postal_code: str
+    city: str
+    country: str = "FR"
+
+
 class AdminCustomer(BaseModel):
     """Ligne de la liste clients (admin).
 
@@ -295,3 +307,7 @@ class AdminCustomer(BaseModel):
     orders_count: int = 0
     revenue_ttc: float = 0.0
     last_order_at: datetime | None = None
+    # Adresse par défaut + nombre total, pour que l'admin sache qu'il en
+    # existe d'autres plutôt que de croire celle-ci unique.
+    address: AdminCustomerAddress | None = None
+    addresses_count: int = 0
