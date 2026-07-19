@@ -206,16 +206,34 @@ class SogecommercePayment(PaymentProvider):
 
     def verify_ipn(self, payload: dict, signature: str | None) -> IPNResult:
         """
-        IPN Sogecommerce : le corps contient 'kr-answer' (JSON string) et
-        'kr-hash'. La signature = HMAC-SHA256(kr-answer) avec la clé HMAC
-        du Back Office (kr-answer signé avec la 2e clé, pas la clé API).
+        IPN Sogecommerce : le corps contient 'kr-answer' (JSON string),
+        'kr-hash' et 'kr-hash-key'. La signature = HMAC-SHA256(kr-answer),
+        mais la CLÉ dépend du canal (doc « Étape 5 : Analyser le
+        paiement ») :
+          - IPN serveur→serveur : le MOT DE PASSE API (2e clé du tableau)
+            -> kr-hash-key = "password"
+          - Retour navigateur : la clé HMAC-SHA256 (4e clé du tableau)
+            -> kr-hash-key = "sha256_hmac"
+        Utiliser la clé HMAC pour l'IPN rejetait toutes les vraies
+        notifications (« Signature invalide » dans le Back Office).
         On NE fait jamais confiance au payload sans signature valide.
         """
-        secret = settings.sogecommerce_hmac_key
+        # Le champ kr-hash-key du payload désigne la clé utilisée ; sur
+        # l'IPN sa valeur documentée est "password" (défaut si absent).
+        kr_hash_key = payload.get("kr-hash-key", "password")
+        if kr_hash_key == "password":
+            secret = settings.sogecommerce_api_password
+            missing = "SOGECOMMERCE_API_PASSWORD"
+        elif kr_hash_key == "sha256_hmac":
+            secret = settings.sogecommerce_hmac_key
+            missing = "SOGECOMMERCE_HMAC_KEY"
+        else:
+            # Algorithme/clé inconnu : refus (pas de fallback laxiste)
+            return IPNResult("", 0, False, False, payload)
         if not secret:
             raise RuntimeError(
-                "SOGECOMMERCE_HMAC_KEY non configurée "
-                "(Back Office -> Clés d'API REST -> clé HMAC-SHA256)."
+                f"{missing} non configurée "
+                "(Back Office -> Clés d'API REST)."
             )
 
         kr_answer = payload.get("kr-answer")
