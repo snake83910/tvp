@@ -78,6 +78,7 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
         paid_at=order.paid_at,
         delivery_mode=order.delivery_mode,
         shipping_address=order.shipping_address,
+        billing_address=order.billing_address or order.shipping_address,
         invoice_number=order.invoice_number,
         promo_code=order.promo_code,
         discount_ttc=order.discount_ttc_cents / 100,

@@ -66,6 +66,8 @@ class PriceChangeOut(BaseModel):
 
 class CheckoutIn(BaseModel):
     address_id: uuid.UUID
+    # None = facturation identique à la livraison
+    billing_address_id: uuid.UUID | None = None
     delivery_mode: str = "home"
     accept_terms: bool
     promo_code: str | None = None
@@ -199,9 +201,10 @@ class OrderDetail(BaseModel):
     created_at: datetime
     paid_at: datetime | None
 
-    # Adresse de livraison figée
+    # Adresses figées (facturation = livraison si non dissociée)
     delivery_mode: str
     shipping_address: dict
+    billing_address: dict = {}
 
     # Numéro de facture (assigné au paiement)
     invoice_number: int | None = None

@@ -121,6 +121,11 @@ export default function AdminOrderDetail() {
   }
 
   const addr = order.shipping_address;
+  // Facturation dissociée : bloc affiché uniquement si elle diffère
+  const billing = order.billing_address;
+  const billingDiffers =
+    !!billing &&
+    JSON.stringify(billing) !== JSON.stringify(order.shipping_address);
 
   return (
     <div className="max-w-4xl">
@@ -183,6 +188,15 @@ export default function AdminOrderDetail() {
             <Row label="Ville" value={`${addr.postal_code} ${addr.city}`} />
             <Row label="Pays" value={addr.country ?? "FR"} />
           </Section>
+
+          {billingDiffers && (
+            <Section title="Adresse de facturation">
+              {billing.label && <Row label="Libellé" value={billing.label} />}
+              <Row label="Adresse" value={[billing.line1, billing.line2].filter(Boolean).join(", ")} />
+              <Row label="Ville" value={`${billing.postal_code} ${billing.city}`} />
+              <Row label="Pays" value={billing.country ?? "FR"} />
+            </Section>
+          )}
 
           {/* Articles */}
           <Section title="Articles">

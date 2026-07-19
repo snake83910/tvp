@@ -56,6 +56,19 @@
     </div>
   </div>
 
+  {% if billing_address %}
+  <!-- Facturation (affichée seulement si dissociée de la livraison) -->
+  <div style="margin:0 0 16px 0;padding:14px 16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Facturé à
+    </div>
+    <div style="color:#17181a;">
+      {{ billing_address.line1 }}{% if billing_address.line2 %}, {{ billing_address.line2 }}{% endif %}<br />
+      {{ billing_address.postal_code }} {{ billing_address.city }}
+    </div>
+  </div>
+  {% endif %}
+
   <p style="margin:0 0 20px 0;">
     Votre commande va maintenant être transmise à notre fournisseur. Vous
     recevrez un nouvel email dès qu'elle sera expédiée, avec le numéro de

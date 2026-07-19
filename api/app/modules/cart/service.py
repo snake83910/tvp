@@ -353,12 +353,26 @@ class PriceChange:
     new_ttc: float
 
 
+def _address_snapshot(a: Address) -> dict:
+    """Fige une adresse dans la commande, découplée du compte : le client
+    peut la modifier ou la supprimer après coup sans altérer la facture."""
+    return {
+        "label": a.label,
+        "line1": a.line1,
+        "line2": a.line2,
+        "postal_code": a.postal_code,
+        "city": a.city,
+        "country": a.country,
+    }
+
+
 async def checkout(
     db: AsyncSession,
     user: User,
     address_id: uuid.UUID,
     delivery_mode: str = "home",
     promo_code: str | None = None,
+    billing_address_id: uuid.UUID | None = None,
 ) -> tuple[Order | None, list[PriceChange]]:
     """
     Transforme le panier en commande.
@@ -366,11 +380,19 @@ async def checkout(
     - Applique le code promo (revalidé ici, source de vérité).
     - Calcule les frais de port selon les quantités PAR LIGNE :
       gratuit seulement si toutes les références sont >= 2.
-    - Fige l'adresse de livraison dans la commande.
+    - Fige les adresses de livraison ET de facturation dans la commande.
+      billing_address_id à None = facturation identique à la livraison.
     """
     address = await db.get(Address, address_id)
     if address is None or address.user_id != user.id:
         raise ValueError("Adresse de livraison introuvable")
+
+    if billing_address_id is None or billing_address_id == address_id:
+        billing = address
+    else:
+        billing = await db.get(Address, billing_address_id)
+        if billing is None or billing.user_id != user.id:
+            raise ValueError("Adresse de facturation introuvable")
 
     if delivery_mode != "home":
         raise ValueError(
@@ -561,14 +583,8 @@ async def checkout(
         promo_code=promo_code_final,
         discount_ttc_cents=discount_ttc,
         delivery_mode=ship.mode,
-        shipping_address={
-            "label": address.label,
-            "line1": address.line1,
-            "line2": address.line2,
-            "postal_code": address.postal_code,
-            "city": address.city,
-            "country": address.country,
-        },
+        shipping_address=_address_snapshot(address),
+        billing_address=_address_snapshot(billing),
         shipping_ht_cents=ship.ht_cents,
         shipping_vat_cents=ship.vat_cents,
         total_ht_cents=total_ht,
