@@ -41,7 +41,60 @@ _BILLED_STATUSES = {
 _COL_W = (22, 72, 12, 22, 14, 32)
 
 
+# Caractères courants hors latin-1, avec leur équivalent lisible. Le
+# symbole euro est le piège nº1 : il n'est PAS dans latin-1 et fpdf lève
+# une exception plutôt que de l'ignorer. Une facture ne doit jamais
+# échouer sur une coquille de saisie ou un libellé fournisseur exotique.
+_SUBSTITUTIONS = {
+    # " EUR" et non "EUR" : sans l'espace, « 500€ » donnerait « 500EUR ».
+    # Le doublon d'espace de « 500 € » est retiré juste après.
+    "€": " EUR",
+    "—": "-",     # —
+    "–": "-",     # –
+    "’": "'",     # ’
+    "‘": "'",     # ‘
+    "“": '"',     # “
+    "”": '"',     # ”
+    "…": "...",   # …
+    " ": " ",     # espace insécable
+    "•": "-",     # •
+}
+
+
+def _latin1(text: str) -> str:
+    """Rend un texte imprimable par Helvetica (latin-1).
+
+    Les accents français passent tels quels ; seuls les caractères hors
+    du jeu sont remplacés. Ce qui n'a pas d'équivalent devient « ? » :
+    visible et corrigeable, plutôt qu'une facture qui part en erreur 500.
+    """
+    for bad, good in _SUBSTITUTIONS.items():
+        text = text.replace(bad, good)
+    text = text.replace("  EUR", " EUR")
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def _clean(args: tuple, kwargs: dict, pos: int) -> tuple[tuple, dict]:
+    """Assainit l'argument texte, qu'il soit positionnel ou nommé."""
+    if len(args) > pos and isinstance(args[pos], str):
+        args = args[:pos] + (_latin1(args[pos]),) + args[pos + 1:]
+    for key in ("text", "txt"):
+        if isinstance(kwargs.get(key), str):
+            kwargs[key] = _latin1(kwargs[key])
+    return args, kwargs
+
+
 class _InvoicePDF(FPDF):
+    # Point de passage unique : tout texte écrit dans la facture est
+    # assaini ici. Le faire au cas par cas se serait oublié un jour.
+    def cell(self, *args, **kwargs):          # type: ignore[override]
+        args, kwargs = _clean(args, kwargs, 2)
+        return super().cell(*args, **kwargs)
+
+    def multi_cell(self, *args, **kwargs):    # type: ignore[override]
+        args, kwargs = _clean(args, kwargs, 2)
+        return super().multi_cell(*args, **kwargs)
+
     def __init__(self) -> None:
         super().__init__(orientation="P", unit="mm", format="A4")
         self.set_margins(18, 18, 18)
@@ -118,19 +171,24 @@ def _issuer_lines() -> list[str]:
     document — mieux vaut une mention manquante et visible.
     """
     s = settings
-    lines = [s.company_legal_name or _COMPANY_NAME]
-    if s.company_capital:
-        lines.append(f"SAS au capital de {s.company_capital}")
-    if s.company_address:
-        lines.append(s.company_address)
-    if s.company_city:
-        lines.append(s.company_city)
-    if s.company_siret:
-        lines.append(f"SIRET {s.company_siret}")
-    if s.company_rcs:
-        lines.append(f"RCS {s.company_rcs}")
-    if s.company_vat_number:
-        lines.append(f"TVA intracom. {s.company_vat_number}")
+    # .strip() : « COMPANY_CAPITAL= 500 EUR » dans un .env garde l'espace
+    # de tête selon le parseur, ce qui décalerait la ligne à l'impression.
+    def v(raw: str) -> str:
+        return (raw or "").strip()
+
+    lines = [v(s.company_legal_name) or _COMPANY_NAME]
+    if v(s.company_capital):
+        lines.append(f"SAS au capital de {v(s.company_capital)}")
+    if v(s.company_address):
+        lines.append(v(s.company_address))
+    if v(s.company_city):
+        lines.append(v(s.company_city))
+    if v(s.company_siret):
+        lines.append(f"SIRET {v(s.company_siret)}")
+    if v(s.company_rcs):
+        lines.append(f"RCS {v(s.company_rcs)}")
+    if v(s.company_vat_number):
+        lines.append(f"TVA intracom. {v(s.company_vat_number)}")
     lines.append(_COMPANY_EMAIL)
     return lines
 
@@ -287,7 +345,6 @@ def generate_invoice_pdf(order: Order, user: User) -> bytes:
     articles_ht  = sum(it.unit_price_ht_cents * it.quantity for it in order.items) / 100
     tva          = order.total_vat_cents / 100
     shipping_ht  = order.shipping_ht_cents / 100
-    shipping_ttc = (order.shipping_ht_cents + order.shipping_vat_cents) / 100
 
     total_row("Total articles HT :", _eur(articles_ht))
     if getattr(order, "discount_ttc_cents", 0):
