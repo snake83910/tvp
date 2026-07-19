@@ -106,4 +106,18 @@ class Settings(BaseSettings):
     siv_api_key: str = ""
     siv_api_url: str = "https://www.apiplaqueimmatriculation.com/GetInfosVehicule.php"
 
+    # ── Mentions légales de l'émetteur (facture PDF) ──────────────
+    # Obligatoires sur une facture de SAS assujettie à la TVA
+    # (art. L441-9 code de commerce, art. 242 nonies A ann. II CGI).
+    # Laissées VIDES exprès : ce sont des identifiants légaux, ils
+    # doivent venir du Kbis, pas d'une valeur par défaut inventée.
+    # Chaque ligne renseignée s'affiche, les vides sont omises.
+    company_legal_name: str = ""    # ex. "TOUS VOS PNEUS SAS"
+    company_capital: str = ""       # ex. "10 000 EUR"
+    company_address: str = ""       # ex. "12 rue de la Republique"
+    company_city: str = ""          # ex. "13001 Marseille"
+    company_siret: str = ""         # 14 chiffres
+    company_rcs: str = ""           # ex. "Marseille B 123 456 789"
+    company_vat_number: str = ""    # ex. "FR12345678901"
+
 settings = Settings()
