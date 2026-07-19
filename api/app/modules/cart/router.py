@@ -212,8 +212,9 @@ async def checkout(
     Finalise le panier en commande.
  
     - Exige acceptation explicite des CGV (obligation légale e-commerce FR).
-    - Adresse de livraison et mode passés au service, qui figera tout
-      dans la commande créée.
+    - Adresses (livraison + facturation) et mode passés au service, qui
+      figera tout dans la commande créée. billing_address_id omis =
+      facturation identique à la livraison.
     - Si les prix Maxityre ont changé depuis l'ajout au panier, on ne
       crée PAS la commande : on renvoie les écarts pour confirmation
       explicite côté frontend (anti-litige).
@@ -227,6 +228,7 @@ async def checkout(
         order, changes = await service.checkout(
             db, user, data.address_id, data.delivery_mode,
             promo_code=data.promo_code,
+            billing_address_id=data.billing_address_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

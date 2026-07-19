@@ -127,6 +127,8 @@ export const cartApi = {
     acceptTerms: boolean,
     deliveryMode = "home",
     promoCode?: string | null,
+    // null = facturation identique à la livraison
+    billingAddressId?: string | null,
   ) =>
     call<{
       order_number: string | null;
@@ -140,6 +142,7 @@ export const cartApi = {
       }>;
     }>("/cart/checkout", "POST", {
       address_id: addressId,
+      billing_address_id: billingAddressId || null,
       delivery_mode: deliveryMode,
       accept_terms: acceptTerms,
       promo_code: promoCode || null,

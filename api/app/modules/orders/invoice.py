@@ -63,6 +63,29 @@ def _truncate(text: str, n: int) -> str:
     return text[:n] + "..." if len(text) > n else text
 
 
+def _address_lines(addr: dict) -> list[str]:
+    """Lignes affichables d'un snapshot d'adresse, vides écartées."""
+    city = f"{addr.get('postal_code', '')} {addr.get('city', '')}".strip()
+    lines = [addr.get("line1"), addr.get("line2"), city,
+             addr.get("country", "FR")]
+    return [ligne for ligne in lines if ligne]
+
+
+def _address_block(
+    pdf: FPDF, x: float, y: float, title: str, lines: list[str]
+) -> None:
+    """Écrit un bloc adresse titré en colonne, à position absolue."""
+    pdf.set_xy(x, y)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(30, 30, 30)
+    pdf.cell(84, 5, title, ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(50, 50, 50)
+    for line in lines:
+        pdf.set_x(x)
+        pdf.cell(84, 4, _truncate(line, 45), ln=True)
+
+
 def generate_invoice_pdf(order: Order, user: User) -> bytes:
     is_proforma = order.status not in _BILLED_STATUSES
 
@@ -102,25 +125,25 @@ def generate_invoice_pdf(order: Order, user: User) -> bytes:
     pdf.line(18, pdf.get_y(), 192, pdf.get_y())
     pdf.ln(6)
 
-    # ── Bloc client ───────────────────────────────────────────────
-    addr = order.shipping_address
+    # ── Blocs adresses ────────────────────────────────────────────
+    # La facturation fait foi pour le bloc « FACTURE A ». Si le client a
+    # dissocié les deux, on affiche la livraison en regard, à droite.
+    shipping = order.shipping_address or {}
+    billing = order.billing_address or shipping
     full_name = " ".join(filter(None, [user.first_name, user.last_name]))
 
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.set_text_color(30, 30, 30)
-    pdf.cell(0, 5, "FACTURE A", ln=True)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(50, 50, 50)
-    if full_name:
-        pdf.cell(0, 4, full_name, ln=True)
-    pdf.cell(0, 4, user.email, ln=True)
-    if addr.get("line1"):
-        pdf.cell(0, 4, addr["line1"], ln=True)
-    if addr.get("line2"):
-        pdf.cell(0, 4, addr["line2"], ln=True)
-    if addr.get("postal_code") or addr.get("city"):
-        pdf.cell(0, 4, f"{addr.get('postal_code', '')} {addr.get('city', '')}".strip(), ln=True)
-    pdf.cell(0, 4, addr.get("country", "FR"), ln=True)
+    billing_lines = [
+        *filter(None, [full_name, user.email]), *_address_lines(billing)
+    ]
+    shipping_lines = (
+        _address_lines(shipping) if billing != shipping else []
+    )
+
+    y0 = pdf.get_y()
+    _address_block(pdf, 18, y0, "FACTURE A", billing_lines)
+    if shipping_lines:
+        _address_block(pdf, 108, y0, "LIVRAISON A", shipping_lines)
+    pdf.set_y(y0 + 5 + 4 * max(len(billing_lines), len(shipping_lines)))
 
     if is_proforma:
         pdf.ln(4)

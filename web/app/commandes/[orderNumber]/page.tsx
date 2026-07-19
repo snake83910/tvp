@@ -136,6 +136,11 @@ export default function OrderDetailPage({
   }
 
   const addr = order.shipping_address;
+  // Facturation dissociée : bloc affiché uniquement si elle diffère
+  const billing = order.billing_address;
+  const billingDiffers =
+    !!billing &&
+    JSON.stringify(billing) !== JSON.stringify(order.shipping_address);
 
   return (
     <>
@@ -289,6 +294,30 @@ export default function OrderDetailPage({
                   : order.delivery_mode}
               </p>
             </div>
+
+            {billingDiffers && (
+              <div className="rounded-2xl border border-line bg-paper p-6 shadow-card">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
+                  Facturation
+                </p>
+                <p className="text-sm font-semibold text-ink">
+                  {billing.label ?? "Adresse de facturation"}
+                </p>
+                <p className="mt-1 text-sm text-ink-soft">
+                  {billing.line1}
+                  {billing.line2 ? (
+                    <>
+                      <br />
+                      {billing.line2}
+                    </>
+                  ) : null}
+                  <br />
+                  {billing.postal_code} {billing.city}
+                  <br />
+                  {billing.country}
+                </p>
+              </div>
+            )}
 
             {/* Suivi expédition */}
             {(order.status === "shipped" || order.status === "delivered") && (

@@ -157,6 +157,12 @@ class Order(Base):
     shipping_address: Mapped[dict] = mapped_column(
         JSONB, default=dict
     )
+    # Facturation : adresse figée elle aussi. Toujours renseignée (recopie
+    # de la livraison si le client n'en a pas choisi une distincte), pour
+    # que la facture n'ait jamais à deviner.
+    billing_address: Mapped[dict] = mapped_column(
+        JSONB, default=dict
+    )
     # Frais de port en centimes (jamais de float pour l'argent)
     shipping_ht_cents: Mapped[int] = mapped_column(Integer, default=0)
     shipping_vat_cents: Mapped[int] = mapped_column(Integer, default=0)

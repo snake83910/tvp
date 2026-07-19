@@ -159,20 +159,25 @@ export interface OrderItemDetail {
   line_total_ttc: number;
 }
 
+/** Adresse figée dans une commande (snapshot, pas l'entrée du carnet). */
+export interface AddressSnapshot {
+  label?: string | null;
+  line1?: string;
+  line2?: string | null;
+  postal_code?: string;
+  city?: string;
+  country?: string;
+}
+
 export interface OrderDetail {
   order_number: string;
   status: string;
   created_at: string;
   paid_at: string | null;
   delivery_mode: string;
-  shipping_address: {
-    label?: string | null;
-    line1?: string;
-    line2?: string | null;
-    postal_code?: string;
-    city?: string;
-    country?: string;
-  };
+  shipping_address: AddressSnapshot;
+  // Égale à shipping_address si le client ne les a pas dissociées
+  billing_address?: AddressSnapshot;
   invoice_number: number | null;
   promo_code?: string | null;
   discount_ttc?: number;

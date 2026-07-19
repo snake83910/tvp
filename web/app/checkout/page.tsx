@@ -37,6 +37,19 @@ export default function CheckoutPage() {
     country: "FR",
   });
   const [showNew, setShowNew] = useState(false);
+  // Facturation : identique à la livraison par défaut (cas courant).
+  // Décoché -> le client choisit/saisit une adresse distincte.
+  const [sameBilling, setSameBilling] = useState(true);
+  const [billingId, setBillingId] = useState<string>("");
+  const [newBilling, setNewBilling] = useState({
+    label: "Facturation",
+    line1: "",
+    line2: "",
+    postal_code: "",
+    city: "",
+    country: "FR",
+  });
+  const [showNewBilling, setShowNewBilling] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,8 +103,14 @@ export default function CheckoutPage() {
       .then((list) => {
         setAddresses(list);
         const def = list.find((a) => a.is_default) ?? list[0];
-        if (def) setSelectedId(def.id);
-        else setShowNew(true); // pas d'adresse -> on en saisit une
+        if (def) {
+          setSelectedId(def.id);
+          setBillingId(def.id);
+        } else {
+          // pas d'adresse -> on en saisit une
+          setShowNew(true);
+          setShowNewBilling(true);
+        }
       })
       .catch((e) => {
         setError(
@@ -132,8 +151,28 @@ export default function CheckoutPage() {
         setBusy(false);
         return;
       }
+
+      // Facturation : null = identique à la livraison (le back recopie).
+      let billingAddressId: string | null = null;
+      if (!sameBilling) {
+        if (showNewBilling) {
+          const created = await accountApi.addAddress({
+            ...newBilling,
+            is_default: false,
+          });
+          billingAddressId = created.id;
+        } else {
+          billingAddressId = billingId;
+        }
+        if (!billingAddressId) {
+          setError("Veuillez choisir ou saisir une adresse de facturation.");
+          setBusy(false);
+          return;
+        }
+      }
+
       const res = await cartApi.checkout(
-        addressId, true, "home", promo?.code ?? null,
+        addressId, true, "home", promo?.code ?? null, billingAddressId,
       );
       if (res.price_changes.length > 0) {
         // Prix fournisseur modifiés : tableau avant/après explicite
@@ -195,89 +234,54 @@ export default function CheckoutPage() {
           <div className="space-y-6">
             {/* Adresse */}
             <Section title="1 · Adresse de livraison">
-              {addresses.length > 0 && !showNew && (
-                <div className="space-y-2">
-                  {addresses.map((a) => (
-                    <label
-                      key={a.id}
-                      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition ${
-                        selectedId === a.id
-                          ? "border-signal bg-signal-light"
-                          : "border-line hover:border-signal/50"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="addr"
-                        checked={selectedId === a.id}
-                        onChange={() => setSelectedId(a.id)}
-                        className="mt-1 accent-signal"
-                      />
-                      <div>
-                        <p className="font-semibold text-ink">
-                          {a.label ?? "Adresse"}
-                        </p>
-                        <p className="text-sm text-ink-muted">
-                          {a.line1}
-                          {a.line2 ? `, ${a.line2}` : ""},{" "}
-                          {a.postal_code} {a.city}
-                        </p>
-                      </div>
-                    </label>
-                  ))}
-                  <button
-                    onClick={() => setShowNew(true)}
-                    className="text-sm font-semibold text-signal hover:underline"
-                  >
-                    + Ajouter une nouvelle adresse
-                  </button>
-                </div>
-              )}
-              {showNew && (
-                <div className="space-y-3">
-                  <Input
-                    label="Adresse"
-                    value={newAddress.line1}
-                    onChange={(v) =>
-                      setNewAddress({ ...newAddress, line1: v })
-                    }
+              <AddressPicker
+                radioName="addr"
+                addresses={addresses}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                showNew={showNew}
+                onShowNew={setShowNew}
+                draft={newAddress}
+                onDraft={setNewAddress}
+              />
+
+              {/* Facturation : repliée tant qu'elle est identique */}
+              <div className="mt-6 border-t border-line pt-5">
+                <label className="flex items-center gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={sameBilling}
+                    onChange={(e) => {
+                      setSameBilling(e.target.checked);
+                      // Pas d'adresse enregistrée : on ouvre la saisie
+                      if (!e.target.checked && addresses.length === 0)
+                        setShowNewBilling(true);
+                    }}
+                    className="h-5 w-5 accent-signal"
                   />
-                  <Input
-                    label="Complément (facultatif)"
-                    value={newAddress.line2}
-                    onChange={(v) =>
-                      setNewAddress({ ...newAddress, line2: v })
-                    }
-                    required={false}
-                  />
-                  <div className="grid grid-cols-3 gap-3">
-                    <Input
-                      label="Code postal"
-                      value={newAddress.postal_code}
-                      onChange={(v) =>
-                        setNewAddress({ ...newAddress, postal_code: v })
-                      }
+                  <span className="font-semibold text-ink-soft">
+                    L&apos;adresse de facturation est identique
+                  </span>
+                </label>
+
+                {!sameBilling && (
+                  <div className="mt-4">
+                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-muted">
+                      Adresse de facturation
+                    </p>
+                    <AddressPicker
+                      radioName="billing-addr"
+                      addresses={addresses}
+                      selectedId={billingId}
+                      onSelect={setBillingId}
+                      showNew={showNewBilling}
+                      onShowNew={setShowNewBilling}
+                      draft={newBilling}
+                      onDraft={setNewBilling}
                     />
-                    <div className="col-span-2">
-                      <Input
-                        label="Ville"
-                        value={newAddress.city}
-                        onChange={(v) =>
-                          setNewAddress({ ...newAddress, city: v })
-                        }
-                      />
-                    </div>
                   </div>
-                  {addresses.length > 0 && (
-                    <button
-                      onClick={() => setShowNew(false)}
-                      className="text-sm text-ink-muted hover:text-signal"
-                    >
-                      ← Utiliser une adresse existante
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </Section>
 
             {/* Livraison */}
@@ -487,6 +491,117 @@ export default function CheckoutPage() {
           </aside>
         </div>
       </main>
+    </>
+  );
+}
+
+interface AddressDraft {
+  label: string;
+  line1: string;
+  line2: string;
+  postal_code: string;
+  city: string;
+  country: string;
+}
+
+/** Choix d'une adresse du carnet, ou saisie d'une nouvelle. Partagé par
+ *  la livraison et la facturation — d'où le radioName distinct. */
+function AddressPicker({
+  radioName,
+  addresses,
+  selectedId,
+  onSelect,
+  showNew,
+  onShowNew,
+  draft,
+  onDraft,
+}: {
+  radioName: string;
+  addresses: Address[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  showNew: boolean;
+  onShowNew: (v: boolean) => void;
+  draft: AddressDraft;
+  onDraft: (d: AddressDraft) => void;
+}) {
+  return (
+    <>
+      {addresses.length > 0 && !showNew && (
+        <div className="space-y-2">
+          {addresses.map((a) => (
+            <label
+              key={a.id}
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition ${
+                selectedId === a.id
+                  ? "border-signal bg-signal-light"
+                  : "border-line hover:border-signal/50"
+              }`}
+            >
+              <input
+                type="radio"
+                name={radioName}
+                checked={selectedId === a.id}
+                onChange={() => onSelect(a.id)}
+                className="mt-1 accent-signal"
+              />
+              <div>
+                <p className="font-semibold text-ink">
+                  {a.label ?? "Adresse"}
+                </p>
+                <p className="text-sm text-ink-muted">
+                  {a.line1}
+                  {a.line2 ? `, ${a.line2}` : ""}, {a.postal_code}{" "}
+                  {a.city}
+                </p>
+              </div>
+            </label>
+          ))}
+          <button
+            onClick={() => onShowNew(true)}
+            className="text-sm font-semibold text-signal hover:underline"
+          >
+            + Ajouter une nouvelle adresse
+          </button>
+        </div>
+      )}
+      {showNew && (
+        <div className="space-y-3">
+          <Input
+            label="Adresse"
+            value={draft.line1}
+            onChange={(v) => onDraft({ ...draft, line1: v })}
+          />
+          <Input
+            label="Complément (facultatif)"
+            value={draft.line2}
+            onChange={(v) => onDraft({ ...draft, line2: v })}
+            required={false}
+          />
+          <div className="grid grid-cols-3 gap-3">
+            <Input
+              label="Code postal"
+              value={draft.postal_code}
+              onChange={(v) => onDraft({ ...draft, postal_code: v })}
+            />
+            <div className="col-span-2">
+              <Input
+                label="Ville"
+                value={draft.city}
+                onChange={(v) => onDraft({ ...draft, city: v })}
+              />
+            </div>
+          </div>
+          {addresses.length > 0 && (
+            <button
+              onClick={() => onShowNew(false)}
+              className="text-sm text-ink-muted hover:text-signal"
+            >
+              ← Utiliser une adresse existante
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }

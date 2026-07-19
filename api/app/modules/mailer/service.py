@@ -175,6 +175,13 @@ def send_order_confirmation(order: Order, user: User) -> None:
             order_number=order.order_number,
             items=items_view,
             shipping_address=order.shipping_address,
+            # Affichée uniquement si dissociée de la livraison
+            billing_address=(
+                order.billing_address
+                if order.billing_address
+                and order.billing_address != order.shipping_address
+                else None
+            ),
             shipping_ttc=round(
                 (order.shipping_ht_cents + order.shipping_vat_cents) / 100, 2
             ),
