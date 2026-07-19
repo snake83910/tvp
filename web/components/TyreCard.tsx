@@ -67,6 +67,7 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
           width: tyre.width,
           ratio: tyre.aspect_ratio,
           diameter: tyre.diameter,
+          category: tyre.category,
         })
       : `/produit/${encodeURIComponent(tyre.supplier_ref)}`;
 
@@ -95,6 +96,7 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
         ratio: tyre.aspect_ratio,
         diameter: tyre.diameter,
         quantity: qty,
+        category: tyre.category,
       });
       setState("done");
       setTimeout(() => setState("idle"), 2000);

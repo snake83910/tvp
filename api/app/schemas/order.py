@@ -7,8 +7,21 @@ class AddItemIn(BaseModel):
     supplier_ref: str
     width: int
     ratio: int
-    diameter: int
+    diameter: float  # poids lourd : 22.5
     quantity: int = 2  # défaut métier pneu : par essieu
+    # Famille de véhicule : la revalidation prix/stock au checkout doit
+    # rechercher dans le BON catalogue fournisseur
+    category: str = "auto"
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        from app.integrations.supplier_base import VEHICLE_CATEGORIES
+        if v not in VEHICLE_CATEGORIES:
+            raise ValueError(
+                f"Catégorie inconnue. Valeurs : {', '.join(VEHICLE_CATEGORIES)}"
+            )
+        return v
 
 
 class UpdateQtyIn(BaseModel):

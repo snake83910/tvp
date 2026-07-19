@@ -12,18 +12,37 @@ from app.integrations.maxityre import MaxityreConnector
 connector = MaxityreConnector()
 
 
+def fmt_dim(value: float | int) -> str:
+    """Clé de cache stable : 22.5 -> "22.5", 16.0 -> "16"."""
+    f = float(value)
+    return str(int(f)) if f.is_integer() else str(f)
+
+
+def dimension_cache_key(
+    width: int, ratio: int, diameter: float, category: str = "auto"
+) -> str:
+    """Clé Redis d'un catalogue de dimension — UNIQUE point de vérité
+    (recherche, panier, invalidation au checkout)."""
+    return (
+        f"maxityre:dim:{category}:{fmt_dim(width)}:"
+        f"{fmt_dim(ratio)}:{fmt_dim(diameter)}"
+    )
+
+
 async def load_dimension_catalog(
-    width: int, ratio: int, diameter: int
+    width: int, ratio: int, diameter: float, category: str = "auto"
 ) -> list[dict]:
     """Catalogue brut d'une dimension : cache Redis sinon Maxityre.
 
     Centralisé pour que tous les endpoints partagent la même source
     (et donc le même cache : zéro appel Maxityre redondant).
     """
-    cache_key = f"maxityre:dim:{width}:{ratio}:{diameter}"
+    cache_key = dimension_cache_key(width, ratio, diameter, category)
     raw_items = await cache_get(cache_key)
     if raw_items is None:
-        tyres = await connector.search_by_dimension(width, ratio, diameter)
+        tyres = await connector.search_by_dimension(
+            width, ratio, diameter, category
+        )
         raw_items = [t.__dict__ for t in tyres]
         await cache_set(cache_key, raw_items, settings.maxityre_cache_ttl)
     return raw_items

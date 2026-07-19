@@ -84,7 +84,7 @@ async def add_item(
         cart = await service.add_item(
             db, user, x_cart_session,
             data.supplier_ref, data.width, data.ratio,
-            data.diameter, data.quantity,
+            data.diameter, data.quantity, data.category,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -26,6 +26,7 @@ interface CartCtx {
     ratio: number;
     diameter: number;
     quantity: number;
+    category?: string;
   }) => Promise<void>;
   updateQty: (itemId: string, quantity: number) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
@@ -56,6 +57,7 @@ export function CartProvider({
       ratio: number;
       diameter: number;
       quantity: number;
+      category?: string;
     }) => {
       let c = await cartApi.addItem(item);
       if (!c.items?.length) {

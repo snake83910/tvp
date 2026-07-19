@@ -13,6 +13,25 @@ function baseUrl(): string {
   return typeof window === "undefined" ? SERVER_API : BROWSER_API;
 }
 
+/** Familles de véhicules supportées par la recherche. */
+export type VehicleCategory =
+  | "auto"
+  | "moto"
+  | "quad"
+  | "camion"
+  | "agricole";
+
+export const VEHICLE_CATEGORIES: {
+  value: VehicleCategory;
+  label: string;
+}[] = [
+  { value: "auto", label: "Auto" },
+  { value: "moto", label: "Moto" },
+  { value: "quad", label: "Quad" },
+  { value: "camion", label: "Camion" },
+  { value: "agricole", label: "Agricole" },
+];
+
 export interface TyreResult {
   supplier_ref: string;
   brand: string;
@@ -21,6 +40,7 @@ export interface TyreResult {
   width: number | null;
   aspect_ratio: number | null;
   diameter: number | null;
+  category?: VehicleCategory;
   load_index: number | null;
   speed_rating: string | null;
   season: string;
@@ -105,12 +125,14 @@ export const api = {
     ratio: number,
     diameter: number,
     token?: string,
+    category?: string,
   ) => {
     const q = new URLSearchParams({
       width: String(width),
       ratio: String(ratio),
       diameter: String(diameter),
     });
+    if (category && category !== "auto") q.set("category", category);
     return request<TyreResult>(
       `/search/product/${encodeURIComponent(ref)}?${q.toString()}`,
       { headers: token ? { Authorization: `Bearer ${token}` } : {} },
@@ -127,6 +149,7 @@ export const api = {
       width: number;
       ratio: number;
       diameter: number;
+      category?: string;
       brand?: string;
       season?: string;
       threePmsf?: boolean;
@@ -142,6 +165,8 @@ export const api = {
       ratio: String(params.ratio),
       diameter: String(params.diameter),
     });
+    if (params.category && params.category !== "auto")
+      q.set("category", params.category);
     if (params.brand) q.set("brand", params.brand);
     if (params.season) q.set("season", params.season);
     if (params.threePmsf) q.set("three_pmsf", "true");

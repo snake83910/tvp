@@ -2,17 +2,86 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, type VehicleDimension } from "@/lib/api";
+import {
+  api,
+  VEHICLE_CATEGORIES,
+  type VehicleCategory,
+  type VehicleDimension,
+} from "@/lib/api";
 
-// Valeurs standard du marché : un <select> élimine les fautes de frappe
-// (« 2055 »), les recherches vides, et donne une roue native sur mobile.
-const WIDTHS = Array.from({ length: 24 }, (_, i) => 125 + i * 10); // 125→355
-const RATIOS = Array.from({ length: 13 }, (_, i) => 25 + i * 5); // 25→85
-const DIAMETERS = Array.from({ length: 13 }, (_, i) => 12 + i); // 12→24
+// Valeurs standard du marché PAR FAMILLE de véhicule : un <select>
+// élimine les fautes de frappe (« 2055 »), les recherches vides, et
+// donne une roue native sur mobile.
+const range = (from: number, to: number, step: number) =>
+  Array.from(
+    { length: Math.floor((to - from) / step) + 1 },
+    (_, i) => from + i * step,
+  );
+
+const DIMS: Record<
+  VehicleCategory,
+  {
+    widths: number[];
+    ratios: number[];
+    diameters: number[];
+    ph: [string, string, string]; // placeholders (exemple réaliste)
+  }
+> = {
+  auto: {
+    widths: range(125, 355, 10),
+    ratios: range(25, 85, 5),
+    diameters: range(12, 24, 1),
+    ph: ["205", "55", "16"],
+  },
+  moto: {
+    widths: [
+      80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200,
+      210, 240, 250, 260, 300, 330,
+    ],
+    ratios: [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100],
+    diameters: [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21],
+    ph: ["120", "70", "17"],
+  },
+  quad: {
+    widths: [165, 175, 195, 205, 225, 255, 270],
+    ratios: [40, 50, 55, 60, 70, 80, 100],
+    diameters: [8, 9, 10, 11, 12, 14],
+    ph: ["205", "80", "12"],
+  },
+  camion: {
+    widths: [
+      205, 215, 225, 235, 245, 255, 265, 275, 285, 295, 305, 315,
+      355, 385, 425, 445,
+    ],
+    ratios: [45, 50, 55, 60, 65, 70, 75, 80],
+    diameters: [17.5, 19.5, 22.5],
+    ph: ["315", "70", "22.5"],
+  },
+  agricole: {
+    widths: [
+      200, 230, 250, 260, 270, 280, 300, 320, 340, 360, 380, 400,
+      420, 440, 460, 480, 500, 520, 540, 560, 580, 600, 620, 650,
+      680, 710, 750, 800, 900, 1000, 1050,
+    ],
+    ratios: [50, 55, 60, 65, 70, 75, 80, 85, 90, 95],
+    diameters: [
+      16, 18, 20, 22, 24, 25, 26, 28, 30, 32, 34, 36, 38, 42, 46, 50,
+    ],
+    ph: ["420", "70", "24"],
+  },
+};
+
+const CATEGORY_ICONS: Record<VehicleCategory, string> = {
+  auto: "🚗",
+  moto: "🏍️",
+  quad: "🛞",
+  camion: "🚚",
+  agricole: "🚜",
+};
 
 const LAST_DIM_KEY = "tvp_last_dim";
 
-type LastDim = { w: string; h: string; d: string };
+type LastDim = { w: string; h: string; d: string; cat?: VehicleCategory };
 
 function readLastDim(): LastDim | null {
   if (typeof window === "undefined") return null;
@@ -34,8 +103,13 @@ function saveLastDim(dim: LastDim) {
   }
 }
 
-export function SearchHero() {
+export function SearchHero({
+  initialCategory = "auto",
+}: {
+  initialCategory?: VehicleCategory;
+}) {
   const router = useRouter();
+  const [cat, setCat] = useState<VehicleCategory>(initialCategory);
   const [tab, setTab] = useState<"plaque" | "dim">("dim");
 
   const [w, setW] = useState("");
@@ -54,15 +128,35 @@ export function SearchHero() {
     const last = readLastDim();
     if (last) {
       setLastDim(last);
-      setW((prev) => prev || last.w);
-      setH((prev) => prev || last.h);
-      setD((prev) => prev || last.d);
+      if ((last.cat ?? "auto") === initialCategory) {
+        setW((prev) => prev || last.w);
+        setH((prev) => prev || last.h);
+        setD((prev) => prev || last.d);
+      }
     }
-  }, []);
+  }, [initialCategory]);
 
-  function goSearch(width: string, ratio: string, diameter: string) {
-    saveLastDim({ w: width, h: ratio, d: diameter });
+  function switchCategory(next: VehicleCategory) {
+    if (next === cat) return;
+    setCat(next);
+    // Les valeurs de l'ancienne famille n'existent pas forcément dans
+    // la nouvelle (ex. 22.5 n'existe qu'en camion) : on repart à vide.
+    setW("");
+    setH("");
+    setD("");
+    // La recherche par plaque est un service AUTO uniquement
+    if (next !== "auto" && tab === "plaque") setTab("dim");
+  }
+
+  function goSearch(
+    width: string,
+    ratio: string,
+    diameter: string,
+    category: VehicleCategory = cat,
+  ) {
+    saveLastDim({ w: width, h: ratio, d: diameter, cat: category });
     const q = new URLSearchParams({ width, ratio, diameter });
+    if (category !== "auto") q.set("category", category);
     router.push(`/recherche?${q.toString()}`);
   }
 
@@ -102,37 +196,70 @@ export function SearchHero() {
   }
 
   function goToDim(dim: VehicleDimension) {
-    goSearch(String(dim.width), String(dim.height), String(dim.diameter));
+    goSearch(
+      String(dim.width),
+      String(dim.height),
+      String(dim.diameter),
+      "auto",
+    );
   }
+
+  const dims = DIMS[cat];
 
   return (
     <div className="overflow-hidden rounded-2xl bg-paper shadow-card">
-      {/* Onglets */}
-      <div className="grid grid-cols-2">
-        <button
-          onClick={() => setTab("plaque")}
-          className={`py-4 text-sm font-bold uppercase tracking-wide transition ${
-            tab === "plaque"
-              ? "bg-paper text-ink"
-              : "bg-paper-dim text-ink-muted hover:text-ink"
-          }`}
-        >
-          Par plaque
-        </button>
-        <button
-          onClick={() => setTab("dim")}
-          className={`py-4 text-sm font-bold uppercase tracking-wide transition ${
-            tab === "dim"
-              ? "bg-paper text-ink"
-              : "bg-paper-dim text-ink-muted hover:text-ink"
-          }`}
-        >
-          Par dimensions
-        </button>
+      {/* Familles de véhicules */}
+      <div
+        className="flex overflow-x-auto border-b border-line bg-paper-dim"
+        role="tablist"
+        aria-label="Type de véhicule"
+      >
+        {VEHICLE_CATEGORIES.map((c) => (
+          <button
+            key={c.value}
+            role="tab"
+            aria-selected={cat === c.value}
+            onClick={() => switchCategory(c.value)}
+            className={`flex min-w-fit flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-bold uppercase tracking-wide transition ${
+              cat === c.value
+                ? "border-b-2 border-signal bg-paper text-ink"
+                : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            <span aria-hidden>{CATEGORY_ICONS[c.value]}</span>
+            {c.label}
+          </button>
+        ))}
       </div>
 
+      {/* Onglets plaque / dimensions (plaque = véhicules AUTO uniquement) */}
+      {cat === "auto" && (
+        <div className="grid grid-cols-2">
+          <button
+            onClick={() => setTab("plaque")}
+            className={`py-4 text-sm font-bold uppercase tracking-wide transition ${
+              tab === "plaque"
+                ? "bg-paper text-ink"
+                : "bg-paper-dim text-ink-muted hover:text-ink"
+            }`}
+          >
+            Par plaque
+          </button>
+          <button
+            onClick={() => setTab("dim")}
+            className={`py-4 text-sm font-bold uppercase tracking-wide transition ${
+              tab === "dim"
+                ? "bg-paper text-ink"
+                : "bg-paper-dim text-ink-muted hover:text-ink"
+            }`}
+          >
+            Par dimensions
+          </button>
+        </div>
+      )}
+
       <div className="border-t border-line p-6 md:p-8">
-        {tab === "plaque" ? (
+        {cat === "auto" && tab === "plaque" ? (
           <div>
             <form onSubmit={submitPlate} className="flex flex-col gap-4 sm:flex-row sm:items-end">
               <div className="flex-1">
@@ -197,7 +324,7 @@ export function SearchHero() {
           </div>
         ) : (
           <div>
-            {lastDim && (
+            {lastDim && (lastDim.cat ?? "auto") === cat && (
               <button
                 type="button"
                 onClick={() => goSearch(lastDim.w, lastDim.h, lastDim.d)}
@@ -215,11 +342,11 @@ export function SearchHero() {
               onSubmit={submitDim}
               className="flex flex-col gap-4 md:flex-row md:items-end"
             >
-              <DimSelect label="Largeur" value={w} set={setW} options={WIDTHS} ph="205" />
+              <DimSelect label="Largeur" value={w} set={setW} options={dims.widths} ph={dims.ph[0]} />
               <span className="hidden pb-3 text-2xl text-ink-muted md:block">/</span>
-              <DimSelect label="Hauteur" value={h} set={setH} options={RATIOS} ph="55" />
+              <DimSelect label="Hauteur" value={h} set={setH} options={dims.ratios} ph={dims.ph[1]} />
               <span className="hidden pb-3 text-2xl text-ink-muted md:block">R</span>
-              <DimSelect label="Diamètre" value={d} set={setD} options={DIAMETERS} ph="16" />
+              <DimSelect label="Diamètre" value={d} set={setD} options={dims.diameters} ph={dims.ph[2]} />
               <button
                 type="submit"
                 className="rounded-lg bg-signal px-8 py-3 font-display text-base font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
@@ -228,7 +355,7 @@ export function SearchHero() {
               </button>
             </form>
 
-            <SidewallHelp />
+            <SidewallHelp ph={dims.ph} />
           </div>
         )}
       </div>
@@ -276,10 +403,11 @@ function DimSelect({
 }
 
 /**
- * Aide dépliable : où lire « 205/55 R16 » sur le flanc du pneu.
+ * Aide dépliable : où lire la dimension sur le flanc du pneu.
  * Décomposition colorée du marquage — LE point de friction des novices.
+ * L'exemple s'adapte à la famille de véhicule sélectionnée.
  */
-function SidewallHelp() {
+function SidewallHelp({ ph }: { ph: [string, string, string] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-4">
@@ -298,32 +426,32 @@ function SidewallHelp() {
             actuels, par exemple&nbsp;:
           </p>
           <p className="mb-4 select-none font-mono text-2xl font-black tracking-wider md:text-3xl">
-            <span className="border-b-4 border-signal text-ink">205</span>
+            <span className="border-b-4 border-signal text-ink">{ph[0]}</span>
             <span className="text-ink-muted">/</span>
-            <span className="border-b-4 border-amber-500 text-ink">55</span>
+            <span className="border-b-4 border-amber-500 text-ink">{ph[1]}</span>
             <span className="text-ink-muted"> R</span>
-            <span className="border-b-4 border-blue-500 text-ink">16</span>
-            <span className="text-ink-muted"> 91V</span>
+            <span className="border-b-4 border-blue-500 text-ink">{ph[2]}</span>
           </p>
           <ul className="space-y-1.5 text-sm">
             <li>
               <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-signal align-middle" />
-              <strong className="text-ink">205</strong>
+              <strong className="text-ink">{ph[0]}</strong>
               <span className="text-ink-muted"> — largeur du pneu en millimètres</span>
             </li>
             <li>
               <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-amber-500 align-middle" />
-              <strong className="text-ink">55</strong>
+              <strong className="text-ink">{ph[1]}</strong>
               <span className="text-ink-muted"> — hauteur du flanc (en % de la largeur)</span>
             </li>
             <li>
               <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-blue-500 align-middle" />
-              <strong className="text-ink">16</strong>
+              <strong className="text-ink">{ph[2]}</strong>
               <span className="text-ink-muted"> — diamètre de la jante en pouces</span>
             </li>
             <li className="pt-1 text-ink-muted">
               <span className="mr-2 inline-block h-3 w-3 align-middle" />
-              91V — indices de charge et de vitesse (facultatifs pour la recherche)
+              Les indices de charge et de vitesse (ex. 91V) sont facultatifs
+              pour la recherche
             </li>
           </ul>
         </div>

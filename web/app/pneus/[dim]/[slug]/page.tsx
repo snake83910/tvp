@@ -9,11 +9,17 @@ export const dynamic = "force-dynamic";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
 
-async function load(params: { dim: string; slug: string }) {
+async function load(
+  params: { dim: string; slug: string },
+  category?: string,
+) {
   const parsed = parseProductSlug(params.dim, params.slug);
   if (!parsed) return null;
   try {
-    const tyre = await api.getProduct(parsed.ref, parsed.width, parsed.ratio, parsed.diameter);
+    const tyre = await api.getProduct(
+      parsed.ref, parsed.width, parsed.ratio, parsed.diameter,
+      undefined, category,
+    );
     return { tyre, parsed };
   } catch {
     return null;
@@ -22,10 +28,12 @@ async function load(params: { dim: string; slug: string }) {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: { dim: string; slug: string };
+  searchParams: { t?: string };
 }): Promise<Metadata> {
-  const data = await load(params);
+  const data = await load(params, searchParams.t);
   if (!data) return { title: "Pneu | Tous Vos Pneus" };
   const { tyre } = data;
   const title = `${tyre.brand} ${tyre.model} ${tyre.dimension} — ${tyre.display_price.toFixed(2)}€`;
@@ -47,10 +55,12 @@ export async function generateMetadata({
 
 export default async function ProductSeoPage({
   params,
+  searchParams,
 }: {
   params: { dim: string; slug: string };
+  searchParams: { t?: string };
 }) {
-  const data = await load(params);
+  const data = await load(params, searchParams.t);
   if (!data) notFound();
   return (
     <>

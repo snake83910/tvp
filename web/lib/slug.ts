@@ -12,9 +12,10 @@ export function slugify(input: string): string {
 
 /**
  * URL canonique d'une fiche produit pour SEO.
- * Format : /pneus/<w>-<h>-r<d>/<brand>-<model>-<ref>
+ * Format : /pneus/<w>-<h>-r<d>/<brand>-<model>-<ref>[?t=<categorie>]
  *
  * Ex: /pneus/205-55-r16/michelin-primacy-4-PNREF12345
+ *     /pneus/315-70-r22.5/torque-t1000-REF987?t=camion
  */
 export function productUrl(args: {
   ref: string;
@@ -23,19 +24,24 @@ export function productUrl(args: {
   width: number;
   ratio: number;
   diameter: number;
+  category?: string;
 }): string {
   const slug = `${slugify(args.brand)}-${slugify(args.model)}-${encodeURIComponent(args.ref)}`;
-  return `/pneus/${args.width}-${args.ratio}-r${args.diameter}/${slug}`;
+  const base = `/pneus/${args.width}-${args.ratio}-r${args.diameter}/${slug}`;
+  return args.category && args.category !== "auto"
+    ? `${base}?t=${args.category}`
+    : base;
 }
 
 /**
  * Parse l'URL et extrait ref + dimensions. Renvoie null si invalide.
+ * Le diamètre peut être décimal (poids lourd : r22.5).
  */
 export function parseProductSlug(
   dim: string,
   slug: string,
 ): { ref: string; width: number; ratio: number; diameter: number } | null {
-  const m = dim.match(/^(\d+)-(\d+)-r(\d+)$/i);
+  const m = dim.match(/^(\d+)-(\d+)-r(\d+(?:\.\d)?)$/i);
   if (!m) return null;
   // ref = dernier segment du slug
   const parts = slug.split("-");

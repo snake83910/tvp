@@ -18,9 +18,10 @@ SEASON_MAP = {
 class TyreDimension:
     width: int           # 205
     aspect_ratio: int    # 55
-    diameter: int        # 16
+    # int (16) ou float (22.5 poids lourd, 19.5, 17.5)
+    diameter: int | float
     load_index: int | None = None   # 91
-    speed_rating: str | None = None  # V
+    speed_rating: str | None = None  # V (auto), D / A8 (agricole)
 
     def normalized(self) -> str:
         base = f"{self.width}/{self.aspect_ratio} R{self.diameter}"
@@ -36,6 +37,9 @@ class TyreDimension:
 #   225/45R17 94W XL     265/70R16 112H
 #   195/65 R15 91/89 T   (indices doubles -> on garde le 1er)
 #   235/65 R16C 115/113R (utilitaire : C + indices doubles)
+#   120/70 ZR17 58W      (moto)
+#   315/70 R22.5 154/150L (poids lourd : diamètre DÉCIMAL + indices doubles)
+#   420/70 R24 130D / 139A8 (agricole : indice de vitesse A8, B...)
 #
 # Les formats NON métriques (pouces US type 31x10.50R15) sont volontairement
 # REFUSÉS (-> None) plutôt que mal interprétés : un faux parsing = mauvais
@@ -49,14 +53,14 @@ _DIM_RE = re.compile(
     \s*
     (?:[Zz]?[Rr])             # R / ZR (obligatoire en métrique tourisme)
     \s*
-    (?P<diam>\d{2}(?:\.\d)?)  # diamètre 2 chiffres (15..22, ou 19.5)
+    (?P<diam>\d{2}(?:\.\d)?)  # diamètre 2 chiffres (15..22, ou 22.5 PL)
     (?P<comm>[Cc])?           # C = pneu utilitaire (commercial)
     (?:
         \s+
         (?P<load>\d{2,3})     # indice de charge
         (?:\s*/\s*\d{2,3})?   # indice de charge double éventuel (ignoré)
         \s*
-        (?P<speed>[A-Za-z])?  # indice de vitesse
+        (?P<speed>[A-Za-z]\d?)?  # indice de vitesse (V, W... ou A8 agricole)
     )?
     \s*
     (?P<xl>XL|RF|RFT)?        # renforcé
@@ -73,13 +77,12 @@ def parse_dimension(raw: str) -> TyreDimension | None:
     m = _DIM_RE.match(raw.strip())
     if not m:
         return None
-    diam_raw = m.group("diam")
     try:
-        diameter = int(float(diam_raw)) if "." not in diam_raw else int(
-            float(diam_raw)
-        )
+        diam_f = float(m.group("diam"))
     except ValueError:
         return None
+    # 22.5 reste 22.5 (poids lourd) ; 16.0 redevient 16 (affichage propre)
+    diameter: int | float = int(diam_f) if diam_f.is_integer() else diam_f
     return TyreDimension(
         width=int(m.group("width")),
         aspect_ratio=int(m.group("ratio")),

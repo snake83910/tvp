@@ -3,7 +3,12 @@ import { SearchHero } from "@/components/SearchHero";
 import { TyreCard } from "@/components/TyreCard";
 import { FilterBar } from "@/components/FilterBar";
 import { Pagination } from "@/components/Pagination";
-import { api, type SearchResponse } from "@/lib/api";
+import {
+  api,
+  VEHICLE_CATEGORIES,
+  type SearchResponse,
+  type VehicleCategory,
+} from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +16,7 @@ type SP = {
   width?: string;
   ratio?: string;
   diameter?: string;
+  category?: string;
   brand?: string;
   season?: string;
   three_pmsf?: string;
@@ -27,6 +33,15 @@ export default async function SearchPage({
 }) {
   const { width, ratio, diameter } = searchParams;
   const hasQuery = width && ratio && diameter;
+  // Catégorie validée côté front aussi : une valeur inconnue retombe
+  // sur "auto" plutôt que d'afficher une erreur 422
+  const category: VehicleCategory = VEHICLE_CATEGORIES.some(
+    (c) => c.value === searchParams.category,
+  )
+    ? (searchParams.category as VehicleCategory)
+    : "auto";
+  const categoryLabel =
+    VEHICLE_CATEGORIES.find((c) => c.value === category)?.label ?? "Auto";
 
   let data: SearchResponse | null = null;
   let error: string | null = null;
@@ -37,6 +52,7 @@ export default async function SearchPage({
         width: Number(width),
         ratio: Number(ratio),
         diameter: Number(diameter),
+        category,
         brand: searchParams.brand,
         season: searchParams.season,
         threePmsf: searchParams.three_pmsf === "1",
@@ -60,10 +76,13 @@ export default async function SearchPage({
       <SiteHeader />
       <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
         <h1 className="mb-8 font-display text-4xl font-black tracking-tightest md:text-5xl">
-          Trouvez vos <span className="text-signal">pneus</span>
+          Trouvez vos{" "}
+          <span className="text-signal">
+            pneus{category !== "auto" ? ` ${categoryLabel.toLowerCase()}` : ""}
+          </span>
         </h1>
 
-        <SearchHero />
+        <SearchHero initialCategory={category} />
 
         {!hasQuery && (
           <p className="mt-12 text-ink-muted">
@@ -83,8 +102,13 @@ export default async function SearchPage({
 
         {hasQuery && data && data.total === 0 && (
           <p className="mt-12 text-ink-muted">
-            Aucun pneu trouvé pour {width}/{ratio} R{diameter} avec ces
-            filtres. Essayez d&apos;élargir les critères.
+            Aucun pneu {category !== "auto" ? categoryLabel.toLowerCase() : ""}{" "}
+            trouvé pour {width}/{ratio} R{diameter} avec ces filtres.
+            Essayez d&apos;élargir les critères
+            {category !== "auto"
+              ? " ou vérifiez la famille de véhicule sélectionnée"
+              : ""}
+            .
           </p>
         )}
 

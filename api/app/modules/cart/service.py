@@ -175,8 +175,9 @@ async def add_item(
     supplier_ref: str,
     width: int,
     ratio: int,
-    diameter: int,
+    diameter: float,
     quantity: int,
+    category: str = "auto",
 ) -> Cart:
     """Ajoute un pneu au panier.
 
@@ -194,7 +195,7 @@ async def add_item(
 
     # Même cache Redis que la recherche : le client vient de voir ce pneu
     # dans les résultats, inutile de re-paginer Maxityre pour le retrouver.
-    raw_items = await load_dimension_catalog(width, ratio, diameter)
+    raw_items = await load_dimension_catalog(width, ratio, diameter, category)
     match = next(
         (t for t in raw_items if t.get("supplier_ref") == supplier_ref),
         None,
@@ -251,6 +252,8 @@ async def add_item(
                 "width": width,
                 "ratio": ratio,
                 "diameter": diameter,
+                # Revalidation checkout : chercher dans le BON catalogue
+                "category": category,
                 "brand": match.get("brand", ""),
                 # Affichage panier : vignette + saison sans re-fetch
                 "image_url": match.get("image_url"),
@@ -293,7 +296,8 @@ async def update_item_quantity(
     pd = item.product_data or {}
     if pd.get("width") and new_quantity > item.quantity:
         raw_items = await load_dimension_catalog(
-            pd["width"], pd["ratio"], pd["diameter"]
+            pd["width"], pd["ratio"], pd["diameter"],
+            pd.get("category", "auto"),
         )
         m = next(
             (t for t in raw_items if t.get("supplier_ref") == item.supplier_ref),
@@ -401,19 +405,23 @@ async def checkout(
     # Revalidation FRAÎCHE (pas le cache Redis : anti-litige, on veut le
     # prix fournisseur du moment). Une seule recherche par dimension
     # distincte, lancées en parallèle — pas une par ligne en série.
+    # La catégorie fait partie de la clé : un 315/70 R22.5 camion ne se
+    # revalide pas dans le catalogue auto.
     dims = list({
         (it.product_data["width"], it.product_data["ratio"],
-         it.product_data["diameter"])
+         it.product_data["diameter"],
+         it.product_data.get("category", "auto"))
         for it in cart.items
     })
     results = await asyncio.gather(
-        *[_connector.search_by_dimension(w, r, d) for w, r, d in dims]
+        *[_connector.search_by_dimension(w, r, d, c) for w, r, d, c in dims]
     )
     tyres_by_dim = dict(zip(dims, results))
 
     for it in cart.items:
         pd = it.product_data
-        tyres = tyres_by_dim[(pd["width"], pd["ratio"], pd["diameter"])]
+        tyres = tyres_by_dim[(pd["width"], pd["ratio"], pd["diameter"],
+                              pd.get("category", "auto"))]
         match = next(
             (t for t in tyres if t.supplier_ref == it.supplier_ref), None
         )
@@ -496,8 +504,12 @@ async def checkout(
         stale_keys = [
             f"maxityre:detail:{ref}" for ref in all_changed
         ]
+        from app.modules.catalog.service import dimension_cache_key
         stale_keys += [
-            f"maxityre:dim:{pd['width']}:{pd['ratio']}:{pd['diameter']}"
+            dimension_cache_key(
+                pd["width"], pd["ratio"], pd["diameter"],
+                pd.get("category", "auto"),
+            )
             for it in cart.items
             if it.supplier_ref in all_changed
             for pd in [it.product_data or {}]

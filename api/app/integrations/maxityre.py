@@ -23,6 +23,12 @@ from app.modules.catalog.normalize import map_season, parse_dimension
 
 _CDN_IMG = "https://cdn.maxityre.com/assets/img/tyre/big/"
 
+
+def _fmt_dim(value: float | int) -> str:
+    """Formate une dimension pour l'API : 22.5 -> "22.5", 16.0 -> "16"."""
+    f = float(value)
+    return str(int(f)) if f.is_integer() else str(f)
+
 # Client httpx PARTAGÉ : les connexions TCP/TLS sont réutilisées entre
 # les appels (une recherche = des dizaines de pages, un handshake TLS
 # par page coûterait cher). Fermé proprement au shutdown (main.lifespan).
@@ -165,18 +171,21 @@ class MaxityreConnector(SupplierConnector):
         url: str,
         width: int,
         height: int,
-        diameter: int,
+        diameter: float,
         page: int,
+        category: str = "auto",
     ) -> dict:
         """Récupère une page de résultats avec retry simple.
         3 tentatives sur erreur réseau / 5xx, backoff 0.5s puis 1s."""
         import asyncio as _asyncio
 
         params = {
-            "search_pneus_dimension[category]": "auto",
+            "search_pneus_dimension[category]": category,
             "search_pneus_dimension[width]": width,
             "search_pneus_dimension[height]": height,
-            "search_pneus_dimension[diameter]": diameter,
+            # 22.5 doit partir en "22.5", mais 16.0 en "16" (l'API ne
+            # reconnaît pas "16.0")
+            "search_pneus_dimension[diameter]": _fmt_dim(diameter),
             "search_pneus_dimension[page]": page,
         }
         last_exc: Exception | None = None
@@ -199,10 +208,15 @@ class MaxityreConnector(SupplierConnector):
         return {}
 
     async def search_by_dimension(
-        self, width: int, height: int, diameter: int
+        self,
+        width: int,
+        height: int,
+        diameter: float,
+        category: str = "auto",
     ) -> list[SupplierTyre]:
         """
-        Récupère TOUTES les pages Maxityre pour la dimension.
+        Récupère TOUTES les pages Maxityre pour la dimension, dans la
+        famille demandée (auto / moto / quad / camion / agricole).
 
         L'API pagine : details.nbResults = total, details.limit = taille
         de page. On lit la 1re page pour connaître le total, puis on
@@ -219,7 +233,7 @@ class MaxityreConnector(SupplierConnector):
 
         client = _get_client()
         first = await self._fetch_page(
-            client, url, width, height, diameter, 1
+            client, url, width, height, diameter, 1, category
         )
         if not first:
             return []
@@ -240,7 +254,7 @@ class MaxityreConnector(SupplierConnector):
             # Pages 2..N en parallèle
             tasks = [
                 self._fetch_page(
-                    client, url, width, height, diameter, p
+                    client, url, width, height, diameter, p, category
                 )
                 for p in range(2, total_pages + 1)
             ]
@@ -254,6 +268,21 @@ class MaxityreConnector(SupplierConnector):
         for it in items:
             tyre = self._to_tyre(it)
             if tyre is not None:
+                # Certains formats (scooter « 120/70-12 », agricole
+                # « 16.9 R38 »...) ne passent pas le parseur strict :
+                # on retombe sur la dimension RECHERCHÉE, que l'API a
+                # elle-même utilisée pour sélectionner ces pneus. Sans
+                # ça, width/diameter=None casse l'ajout au panier.
+                if tyre.width is None:
+                    tyre.width = width
+                if tyre.aspect_ratio is None:
+                    tyre.aspect_ratio = height
+                if tyre.diameter is None:
+                    tyre.diameter = (
+                        int(diameter)
+                        if float(diameter).is_integer()
+                        else diameter
+                    )
                 out.append(tyre)
         return out
 
@@ -311,10 +340,14 @@ class MaxityreConnector(SupplierConnector):
                 brand=marque.get("marque", "") or "",
                 model=profil.get("profil", "") or "",
                 raw_dimension=raw_dim,
-                width=int(item["largeur"]) if item.get("largeur") else None,
-                aspect_ratio=int(item["hauteur"]) if item.get("hauteur") else None,
-                diameter=int(item["diametre"]) if item.get("diametre") else None,
-                load_index=int(item["charge"]) if item.get("charge") else None,
+                width=int(float(item["largeur"])) if item.get("largeur") else None,
+                aspect_ratio=int(float(item["hauteur"])) if item.get("hauteur") else None,
+                # Poids lourd : "22.5" -> 22.5 (int("22.5") lèverait et
+                # ferait perdre toute la fiche)
+                diameter=(
+                    int(d) if (d := float(item["diametre"])).is_integer() else d
+                ) if item.get("diametre") else None,
+                load_index=int(float(item["charge"])) if item.get("charge") else None,
                 speed_rating=speed,
                 season=map_season(item.get("saison")),
                 price_ht=price_ht,

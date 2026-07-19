@@ -101,6 +101,7 @@ export const cartApi = {
     ratio: number;
     diameter: number;
     quantity: number;
+    category?: string;
   }) => call<Cart>("/cart/items", "POST", item),
 
   updateQty: (itemId: string, quantity: number) =>

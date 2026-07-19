@@ -46,6 +46,16 @@ export function TyreDetail({
   const delivery = formatDelivery(tyre.delivery_estimate);
   const stock = stockMessage(tyre.stock);
 
+  // Retour aux résultats : conserve dimension ET famille de véhicule
+  const searchQ = new URLSearchParams({
+    width: String(tyre.width ?? ""),
+    ratio: String(tyre.aspect_ratio ?? ""),
+    diameter: String(tyre.diameter ?? ""),
+  });
+  if (tyre.category && tyre.category !== "auto")
+    searchQ.set("category", tyre.category);
+  const searchHref = `/recherche?${searchQ.toString()}`;
+
   // JSON-LD enrichi : ajoute gtin13 (EAN) si disponible
   const productJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org/",
@@ -78,10 +88,10 @@ export function TyreDetail({
         <Breadcrumbs items={[
           { label: "Accueil", href: "/" },
           { label: "Pneus", href: "/recherche" },
-          { label: tyre.dimension, href: `/recherche?width=${tyre.width}&ratio=${tyre.aspect_ratio}&diameter=${tyre.diameter}` },
+          { label: tyre.dimension, href: searchHref },
           { label: `${tyre.brand} ${tyre.model}` },
         ]} />
-        <Link href="/recherche" className="text-sm text-ink-muted hover:text-signal">
+        <Link href={searchHref} className="text-sm text-ink-muted hover:text-signal">
           ← Retour aux résultats
         </Link>
 

@@ -80,3 +80,62 @@ def test_une_seule_page():
             return await c.search_by_dimension(165, 70, 14)
 
     assert len(asyncio.run(run())) == 8
+
+
+def test_category_transmise_a_l_api():
+    """La catégorie demandée doit partir dans les params de CHAQUE page,
+    et le diamètre décimal poids lourd doit partir en "22.5"."""
+    seen: list[tuple] = []
+
+    class R:
+        status_code = 200
+
+        def json(self):
+            return _page(3, 20, 1)
+
+    async def g(self, url, headers=None, params=None):
+        seen.append((
+            params.get("search_pneus_dimension[category]"),
+            params.get("search_pneus_dimension[diameter]"),
+        ))
+        return R()
+
+    async def run():
+        c = MaxityreConnector()
+        c._token = "x"
+        c._token_ts = 9e18
+        with patch.object(httpx.AsyncClient, "get", g):
+            return await c.search_by_dimension(315, 70, 22.5, "camion")
+
+    asyncio.run(run())
+    assert seen == [("camion", "22.5")]
+
+
+def test_dimension_non_parsable_reprend_la_recherche():
+    """Un format hors parseur strict (ex. scooter « 120/70-12 ») ne doit
+    pas produire width/diameter=None : on retombe sur la dimension
+    recherchée (sinon l'ajout au panier est impossible)."""
+
+    class R:
+        status_code = 200
+
+        def json(self):
+            page = _page(1, 20, 1)
+            page["items"][0]["dimension"] = "120/70-12 51S"
+            return page
+
+    async def g(self, url, headers=None, params=None):
+        return R()
+
+    async def run():
+        c = MaxityreConnector()
+        c._token = "x"
+        c._token_ts = 9e18
+        with patch.object(httpx.AsyncClient, "get", g):
+            return await c.search_by_dimension(120, 70, 12, "moto")
+
+    res = asyncio.run(run())
+    assert len(res) == 1
+    assert res[0].width == 120
+    assert res[0].aspect_ratio == 70
+    assert res[0].diameter == 12

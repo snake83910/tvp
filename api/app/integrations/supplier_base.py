@@ -8,6 +8,12 @@ réelle aujourd'hui (Maxityre) ; une factice pour les tests.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+# Familles de véhicules supportées par la recherche Maxityre
+# (valeurs EXACTES attendues par search_pneus_dimension[category]).
+# "quad" est accepté par l'API mais le catalogue fournisseur est vide à
+# ce jour : la catégorie s'activera d'elle-même quand ils l'alimenteront.
+VEHICLE_CATEGORIES = ("auto", "moto", "quad", "camion", "agricole")
+
 
 @dataclass
 class SupplierTyre:
@@ -19,7 +25,8 @@ class SupplierTyre:
     raw_dimension: str
     width: int | None
     aspect_ratio: int | None
-    diameter: int | None
+    # float : les poids lourds roulent en 17.5 / 19.5 / 22.5 pouces
+    diameter: float | None
     load_index: int | None
     speed_rating: str | None
     season: str                # ete / hiver / 4saisons / inconnu
@@ -50,9 +57,14 @@ class SupplierConnector(ABC):
 
     @abstractmethod
     async def search_by_dimension(
-        self, width: int, height: int, diameter: int
+        self,
+        width: int,
+        height: int,
+        diameter: float,
+        category: str = "auto",
     ) -> list[SupplierTyre]:
-        """Recherche les pneus pour une dimension donnée."""
+        """Recherche les pneus pour une dimension donnée dans une
+        famille de véhicules (auto / moto / quad / camion / agricole)."""
 
     @abstractmethod
     async def get_by_ref(self, supplier_ref: str) -> SupplierTyre | None:

@@ -20,13 +20,15 @@ export async function generateMetadata({
   searchParams,
 }: {
   params: { ref: string };
-  searchParams: { w?: string; h?: string; d?: string };
+  searchParams: { w?: string; h?: string; d?: string; t?: string };
 }): Promise<Metadata> {
-  const { w, h, d } = searchParams;
+  const { w, h, d, t } = searchParams;
   const ref = decodeURIComponent(params.ref);
   if (!w || !h || !d) return { title: "Pneu | Tous Vos Pneus" };
   try {
-    const tyre = await api.getProduct(ref, Number(w), Number(h), Number(d));
+    const tyre = await api.getProduct(
+      ref, Number(w), Number(h), Number(d), undefined, t,
+    );
     const title = `${tyre.brand} ${tyre.model} ${tyre.dimension} — ${tyre.display_price.toFixed(2)}€`;
     const desc = `Pneu ${tyre.brand} ${tyre.model} en ${tyre.dimension}, saison ${SEASON[tyre.season] ?? tyre.season}. Livraison rapide en France.`;
     return {
@@ -56,10 +58,10 @@ export default async function ProductPage({
   searchParams,
 }: {
   params: { ref: string };
-  searchParams: { w?: string; h?: string; d?: string };
+  searchParams: { w?: string; h?: string; d?: string; t?: string };
 }) {
   const ref = decodeURIComponent(params.ref);
-  const { w, h, d } = searchParams;
+  const { w, h, d, t } = searchParams;
 
   let tyre = null;
   let error: string | null = null;
@@ -71,6 +73,8 @@ export default async function ProductPage({
         Number(w),
         Number(h),
         Number(d),
+        undefined,
+        t,
       );
     } catch (e) {
       error = e instanceof Error ? e.message : "Erreur";

@@ -16,9 +16,12 @@ class TyreResult(BaseModel):
     dimension: str
     width: int | None
     aspect_ratio: int | None
-    diameter: int | None
+    # float : poids lourd en 17.5 / 19.5 / 22.5 pouces
+    diameter: float | None
     load_index: int | None
     speed_rating: str | None
+    # Famille de véhicule de la recherche (auto/moto/quad/camion/agricole)
+    category: str = "auto"
     season: str
     image_url: str | None
     eu_label: dict

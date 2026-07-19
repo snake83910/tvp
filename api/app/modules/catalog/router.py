@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import cache_get, cache_set
 from app.core.config import settings
 from app.core.deps import get_current_user_optional
+from app.integrations.supplier_base import VEHICLE_CATEGORIES
 from app.db.session import get_db
 from app.models.catalog import PricingRule
 from app.models.user import ProProfile, User
@@ -43,11 +44,21 @@ router = APIRouter(prefix="/search", tags=["catalog"])
 SORTS = {"price_asc", "price_desc", "brand"}
 
 
+def _check_category(category: str) -> str:
+    if category not in VEHICLE_CATEGORIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Catégorie inconnue. Valeurs : {', '.join(VEHICLE_CATEGORIES)}",
+        )
+    return category
+
+
 def _to_priced_tyre(
     raw: dict,
     rules: list[PricingRule],
     account_type: str,
     price_tier: str | None,
+    category: str = "auto",
 ) -> TyreResult:
     """Transforme un item brut en TyreResult. Synchrone : les règles sont
     déjà chargées en mémoire, aucune requête DB supplémentaire."""
@@ -88,6 +99,7 @@ def _to_priced_tyre(
         is_studded=raw.get("is_studded", False),
         stock=raw.get("stock"),
         delivery_estimate=raw.get("delivery_estimate"),
+        category=category,
     )
 
 
@@ -109,9 +121,15 @@ async def _resolve_account(
 
 @router.get("/dimensions", response_model=SearchResponse)
 async def search_by_dimensions(
-    width: int = Query(..., ge=100, le=400, examples=[205]),
-    ratio: int = Query(..., ge=20, le=100, examples=[55]),
-    diameter: int = Query(..., ge=10, le=30, examples=[16]),
+    # Bornes larges : autos (205/55 R16) mais aussi agricole (650/65 R38)
+    # et poids lourd (315/70 R22.5 — diamètre DÉCIMAL)
+    width: int = Query(..., ge=50, le=1200, examples=[205]),
+    ratio: int = Query(..., ge=20, le=110, examples=[55]),
+    diameter: float = Query(..., ge=8, le=60, examples=[16]),
+    category: str = Query(
+        "auto",
+        description="Famille de véhicule : auto, moto, quad, camion, agricole",
+    ),
     brand: str | None = Query(
         None, examples=["Michelin"],
         description="Une ou plusieurs marques séparées par des virgules",
@@ -134,16 +152,17 @@ async def search_by_dimensions(
     if response is not None:
         response.headers["Cache-Control"] = "private, max-age=300"
 
+    _check_category(category)
     account_type, price_tier = await _resolve_account(db, user)
 
     # 1 requête DB pour les règles, 1 pour le catalogue (cache Redis) — pas de N+1
     raw_items, rules = await asyncio.gather(
-        _load_dimension_catalog(width, ratio, diameter),
+        _load_dimension_catalog(width, ratio, diameter, category),
         load_active_rules(db),
     )
 
     priced_all: list[TyreResult] = [
-        _to_priced_tyre(it, rules, account_type, price_tier)
+        _to_priced_tyre(it, rules, account_type, price_tier, category)
         for it in raw_items
     ]
 
@@ -297,9 +316,10 @@ async def search_by_plate(
 @router.get("/product/{ref}", response_model=TyreResult)
 async def get_product(
     ref: str,
-    width: int = Query(..., ge=100, le=400),
-    ratio: int = Query(..., ge=20, le=100),
-    diameter: int = Query(..., ge=10, le=30),
+    width: int = Query(..., ge=50, le=1200),
+    ratio: int = Query(..., ge=20, le=110),
+    diameter: float = Query(..., ge=8, le=60),
+    category: str = Query("auto"),
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ):
@@ -312,7 +332,8 @@ async def get_product(
     Si le cache est vide, on remplit en un seul appel (qui paginera
     Maxityre une bonne fois et servira ensuite toutes les requêtes).
     """
-    raw_items = await _load_dimension_catalog(width, ratio, diameter)
+    _check_category(category)
+    raw_items = await _load_dimension_catalog(width, ratio, diameter, category)
     match = next(
         (it for it in raw_items if it.get("supplier_ref") == ref),
         None,
@@ -340,4 +361,4 @@ async def get_product(
 
     account_type, price_tier = await _resolve_account(db, user)
     rules = await load_active_rules(db)
-    return _to_priced_tyre(match, rules, account_type, price_tier)
+    return _to_priced_tyre(match, rules, account_type, price_tier, category)

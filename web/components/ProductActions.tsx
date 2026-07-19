@@ -46,6 +46,7 @@ export function ProductActions({ tyre }: { tyre: TyreResult }) {
         ratio: tyre.aspect_ratio,
         diameter: tyre.diameter,
         quantity: qty,
+        category: tyre.category,
       });
       setState("done");
     } catch (e) {
