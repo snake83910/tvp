@@ -5,8 +5,8 @@ Barème de frais de port par famille de véhicule (validé juillet 2026).
   camion/agricole : 15,00 € HT si une ligne < 2 pneus, sinon gratuit
   moto            : toujours gratuit
 
-Forfait à la COMMANDE : plusieurs lignes en défaut -> le forfait le
-plus élevé, pas la somme.
+Les forfaits S'ADDITIONNENT par ligne en défaut, y compris au sein
+d'une même famille (1 Michelin + 1 Continental auto = 2 x 6,90 €).
 """
 from app.modules.shipping.rules import compute_home_shipping
 
@@ -47,9 +47,19 @@ def test_moto_toujours_gratuit():
     assert _ht([("moto", 1), ("moto", 1)]) == 0
 
 
-def test_mixte_max_pas_la_somme():
-    # 1 auto (6,90) + 1 camion (15,00) -> 15,00 (une seule expédition)
-    assert _ht([("auto", 1), ("camion", 1)]) == 1500
+def test_mixte_somme_des_forfaits():
+    # 1 auto (6,90) + 1 camion (15,00) -> 21,90 (une expédition par ligne)
+    assert _ht([("auto", 1), ("camion", 1)]) == 2190
+
+
+def test_meme_famille_somme_aussi():
+    # 1 Michelin + 1 Continental auto -> 2 x 6,90 = 13,80
+    assert _ht([("auto", 1), ("auto", 1)]) == 1380
+
+
+def test_ligne_a_2_ne_paie_pas_dans_un_mixte():
+    # La ligne camion à 2 pneus est gratuite, seule la ligne auto paie
+    assert _ht([("auto", 1), ("camion", 2)]) == 690
 
 
 def test_mixte_moto_ne_couvre_pas_l_auto():
