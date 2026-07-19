@@ -12,11 +12,7 @@ import {
   useCurrentUser,
   type Address,
 } from "@/lib/auth";
-import {
-  SHIP_FLAT_HT,
-  SHIP_FLAT_TTC,
-  isFreeShipping as computeFreeShipping,
-} from "@/lib/shipping";
+import { formatEuro } from "@/lib/money";
 
 interface PriceChange {
   supplier_ref: string;
@@ -89,20 +85,28 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!user) return;
     refresh();
-    accountApi.listAddresses().then((list) => {
-      setAddresses(list);
-      const def = list.find((a) => a.is_default) ?? list[0];
-      if (def) setSelectedId(def.id);
-      else setShowNew(true); // pas d'adresse -> on en saisit une
-    });
+    accountApi
+      .listAddresses()
+      .then((list) => {
+        setAddresses(list);
+        const def = list.find((a) => a.is_default) ?? list[0];
+        if (def) setSelectedId(def.id);
+        else setShowNew(true); // pas d'adresse -> on en saisit une
+      })
+      .catch((e) => {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Impossible de charger vos adresses",
+        );
+      });
   }, [user, refresh]);
 
-  // Règle métier : livraison gratuite SEULEMENT si toutes les lignes >= 2
-  const lineQuantities = cart?.items.map((i) => i.quantity) ?? [];
-  const isFreeShipping = computeFreeShipping(lineQuantities);
-
+  // Frais de port : renvoyés par l'API avec le panier (règle métier
+  // « gratuit si toutes les lignes >= 2 » calculée côté serveur)
   const articlesTtc = cart?.total_ttc ?? 0;
-  const shippingTtc = isFreeShipping ? 0 : SHIP_FLAT_TTC;
+  const shippingTtc = cart?.shipping_ttc ?? 0;
+  const isFreeShipping = cart?.free_shipping ?? false;
   const discountTtc = promo?.discount_ttc ?? 0;
   const grandTotal = +(articlesTtc - discountTtc + shippingTtc).toFixed(2);
 
@@ -287,7 +291,7 @@ export default function CheckoutPage() {
                     <p className="text-sm text-ink-muted">
                       {isFreeShipping
                         ? "Gratuite (toutes les références à ≥ 2 pneus)"
-                        : `${SHIP_FLAT_HT.toFixed(2).replace(".", ",")} € HT — gratuite si chaque référence est à 2 pneus minimum`}
+                        : `${formatEuro(cart.shipping_ht)} HT — gratuite si chaque référence est à 2 pneus minimum`}
                     </p>
                   </div>
                   <span className="text-sm font-bold text-signal">
@@ -347,10 +351,7 @@ export default function CheckoutPage() {
                     </span>
                   </span>
                   <span className="font-semibold text-ink">
-                    {(it.price_ttc * it.quantity)
-                      .toFixed(2)
-                      .replace(".", ",")}{" "}
-                    €
+                    {formatEuro(it.price_ttc * it.quantity)}
                   </span>
                 </div>
               ))}
@@ -403,28 +404,26 @@ export default function CheckoutPage() {
             <div className="flex justify-between text-sm">
               <span className="text-ink-soft">Sous-total</span>
               <span className="font-semibold text-ink">
-                {articlesTtc.toFixed(2).replace(".", ",")} €
+                {formatEuro(articlesTtc)}
               </span>
             </div>
             {promo && (
               <div className="flex justify-between text-sm">
                 <span className="text-ok">Remise ({promo.code})</span>
                 <span className="font-semibold text-ok">
-                  −{discountTtc.toFixed(2).replace(".", ",")} €
+                  −{formatEuro(discountTtc)}
                 </span>
               </div>
             )}
             <div className="flex justify-between text-sm">
               <span className="text-ink-soft">Livraison</span>
               <span className="font-semibold text-ink">
-                {shippingTtc === 0
-                  ? "Offerte"
-                  : `${shippingTtc.toFixed(2).replace(".", ",")} €`}
+                {shippingTtc === 0 ? "Offerte" : formatEuro(shippingTtc)}
               </span>
             </div>
             <div className="flex justify-between border-t border-line pt-4 font-display text-xl font-black text-ink">
               <span>Total TTC</span>
-              <span>{grandTotal.toFixed(2).replace(".", ",")} €</span>
+              <span>{formatEuro(grandTotal)}</span>
             </div>
 
             {priceChanges.length > 0 && (
@@ -441,7 +440,7 @@ export default function CheckoutPage() {
                         </td>
                         <td className="whitespace-nowrap py-1 text-right">
                           <span className="text-amber-700 line-through">
-                            {c.old_ttc.toFixed(2).replace(".", ",")} €
+                            {formatEuro(c.old_ttc)}
                           </span>{" "}
                           <span
                             className={`font-bold ${
@@ -454,7 +453,7 @@ export default function CheckoutPage() {
                           >
                             {c.new_ttc === 0
                               ? "indisponible"
-                              : `${c.new_ttc.toFixed(2).replace(".", ",")} €`}
+                              : formatEuro(c.new_ttc)}
                           </span>
                         </td>
                       </tr>
@@ -527,6 +526,7 @@ function Input({
       </label>
       <input
         required={required}
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-11 w-full rounded-lg border border-line bg-paper px-3 text-ink outline-none transition focus:border-signal"

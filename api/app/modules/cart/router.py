@@ -47,16 +47,29 @@ def _serialize(cart: Cart) -> CartOut:
         )
         for i in cart.items
     ]
+    total_ht = round(sum(i.price_ht * i.quantity for i in items), 2)
+    total_ttc = round(sum(i.price_ttc * i.quantity for i in items), 2)
+
+    # Frais de port : calculés ici (règles serveur) pour que le front
+    # n'ait pas à dupliquer la logique « gratuit si toutes lignes >= 2 ».
+    from app.modules.shipping.rules import compute_home_shipping
+    if items:
+        ship = compute_home_shipping([i.quantity for i in items])
+        shipping_ht = ship.ht_cents / 100
+        shipping_ttc = ship.ttc_cents / 100
+    else:
+        shipping_ht = shipping_ttc = 0.0
+
     return CartOut(
         id=cart.id,
         session_token=cart.session_token,
         items=items,
-        total_ht=round(
-            sum(i.price_ht * i.quantity for i in items), 2
-        ),
-        total_ttc=round(
-            sum(i.price_ttc * i.quantity for i in items), 2
-        ),
+        total_ht=total_ht,
+        total_ttc=total_ttc,
+        shipping_ht=shipping_ht,
+        shipping_ttc=shipping_ttc,
+        free_shipping=bool(items) and shipping_ttc == 0,
+        grand_total_ttc=round(total_ttc + shipping_ttc, 2),
     )
 
 

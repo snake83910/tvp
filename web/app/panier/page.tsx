@@ -6,7 +6,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { TyreImage } from "@/components/TyreImage";
 import { useCart } from "@/components/CartProvider";
 import { getToken } from "@/lib/auth";
-import { SHIP_FLAT_TTC, isFreeShipping } from "@/lib/shipping";
+import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
   ete: "Été",
@@ -52,9 +52,9 @@ export default function CartPage() {
 
   const isEmpty = !cart || cart.items.length === 0;
 
-  const quantities = cart?.items.map((i) => i.quantity) ?? [];
-  const freeShipping = isFreeShipping(quantities);
-  const shipTtc = freeShipping ? 0 : SHIP_FLAT_TTC;
+  // Frais de port : renvoyés par l'API avec le panier (règle serveur)
+  const freeShipping = cart?.free_shipping ?? false;
+  const shipTtc = cart?.shipping_ttc ?? 0;
   const singles = cart?.items.filter((i) => i.quantity === 1) ?? [];
 
   return (
@@ -110,8 +110,7 @@ export default function CartPage() {
                           )}
                         </div>
                         <p className="mt-0.5 text-sm text-ink-muted">
-                          {it.price_ttc.toFixed(2).replace(".", ",")} €
-                          l&apos;unité
+                          {formatEuro(it.price_ttc)} l&apos;unité
                         </p>
                       </div>
                     </div>
@@ -138,10 +137,7 @@ export default function CartPage() {
                         </button>
                       </div>
                       <p className="w-24 text-right font-display font-black text-ink">
-                        {(it.price_ttc * it.quantity)
-                          .toFixed(2)
-                          .replace(".", ",")}{" "}
-                        €
+                        {formatEuro(it.price_ttc * it.quantity)}
                       </p>
                       <button
                         onClick={() => handleRemove(it.id)}
@@ -176,33 +172,23 @@ export default function CartPage() {
               </p>
               <div className="flex justify-between text-sm text-ink-soft">
                 <span>Articles TTC</span>
-                <span>
-                  {cart.total_ttc.toFixed(2).replace(".", ",")} €
-                </span>
+                <span>{formatEuro(cart.total_ttc)}</span>
               </div>
               <div className="mt-2 flex justify-between text-sm text-ink-soft">
                 <span>Livraison estimée</span>
                 <span className={freeShipping ? "font-bold text-ok" : ""}>
-                  {freeShipping
-                    ? "Offerte"
-                    : `${SHIP_FLAT_TTC.toFixed(2).replace(".", ",")} €`}
+                  {freeShipping ? "Offerte" : formatEuro(shipTtc)}
                 </span>
               </div>
               {!freeShipping && singles.length > 0 && (
                 <p className="mt-2 rounded-lg bg-ok/5 px-3 py-2 text-xs text-ok">
                   💡 Passez chaque référence à 2 pneus et la livraison
-                  est <strong>offerte</strong> (−
-                  {SHIP_FLAT_TTC.toFixed(2).replace(".", ",")} €).
+                  est <strong>offerte</strong> (−{formatEuro(shipTtc)}).
                 </p>
               )}
               <div className="mt-3 flex justify-between border-t border-line pt-3 font-display text-xl font-black text-ink">
                 <span>Total TTC</span>
-                <span>
-                  {(cart.total_ttc + shipTtc)
-                    .toFixed(2)
-                    .replace(".", ",")}{" "}
-                  €
-                </span>
+                <span>{formatEuro(cart.grand_total_ttc)}</span>
               </div>
 
               <Link

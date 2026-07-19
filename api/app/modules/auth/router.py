@@ -27,6 +27,7 @@ from app.modules.auth.service import (
 )
 from app.modules.mailer.service import (
     send_email_change_confirm,
+    send_email_changed_notice,
     send_login_alert,
     send_password_reset,
     send_verify_email,
@@ -34,8 +35,11 @@ from app.modules.mailer.service import (
 )
 from app.schemas.auth import (
     AdminLoginOut,
+    EmailChangeConfirmIn,
+    EmailChangeRequestIn,
     ForgotPasswordIn,
     LoginIn,
+    ReauthIn,
     RefreshIn,
     RegisterIn,
     ResetPasswordIn,
@@ -132,16 +136,12 @@ async def reset_password(
     if payload.get("type") != "password_reset":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
 
-    jti = payload.get("jti")
-    used_key = f"pwreset:used:{jti}" if jti else None
-    if used_key and await get_redis().get(used_key):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien déjà utilisé")
-
     user = await db.get(User, uuid.UUID(payload["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Compte introuvable")
 
-    # Policy + HIBP
+    # Policy + HIBP — AVANT de consommer le jti : un mot de passe refusé
+    # ne doit pas griller le lien de reset.
     from app.core.password_policy import is_pwned, validate_password
     err = validate_password(data.new_password)
     if err:
@@ -151,13 +151,22 @@ async def reset_password(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Ce mot de passe a été exposé dans une fuite. Choisissez-en un autre.",
         )
+
+    # Usage unique : SET NX réclame le jti ATOMIQUEMENT avant d'appliquer
+    # le reset (un GET puis SET séparés laissaient deux requêtes
+    # simultanées consommer le même lien). TTL aligné sur la durée de
+    # vie du token : après expiration du JWT, la clé n'a plus d'utilité.
+    jti = payload.get("jti")
+    if jti:
+        claimed = await get_redis().set(
+            f"pwreset:used:{jti}", "1", ex=15 * 60, nx=True
+        )
+        if not claimed:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien déjà utilisé")
+
     user.password_hash = hash_password(data.new_password)
     await revoke_all_refresh_tokens(db, user.id)
     await db.commit()
-    if used_key:
-        # TTL aligné sur la durée de vie du token : après expiration du
-        # JWT, la clé Redis n'a plus d'utilité.
-        await get_redis().set(used_key, "1", ex=15 * 60)
     return None
 
 
@@ -273,7 +282,7 @@ async def admin_verify_2fa(
 
 @router.post("/reauth")
 async def reauth(
-    payload: dict,
+    data: ReauthIn,
     request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -281,24 +290,41 @@ async def reauth(
     """Demande le mot de passe actuel. Retourne un reauth_token court (5 min)."""
     await rate_limit(request, "reauth", max_attempts=5, window_seconds=60)
     from app.core.security import create_reauth_token, verify_password
-    pwd = payload.get("password") or ""
-    if not verify_password(pwd, user.password_hash):
+    if not verify_password(data.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Mot de passe incorrect")
     return {"reauth_token": create_reauth_token(str(user.id))}
+
+
+def _check_reauth_token(token: str, user_id: str) -> None:
+    """Valide un reauth_token (type + porteur). 401 sinon."""
+    try:
+        payload = decode_token(token)
+    except JWTError:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Confirmation expirée, re-saisissez votre mot de passe",
+        )
+    if payload.get("type") != "reauth" or payload.get("sub") != user_id:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Confirmation invalide")
 
 
 # ── Demande de changement d'email ──────────────────────────────────
 
 @router.post("/request-email-change", status_code=204)
 async def request_email_change(
-    payload: dict,
+    data: EmailChangeRequestIn,
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Rate limit : cet endpoint envoie un email à une adresse arbitraire,
+    # sans limite il servirait de canon à spam avec notre expéditeur.
+    await rate_limit(request, "email_change", max_attempts=3, window_seconds=600)
+    # Action sensible : exige une re-saisie récente du mot de passe.
+    _check_reauth_token(data.reauth_token, str(user.id))
+
     from app.core.security import create_email_change_token
-    new_email = (payload.get("new_email") or "").lower().strip()
-    if not new_email or "@" not in new_email:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Email invalide")
+    new_email = data.new_email
     existing = await db.scalar(select(User).where(User.email == new_email))
     if existing:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email déjà utilisé")
@@ -309,12 +335,11 @@ async def request_email_change(
 
 @router.post("/confirm-email-change", status_code=204)
 async def confirm_email_change(
-    payload: dict,
+    payload: EmailChangeConfirmIn,
     db: AsyncSession = Depends(get_db),
 ):
-    token = payload.get("token") or ""
     try:
-        data = decode_token(token)
+        data = decode_token(payload.token)
     except JWTError:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide ou expiré")
     if data.get("type") != "email_change":
@@ -329,7 +354,15 @@ async def confirm_email_change(
     existing = await db.scalar(select(User).where(User.email == new_email))
     if existing and existing.id != user.id:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email déjà utilisé")
+    old_email = user.email
     user.email = new_email
     user.email_verified = True
+    # L'identifiant de connexion vient de changer : on invalide toutes
+    # les sessions ouvertes (un token volé ne doit pas survivre).
+    await revoke_all_refresh_tokens(db, user.id)
     await db.commit()
+    # Prévenir l'ANCIENNE adresse : si le changement n'est pas légitime,
+    # c'est la seule chance du titulaire de réagir.
+    if old_email != new_email:
+        send_email_changed_notice(old_email, user, new_email)
     return None

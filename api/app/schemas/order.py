@@ -35,6 +35,12 @@ class CartOut(BaseModel):
     items: list[CartItemOut] = []
     total_ht: float = 0
     total_ttc: float = 0
+    # Frais de port calculés par le serveur (app.modules.shipping.rules) :
+    # le front les AFFICHE sans dupliquer la règle métier.
+    shipping_ht: float = 0
+    shipping_ttc: float = 0
+    free_shipping: bool = False
+    grand_total_ttc: float = 0
 
 
 class PriceChangeOut(BaseModel):

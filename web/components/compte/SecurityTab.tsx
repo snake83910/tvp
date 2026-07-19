@@ -11,6 +11,7 @@ export function SecurityTab({ user }: { user: { email: string } }) {
   const [pwdBusy, setPwdBusy] = useState(false);
 
   const [newEmail, setNewEmail] = useState("");
+  const [emailPwd, setEmailPwd] = useState("");
   const [emailMsg, setEmailMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
 
@@ -32,9 +33,11 @@ export function SecurityTab({ user }: { user: { email: string } }) {
     e.preventDefault();
     setEmailMsg(null); setEmailBusy(true);
     try {
-      await accountApi.requestEmailChange(newEmail);
+      // Action sensible : le backend exige une re-saisie du mot de passe
+      const { reauth_token } = await accountApi.reauth(emailPwd);
+      await accountApi.requestEmailChange(newEmail, reauth_token);
       setEmailMsg({ tone: "ok", text: `Email de confirmation envoyé à ${newEmail}` });
-      setNewEmail("");
+      setNewEmail(""); setEmailPwd("");
     } catch (e) {
       setEmailMsg({ tone: "err", text: e instanceof Error ? e.message : "Erreur" });
     } finally { setEmailBusy(false); }
@@ -51,15 +54,26 @@ export function SecurityTab({ user }: { user: { email: string } }) {
             emailMsg.tone === "ok" ? "bg-ok/10 text-ok" : "bg-signal-light text-signal-dark"
           }`}>{emailMsg.text}</p>
         )}
-        <form onSubmit={changeEmail} className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <input
-            type="email"
-            required
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            placeholder="nouvelle.adresse@example.com"
-            className="h-11 flex-1 rounded-lg border border-line bg-paper px-3 outline-none focus:border-signal"
-          />
+        <form onSubmit={changeEmail} className="mt-4 space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="email"
+              required
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="nouvelle.adresse@example.com"
+              className="h-11 flex-1 rounded-lg border border-line bg-paper px-3 outline-none focus:border-signal"
+            />
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={emailPwd}
+              onChange={(e) => setEmailPwd(e.target.value)}
+              placeholder="Mot de passe actuel"
+              className="h-11 flex-1 rounded-lg border border-line bg-paper px-3 outline-none focus:border-signal"
+            />
+          </div>
           <button
             type="submit"
             disabled={emailBusy}
@@ -69,7 +83,7 @@ export function SecurityTab({ user }: { user: { email: string } }) {
           </button>
         </form>
         <p className="mt-2 text-xs text-ink-muted">
-          Un lien de confirmation sera envoyé à la nouvelle adresse. L&apos;email n&apos;est pas changé tant que vous n&apos;avez pas cliqué dessus.
+          Par sécurité, votre mot de passe actuel est demandé. Un lien de confirmation sera envoyé à la nouvelle adresse — l&apos;email n&apos;est pas changé tant que vous n&apos;avez pas cliqué dessus, et vous serez déconnecté de toutes vos sessions après le changement.
         </p>
       </section>
 

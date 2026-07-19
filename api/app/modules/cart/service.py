@@ -105,7 +105,11 @@ async def _get_or_create_cart(
         if cart:
             return cart
 
-    cart = Cart(session_token=session_token or new_session_token())
+    # Token TOUJOURS généré côté serveur. Réutiliser une valeur fournie
+    # par le client permettrait des collisions/fixations : deux clients
+    # envoyant le même token trivial ("abc") partageraient un panier.
+    # Le front mémorise le session_token renvoyé dans la réponse.
+    cart = Cart(session_token=new_session_token())
     db.add(cart)
     await db.flush()
     return cart
@@ -369,10 +373,16 @@ async def checkout(
             "Seule la livraison à domicile est disponible pour l'instant"
         )
 
+    # FOR UPDATE : verrouille la ligne panier le temps du checkout.
+    # Sans ce verrou, un double-clic (deux requêtes simultanées) lisait
+    # deux fois le même panier et créait DEUX commandes identiques.
+    # La 2e requête attend le commit de la 1re, qui supprime le panier :
+    # elle retombe alors proprement sur « Panier vide ».
     cart = await db.scalar(
         select(Cart)
         .where(Cart.user_id == user.id)
         .options(selectinload(Cart.items))
+        .with_for_update()
     )
     if cart is None or not cart.items:
         raise ValueError("Panier vide")

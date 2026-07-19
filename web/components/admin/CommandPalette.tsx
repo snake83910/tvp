@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { adminApi, type AdminOrderSummary } from "@/lib/admin";
+import { formatEuro } from "@/lib/money";
 
 interface Action {
   label: string;
@@ -135,7 +136,7 @@ export function CommandPalette() {
                     <p className="text-xs text-ink-muted">{o.customer_email}</p>
                   </div>
                   <span className="text-sm font-bold text-ink">
-                    {o.total_ttc.toFixed(2).replace(".", ",")} €
+                    {formatEuro(o.total_ttc)}
                   </span>
                 </button>
               ))}

@@ -114,6 +114,21 @@ class Verify2faIn(BaseModel):
     code: str = Field(min_length=6, max_length=6)
 
 
+class ReauthIn(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+
+
+class EmailChangeRequestIn(BaseModel):
+    new_email: NormalizedEmail
+    # Preuve de re-saisie récente du mot de passe (POST /auth/reauth) :
+    # un access token volé ne suffit pas à détourner le compte.
+    reauth_token: str
+
+
+class EmailChangeConfirmIn(BaseModel):
+    token: str
+
+
 # ---------- Sorties ----------
 
 class UserOut(BaseModel):

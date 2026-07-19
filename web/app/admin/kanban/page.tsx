@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { adminApi, type AdminOrderSummary } from "@/lib/admin";
 import { useToast } from "@/components/admin/Toast";
 import { StatusBadge } from "@/components/admin/StatusBadge";
+import { formatEuro } from "@/lib/money";
 
 const COLUMNS: { key: string; label: string }[] = [
   { key: "pending_payment", label: "En attente paiement" },
@@ -89,7 +90,7 @@ export default function AdminKanban() {
                     <p className="mt-1 truncate text-xs text-ink-muted">{o.customer_email}</p>
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-sm font-bold text-ink">
-                        {o.total_ttc.toFixed(2).replace(".", ",")} €
+                        {formatEuro(o.total_ttc)}
                       </p>
                       {NEXT_OF[o.status] && (
                         <button

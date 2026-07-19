@@ -7,7 +7,14 @@ import {
   useEffect,
   useState,
 } from "react";
-import { cartApi, type Cart } from "@/lib/cart";
+import {
+  cartApi,
+  clearCartSession,
+  getCartSession,
+  type Cart,
+} from "@/lib/cart";
+import { getToken } from "@/lib/auth";
+import { formatEuro } from "@/lib/money";
 
 interface CartCtx {
   cart: Cart | null;
@@ -120,6 +127,27 @@ export function CartProvider({
     refresh();
   }, []);
 
+  // À la connexion : fusionne le panier anonyme dans le panier du compte.
+  // Sans cet appel, l'article mis au panier avant de se connecter était
+  // PERDU (l'endpoint /cart/merge existait côté API mais n'était jamais
+  // appelé par le front) — le client arrivait au checkout panier vide.
+  useEffect(() => {
+    async function onAuthChanged() {
+      if (getToken() && getCartSession()) {
+        try {
+          await cartApi.merge();
+          clearCartSession(); // le panier anonyme n'existe plus côté API
+        } catch {
+          // Pas de panier anonyme à fusionner : rien à faire
+        }
+      }
+      refresh();
+    }
+    window.addEventListener("tvp:auth-changed", onAuthChanged);
+    return () =>
+      window.removeEventListener("tvp:auth-changed", onAuthChanged);
+  }, [refresh]);
+
   const count =
     cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0;
 
@@ -153,7 +181,7 @@ export function CartProvider({
             Total panier ({justAdded.count} pneu{justAdded.count > 1 ? "s" : ""})
             {" : "}
             <span className="font-display font-black text-ink">
-              {justAdded.totalTtc.toFixed(2).replace(".", ",")} €
+              {formatEuro(justAdded.totalTtc)}
             </span>
           </p>
           <div className="mt-3 flex gap-2">

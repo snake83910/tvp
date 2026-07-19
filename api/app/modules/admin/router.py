@@ -172,7 +172,13 @@ async def get_stats(
             OrderItem.supplier_ref,
             OrderItem.label_snapshot,
             func.sum(OrderItem.quantity).label("qty"),
-            func.sum(OrderItem.quantity * OrderItem.unit_price_ht_cents).label("rev"),
+            # TTC calculé avec le vat_rate de CHAQUE ligne (pas un 20 %
+            # codé en dur, faux dès qu'un autre taux existera : DOM, export…)
+            func.sum(
+                OrderItem.quantity
+                * OrderItem.unit_price_ht_cents
+                * (1 + OrderItem.vat_rate / 100)
+            ).label("rev_ttc"),
         )
         .join(Order, Order.id == OrderItem.order_id)
         .where(Order.created_at >= last30, Order.status.in_(paid_statuses))
@@ -185,7 +191,7 @@ async def get_stats(
             "ref": r.supplier_ref,
             "label": r.label_snapshot,
             "qty": int(r.qty or 0),
-            "revenue_ttc": round((r.rev or 0) * 1.20 / 100, 2),
+            "revenue_ttc": round((r.rev_ttc or 0) / 100, 2),
         }
         for r in top_rows
     ]

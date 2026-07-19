@@ -17,6 +17,7 @@ import time
 import httpx
 
 from app.core.config import settings
+from app.core.sanitize import sanitize_supplier_html
 from app.integrations.supplier_base import SupplierConnector, SupplierTyre
 from app.modules.catalog.normalize import map_season, parse_dimension
 
@@ -142,7 +143,9 @@ class MaxityreConnector(SupplierConnector):
                 # Enrichissements
                 ean=str(item.get("ean")) if item.get("ean") else None,
                 eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
-                description_html=((profil.get("extraFields") or {}).get("description")) or None,
+                description_html=sanitize_supplier_html(
+                    (profil.get("extraFields") or {}).get("description")
+                ),
                 is_runflat=bool(item.get("runflat")),
                 is_xl=bool(item.get("specifXl") or item.get("renforce")),
                 is_3pmsf=bool(item.get("specifSnow")),
@@ -325,7 +328,9 @@ class MaxityreConnector(SupplierConnector):
                 brand_slug=marque.get("url") or None,
                 ean=str(item.get("ean")) if item.get("ean") else None,
                 eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
-                description_html=((profil.get("extraFields") or {}).get("description")) or None,
+                description_html=sanitize_supplier_html(
+                    (profil.get("extraFields") or {}).get("description")
+                ),
                 is_runflat=bool(item.get("runflat")),
                 is_xl=bool(item.get("specifXl") or item.get("renforce")),
                 is_3pmsf=bool(item.get("specifSnow")),

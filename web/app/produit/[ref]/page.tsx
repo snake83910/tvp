@@ -5,6 +5,7 @@ import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
 import { EuLabel } from "@/components/EuLabel";
 import { api } from "@/lib/api";
+import { formatEuro } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -157,7 +158,7 @@ export default async function ProductPage({
                 <div className="rounded-2xl border border-line bg-paper p-6 shadow-card">
                   <div className="flex items-baseline gap-2">
                     <p className="font-display text-4xl font-black text-ink">
-                      {tyre.display_price.toFixed(2).replace(".", ",")} €
+                      {formatEuro(tyre.display_price)}
                     </p>
                     <span className="text-sm text-ink-muted">
                       / unité {tyre.display_mode}

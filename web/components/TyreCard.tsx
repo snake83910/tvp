@@ -7,6 +7,7 @@ import { useCart } from "@/components/CartProvider";
 import { TyreImage } from "@/components/TyreImage";
 import { BrandLogo } from "@/components/BrandLogo";
 import { productUrl } from "@/lib/slug";
+import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
   ete: "Été",
@@ -55,7 +56,7 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
     "idle" | "adding" | "done" | "error"
   >("idle");
 
-  const price = tyre.display_price.toFixed(2).replace(".", ",");
+  const price = formatEuro(tyre.display_price);
   // URL SEO-friendly avec brand/model dans le path
   const detailHref =
     tyre.width != null && tyre.aspect_ratio != null && tyre.diameter != null
@@ -202,7 +203,7 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
         <div className="mb-3 flex items-end justify-between">
           <div>
             <p className="font-display text-2xl font-black text-ink">
-              {price} €
+              {price}
             </p>
             <p className="text-[11px] uppercase tracking-wider text-ink-muted">
               prix {tyre.display_mode}

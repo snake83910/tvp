@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { authFetch } from "@/lib/auth";
 import { useToast } from "@/components/admin/Toast";
+import { formatEuro } from "@/lib/money";
 
 interface PromoCode {
   id: string;
@@ -48,7 +49,7 @@ const EMPTY_FORM = {
 function fmtDiscount(p: PromoCode): string {
   return p.discount_type === "percent"
     ? `−${p.discount_value} %`
-    : `−${(p.discount_value / 100).toFixed(2).replace(".", ",")} €`;
+    : `−${formatEuro((p.discount_value / 100))}`;
 }
 
 export default function AdminPromoPage() {
@@ -259,7 +260,7 @@ export default function AdminPromoPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-soft">
                     {p.min_articles_ttc_cents > 0 && (
-                      <p>Min. {(p.min_articles_ttc_cents / 100).toFixed(2).replace(".", ",")} €</p>
+                      <p>Min. {formatEuro((p.min_articles_ttc_cents / 100))}</p>
                     )}
                     {p.valid_until && (
                       <p>Jusqu&apos;au {new Date(p.valid_until).toLocaleDateString("fr-FR")}</p>

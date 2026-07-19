@@ -1,0 +1,22 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, l'email de votre compte a été modifié
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    L'adresse email associée à votre compte Tous Vos Pneus vient d'être
+    remplacée par <strong>{{ new_email }}</strong>. Par sécurité, toutes
+    vos sessions ouvertes ont été déconnectées.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    Si vous êtes à l'origine de ce changement, vous n'avez rien à faire.
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    Si ce n'est <strong>pas</strong> vous, contactez-nous immédiatement
+    via <a href="{{ site_url }}/contact" style="color:#D8232A;">{{ site_url }}/contact</a>
+    afin de sécuriser votre compte.
+  </p>
+{% endblock %}

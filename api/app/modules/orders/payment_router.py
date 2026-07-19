@@ -278,6 +278,13 @@ async def sync_payment(
             ),
         )
 
+    # Re-lit le statut : l'IPN a pu passer la commande à paid pendant
+    # l'appel Sogecommerce ci-dessus (sinon on re-consommerait un
+    # numéro de facture et re-enverrait l'email de confirmation).
+    await db.refresh(order)
+    if order.status != OrderStatus.pending_payment:
+        return {"status": "already_processed", "order_status": order.status.value}
+
     payment.status = "captured"
     payment.ipn_signature_ok = True
     payment.ipn_payload = answer
@@ -370,6 +377,26 @@ async def verify_kr_answer(
     )
     if payment is None:
         raise HTTPException(status_code=400, detail="Aucun paiement initialisé")
+
+    if order.status != OrderStatus.pending_payment:
+        # Paiement encaissé sur une commande qui n'est plus payable
+        # (ex. annulée entre-temps par la relance automatique). On
+        # enregistre l'encaissement pour traitement manuel (remboursement)
+        # au lieu de lever une transition invalide -> 500.
+        payment.status = "captured_after_" + order.status.value
+        payment.ipn_signature_ok = True
+        payment.ipn_payload = answer
+        await db.commit()
+        import logging
+        logging.getLogger(__name__).error(
+            "Paiement capturé sur commande %s au statut %s : "
+            "remboursement manuel requis",
+            order.order_number, order.status.value,
+        )
+        return {
+            "status": "paid_but_order_not_pending",
+            "order_status": order.status.value,
+        }
 
     payment.status = "captured"
     payment.ipn_signature_ok = True

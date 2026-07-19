@@ -28,7 +28,9 @@ def _require_cron_token(x_cron_token: str | None = Header(default=None)) -> None
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Jobs cron désactivés (CRON_TOKEN non configuré)",
         )
-    if x_cron_token != settings.cron_token:
+    # compare_digest : comparaison en temps constant (pas d'attaque timing)
+    import hmac
+    if not hmac.compare_digest(x_cron_token or "", settings.cron_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-Cron-Token invalide",
@@ -53,20 +55,20 @@ async def dunning(
     threshold_relance = now - timedelta(hours=1)
     threshold_abandon = now - timedelta(days=7)
 
-    pending = list(await db.scalars(
-        select(Order).where(
+    # Jointure User directe : évite un SELECT par commande (N+1)
+    pending = (await db.execute(
+        select(Order, User)
+        .join(User, User.id == Order.user_id)
+        .where(
             Order.status == OrderStatus.pending_payment,
             Order.created_at <= threshold_relance,
         )
-    ))
+    )).all()
 
     relanced = 0
     abandoned = 0
     mailer = get_mailer()
-    for order in pending:
-        user = await db.get(User, order.user_id)
-        if user is None:
-            continue
+    for order, user in pending:
 
         if order.created_at <= threshold_abandon:
             # Plus de 7 jours sans paiement -> annulation

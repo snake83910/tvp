@@ -6,6 +6,7 @@ import { EprelLabel } from "@/components/EprelLabel";
 import { TyreBadges } from "@/components/TyreBadges";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
   ete: "Été", hiver: "Hiver", "4saisons": "4 saisons", inconnu: "Non précisé",
@@ -129,7 +130,7 @@ export function TyreDetail({
             <div className="rounded-2xl border border-line bg-paper p-6 shadow-card">
               <div className="flex items-baseline gap-2">
                 <p className="font-display text-4xl font-black text-ink">
-                  {tyre.display_price.toFixed(2).replace(".", ",")} €
+                  {formatEuro(tyre.display_price)}
                 </p>
                 <span className="text-sm text-ink-muted">/ unité {tyre.display_mode}</span>
               </div>

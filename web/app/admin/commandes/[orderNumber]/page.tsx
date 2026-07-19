@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { useToast } from "@/components/admin/Toast";
+import { formatEuro } from "@/lib/money";
 
 const TRANSITION_LABEL: Record<string, string> = {
   sent_to_supplier: "Transmise au fournisseur",
@@ -204,10 +205,10 @@ export default function AdminOrderDetail() {
                     <td className="py-2 pr-4 text-ink">{it.label}</td>
                     <td className="py-2 text-center text-ink-soft">{it.quantity}</td>
                     <td className="py-2 text-right text-ink-soft">
-                      {it.unit_price_ttc.toFixed(2).replace(".", ",")} €
+                      {formatEuro(it.unit_price_ttc)}
                     </td>
                     <td className="py-2 text-right font-semibold text-ink">
-                      {it.line_total_ttc.toFixed(2).replace(".", ",")} €
+                      {formatEuro(it.line_total_ttc)}
                     </td>
                   </tr>
                 ))}
@@ -216,19 +217,19 @@ export default function AdminOrderDetail() {
             <div className="mt-4 border-t border-line pt-4 text-sm space-y-1">
               <div className="flex justify-between text-ink-soft">
                 <span>Articles HT</span>
-                <span>{order.articles_ht.toFixed(2).replace(".", ",")} €</span>
+                <span>{formatEuro(order.articles_ht)}</span>
               </div>
               <div className="flex justify-between text-ink-soft">
                 <span>Livraison TTC</span>
-                <span>{order.shipping_ttc.toFixed(2).replace(".", ",")} €</span>
+                <span>{formatEuro(order.shipping_ttc)}</span>
               </div>
               <div className="flex justify-between text-ink-soft">
                 <span>TVA</span>
-                <span>{order.total_vat.toFixed(2).replace(".", ",")} €</span>
+                <span>{formatEuro(order.total_vat)}</span>
               </div>
               <div className="flex justify-between border-t border-line pt-2 font-display text-base font-black text-ink">
                 <span>Total TTC</span>
-                <span>{order.total_ttc.toFixed(2).replace(".", ",")} €</span>
+                <span>{formatEuro(order.total_ttc)}</span>
               </div>
             </div>
           </Section>

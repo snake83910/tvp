@@ -6,6 +6,7 @@ import type { AdminOrderSummary } from "@/lib/admin";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { EmptyState } from "@/components/admin/EmptyState";
+import { formatEuro } from "@/lib/money";
 
 type SortKey = "order_number" | "customer_email" | "created_at" | "status" | "total_ttc";
 type SortDir = "asc" | "desc";
@@ -139,7 +140,7 @@ export function OrderTable({
                   <StatusBadge status={o.status} />
                 </td>
                 <td className={`px-4 ${rowPy} text-right font-display font-black text-ink`}>
-                  {o.total_ttc.toFixed(2).replace(".", ",")} €
+                  {formatEuro(o.total_ttc)}
                 </td>
                 <td className={`relative px-4 ${rowPy} text-right`}>
                   <button
@@ -197,7 +198,7 @@ export function OrderTable({
                 {new Date(o.created_at).toLocaleDateString("fr-FR")}
               </p>
               <p className="font-display text-lg font-black text-ink">
-                {o.total_ttc.toFixed(2).replace(".", ",")} €
+                {formatEuro(o.total_ttc)}
               </p>
             </div>
             <Link

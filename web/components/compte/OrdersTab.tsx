@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { OrderSummary } from "@/lib/auth";
 import { SkeletonList } from "@/components/Skeleton";
 import { STATUS_LABEL, StatusBadge } from "@/components/compte/shared";
+import { formatEuro } from "@/lib/money";
 
 export function OrdersTab({ orders }: { orders: OrderSummary[] | null }) {
   const [filter, setFilter] = useState<string>("");
@@ -84,7 +85,7 @@ export function OrdersTab({ orders }: { orders: OrderSummary[] | null }) {
                 </td>
                 <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
                 <td className="px-4 py-3 text-right font-display font-black text-ink">
-                  {o.total_ttc.toFixed(2).replace(".", ",")} €
+                  {formatEuro(o.total_ttc)}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {o.status === "pending_payment" && (
@@ -123,7 +124,7 @@ export function OrdersTab({ orders }: { orders: OrderSummary[] | null }) {
             </div>
             <div className="mt-3 flex items-end justify-between">
               <p className="font-display text-lg font-black text-ink">
-                {o.total_ttc.toFixed(2).replace(".", ",")} €
+                {formatEuro(o.total_ttc)}
               </p>
               <div className="flex items-center gap-3">
                 {o.status === "pending_payment" && (

@@ -57,8 +57,7 @@ export default function ConfidentialitePage() {
             <h2 className="font-display text-lg font-bold text-ink">Destinataires</h2>
             <p>
               Vos données sont accessibles à nos équipes internes ainsi qu&apos;à nos
-              sous-traitants (hébergeur, prestataire de paiement Sogecommerce, fournisseur
-              Maxityre, transporteur). Aucune revente à des tiers à des fins commerciales.
+              sous-traitants (hébergeur, prestataire de paiement Sogecommerce, transporteur). Aucune revente à des tiers à des fins commerciales.
             </p>
           </section>
 

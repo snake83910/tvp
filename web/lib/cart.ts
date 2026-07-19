@@ -4,7 +4,7 @@ import { authFetch, getToken } from "@/lib/auth";
 
 const CART_SESSION_KEY = "tvp_cart_session";
 
-function getCartSession(): string | null {
+export function getCartSession(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(CART_SESSION_KEY);
 }
@@ -39,6 +39,11 @@ export interface Cart {
   items: CartItem[];
   total_ht: number;
   total_ttc: number;
+  // Frais de port calculés par l'API (source de vérité serveur)
+  shipping_ht: number;
+  shipping_ttc: number;
+  free_shipping: boolean;
+  grand_total_ttc: number;
 }
 
 async function call<T>(

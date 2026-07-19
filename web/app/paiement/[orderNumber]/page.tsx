@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { CheckoutSteps } from "@/components/CheckoutSteps";
 import { authFetch, useCurrentUser } from "@/lib/auth";
+import { formatEuro } from "@/lib/money";
 
 // Endpoint Sogecommerce (identique à la variable d'env backend)
 const SOGE_ENDPOINT =
@@ -212,7 +213,7 @@ export default function PaymentPage({
                 Montant à régler
               </p>
               <p className="mt-2 font-display text-4xl font-black text-ink">
-                {(init.amount_cents / 100).toFixed(2).replace(".", ",")} €
+                {formatEuro((init.amount_cents / 100))}
               </p>
             </div>
 

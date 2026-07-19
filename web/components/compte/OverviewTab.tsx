@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Address, OrderSummary } from "@/lib/auth";
 import { StatusBadge, type Tab } from "@/components/compte/shared";
+import { formatEuro } from "@/lib/money";
 
 export function OverviewTab({
   user, orders, addresses, onTabChange,
@@ -27,7 +28,7 @@ export function OverviewTab({
         <Kpi label="Commandes passées" value={orderCount.toString()} />
         <Kpi
           label="Total dépensé"
-          value={`${totalSpent.toFixed(2).replace(".", ",")} €`}
+          value={formatEuro(totalSpent)}
           hint={user.account_type === "pro" ? "HT" : "TTC"}
         />
         <Kpi label="En cours" value={inProgressCount.toString()} />
@@ -56,7 +57,7 @@ export function OverviewTab({
             </div>
             <StatusBadge status={lastOrder.status} />
             <p className="font-display text-lg font-black text-ink">
-              {lastOrder.total_ttc.toFixed(2).replace(".", ",")} €
+              {formatEuro(lastOrder.total_ttc)}
             </p>
             <Link
               href={`/commandes/${lastOrder.order_number}`}

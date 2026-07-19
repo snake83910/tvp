@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { formatEuro } from "@/lib/money";
 import {
   accountApi,
   downloadInvoice,
@@ -215,7 +216,7 @@ export default function OrderDetailPage({
                 href={`/paiement/${order.order_number}`}
                 className="rounded-full bg-signal px-5 py-2.5 text-sm font-bold text-white transition hover:bg-signal-dark"
               >
-                Payer maintenant — {order.total_ttc.toFixed(2).replace(".", ",")} €
+                Payer maintenant — {formatEuro(order.total_ttc)}
               </Link>
               <button
                 onClick={handleCancel}
@@ -247,12 +248,11 @@ export default function OrderDetailPage({
                     <p className="mt-1 text-sm text-ink-muted">
                       Réf {it.supplier_ref} · {it.quantity} pneu
                       {it.quantity > 1 ? "s" : ""} ×{" "}
-                      {it.unit_price_ttc.toFixed(2).replace(".", ",")}{" "}
-                      €
+                      {formatEuro(it.unit_price_ttc)}
                     </p>
                   </div>
                   <p className="shrink-0 font-display font-black text-ink">
-                    {it.line_total_ttc.toFixed(2).replace(".", ",")} €
+                    {formatEuro(it.line_total_ttc)}
                   </p>
                 </div>
               ))}
@@ -340,7 +340,7 @@ export default function OrderDetailPage({
                     Remise{order.promo_code ? ` (${order.promo_code})` : ""}
                   </span>
                   <span className="font-semibold text-ok">
-                    −{(order.discount_ttc ?? 0).toFixed(2).replace(".", ",")} €
+                    −{formatEuro((order.discount_ttc ?? 0))}
                   </span>
                 </div>
               )}
@@ -352,13 +352,13 @@ export default function OrderDetailPage({
               <div className="mt-2 flex justify-between border-t border-line pt-3 text-xs text-ink-muted">
                 <span>dont TVA</span>
                 <span>
-                  {order.total_vat.toFixed(2).replace(".", ",")} €
+                  {formatEuro(order.total_vat)}
                 </span>
               </div>
               <div className="mt-3 flex justify-between border-t border-line pt-3 font-display text-xl font-black text-ink">
                 <span>Total TTC</span>
                 <span>
-                  {order.total_ttc.toFixed(2).replace(".", ",")} €
+                  {formatEuro(order.total_ttc)}
                 </span>
               </div>
             </div>
@@ -382,7 +382,7 @@ function Row({
     <div className="flex justify-between text-sm">
       <span className="text-ink-soft">{k}</span>
       <span className="font-semibold text-ink">
-        {free ? "Offerte" : `${v.toFixed(2).replace(".", ",")} €`}
+        {free ? "Offerte" : formatEuro(v)}
       </span>
     </div>
   );

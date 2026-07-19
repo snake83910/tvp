@@ -6,6 +6,7 @@ import { adminApi, type AdminOrderSummary, type AdminStats } from "@/lib/admin";
 import { OrderTable } from "@/components/admin/OrderTable";
 import { Sparkline } from "@/components/admin/Sparkline";
 import { SkeletonList } from "@/components/Skeleton";
+import { formatEuro } from "@/lib/money";
 
 const POLL_INTERVAL = 30000; // 30s
 
@@ -104,7 +105,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi
           label="CA 30 jours"
-          value={stats ? `${(stats.revenue_30d_ttc ?? 0).toFixed(2).replace(".", ",")} €` : "…"}
+          value={stats ? formatEuro((stats.revenue_30d_ttc ?? 0)) : "…"}
           sub={stats ? `${stats.orders_30d ?? 0} commande${(stats.orders_30d ?? 0) > 1 ? "s" : ""}` : undefined}
           spark={spark?.revenue?.slice(-sparkPeriod)}
           trend={
@@ -115,12 +116,12 @@ export default function AdminDashboard() {
         />
         <Kpi
           label="CA aujourd'hui"
-          value={stats ? `${stats.revenue_today_ttc.toFixed(2).replace(".", ",")} €` : "…"}
+          value={stats ? formatEuro(stats.revenue_today_ttc) : "…"}
           sub={stats ? `${stats.orders_today} commande${stats.orders_today > 1 ? "s" : ""}` : undefined}
         />
         <Kpi
           label="Panier moyen"
-          value={stats ? `${(stats.avg_cart_ttc ?? 0).toFixed(2).replace(".", ",")} €` : "…"}
+          value={stats ? formatEuro((stats.avg_cart_ttc ?? 0)) : "…"}
           sub="30 derniers jours"
         />
         <Kpi label="Commandes en cours" value={activeOrders ?? "…"} sub={totalOrders ? `${totalOrders} total` : undefined} />
@@ -172,7 +173,7 @@ export default function AdminDashboard() {
                     <td className="px-4 py-2 text-ink">{p.label}</td>
                     <td className="px-4 py-2 text-right font-semibold text-ink">{p.qty}</td>
                     <td className="px-4 py-2 text-right font-display font-black text-ink">
-                      {p.revenue_ttc.toFixed(2).replace(".", ",")} €
+                      {formatEuro(p.revenue_ttc)}
                     </td>
                   </tr>
                 ))}

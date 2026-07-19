@@ -43,3 +43,9 @@ web/.next/
 # Env local dev (URLs API locales, aucun secret)
 web/.env.local
 .claude/
+
+# === Tests e2e Playwright ===
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/.next-e2e/

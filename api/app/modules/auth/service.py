@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.net import client_ip
@@ -73,7 +74,17 @@ async def register_user(db: AsyncSession, data: RegisterIn) -> User:
             )
         )
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Course avec une inscription simultanée sur le même email :
+        # le check-then-insert du début ne suffit pas, la contrainte
+        # UNIQUE tranche. Même réponse que le doublon détecté plus haut.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un compte existe déjà avec cet email",
+        )
     await db.refresh(user)
     return user
 

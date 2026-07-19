@@ -26,7 +26,10 @@ async def rate_limit(
     redis_key = f"rl:{key_prefix}:{ip}"
     redis = get_redis()
     count = await redis.incr(redis_key)
-    if count == 1:
+    # TTL < 0 : clé sans expiration (process mort entre INCR et EXPIRE
+    # lors d'un appel précédent). Sans ce rattrapage, l'IP resterait
+    # bloquée pour toujours une fois le seuil atteint.
+    if count == 1 or await redis.ttl(redis_key) < 0:
         await redis.expire(redis_key, window_seconds)
     if count > max_attempts:
         ttl = await redis.ttl(redis_key)

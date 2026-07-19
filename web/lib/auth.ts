@@ -233,8 +233,13 @@ export const accountApi = {
   changePassword: (old_password: string, new_password: string) =>
     call<void>("/me/password", "POST", { old_password, new_password }, true),
 
-  requestEmailChange: (new_email: string) =>
-    call<void>("/auth/request-email-change", "POST", { new_email }, true),
+  requestEmailChange: (new_email: string, reauth_token: string) =>
+    call<void>(
+      "/auth/request-email-change",
+      "POST",
+      { new_email, reauth_token },
+      true,
+    ),
 
   reauth: (password: string) =>
     call<{ reauth_token: string }>("/auth/reauth", "POST", { password }, true),
@@ -293,7 +298,7 @@ export function useCurrentUser() {
   useEffect(() => {
     let cancelled = false;
 
-    function refresh() {
+    async function refresh() {
       if (!getToken()) {
         if (!cancelled) {
           setUser(null);
@@ -302,11 +307,24 @@ export function useCurrentUser() {
         return;
       }
       setLoading(true);
-      auth
-        .me()
-        .then((u) => { if (!cancelled) setUser(u); })
-        .catch(() => clearTokens())
-        .finally(() => { if (!cancelled) setLoading(false); });
+      try {
+        // authFetch tente déjà le refresh token sur 401. On ne purge la
+        // session QUE sur un 401 confirmé : une erreur réseau ou un 503
+        // passager ne doit pas déconnecter l'utilisateur.
+        const res = await authFetch("/auth/me");
+        if (cancelled) return;
+        if (res.ok) {
+          setUser((await res.json()) as UserMe);
+        } else if (res.status === 401) {
+          clearTokens();
+          setUser(null);
+        }
+        // Autre statut (5xx…) : on conserve l'état courant
+      } catch {
+        // Erreur réseau : on conserve l'état courant
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     // "storage" : déclenché quand un AUTRE onglet modifie localStorage

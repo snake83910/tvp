@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi, type AdminOrderSummary } from "@/lib/admin";
+import { formatEuro } from "@/lib/money";
 
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
@@ -71,7 +72,7 @@ export default function AdminCalendrier() {
 
       <p className="mb-3 text-sm text-ink-muted">
         {orders.length} commande{orders.length > 1 ? "s" : ""} ·
-        CA encaissé : <strong className="text-ink">{totalMois.toFixed(2).replace(".", ",")} €</strong>
+        CA encaissé : <strong className="text-ink">{formatEuro(totalMois)}</strong>
       </p>
 
       {loading ? (

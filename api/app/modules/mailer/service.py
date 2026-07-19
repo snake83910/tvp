@@ -126,6 +126,25 @@ def send_email_change_confirm(user: User, new_email: str, token: str) -> None:
     )
 
 
+def send_email_changed_notice(
+    old_email: str, user: User, new_email: str
+) -> None:
+    """Alerte envoyée sur l'ANCIENNE adresse une fois le changement
+    effectif : si le titulaire n'est pas à l'origine du changement,
+    c'est son seul moyen de s'en apercevoir."""
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=old_email,
+            subject="L'adresse email de votre compte a été modifiée",
+            template="email_change_notice.html",
+            civilite=_civilite(user),
+            site_url=_site_url(),
+            new_email=new_email,
+        )
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 # Confirmation de commande (paiement validé)
 # ─────────────────────────────────────────────────────────────────
