@@ -52,10 +52,14 @@ export default function CartPage() {
 
   const isEmpty = !cart || cart.items.length === 0;
 
-  // Frais de port : renvoyés par l'API avec le panier (règle serveur)
+  // Frais de port : renvoyés par l'API avec le panier (règle serveur).
+  // La moto est toujours offerte : pas d'upsell « passez à 2 » pour elle.
   const freeShipping = cart?.free_shipping ?? false;
   const shipTtc = cart?.shipping_ttc ?? 0;
-  const singles = cart?.items.filter((i) => i.quantity === 1) ?? [];
+  const singles =
+    cart?.items.filter(
+      (i) => i.quantity === 1 && i.category !== "moto",
+    ) ?? [];
 
   return (
     <>
@@ -152,7 +156,7 @@ export default function CartPage() {
 
                   {/* Upsell métier : les pneus se montent par 2, et la
                       livraison est offerte quand chaque référence >= 2 */}
-                  {it.quantity === 1 && (
+                  {it.quantity === 1 && it.category !== "moto" && (
                     <button
                       onClick={() => changeQty(it.id, 2)}
                       disabled={busy === it.id}

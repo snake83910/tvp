@@ -530,8 +530,10 @@ async def checkout(
         round(ttc * 100) * it.quantity for it, _, ttc in revalidated
     )
 
-    line_quantities = [it.quantity for it, _, _ in revalidated]
-    ship = compute_home_shipping(line_quantities)
+    ship = compute_home_shipping([
+        ((it.product_data or {}).get("category", "auto"), it.quantity)
+        for it, _, _ in revalidated
+    ])
 
     # Code promo : revalidation faisant foi (l'aperçu /cart/promo/validate
     # n'engage rien). ValueError -> 400 avec message affichable.

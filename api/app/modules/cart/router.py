@@ -44,6 +44,7 @@ def _serialize(cart: Cart) -> CartOut:
             dimension=_dimension(i.product_data or {}),
             image_url=(i.product_data or {}).get("image_url"),
             season=(i.product_data or {}).get("season"),
+            category=(i.product_data or {}).get("category", "auto"),
         )
         for i in cart.items
     ]
@@ -54,7 +55,9 @@ def _serialize(cart: Cart) -> CartOut:
     # n'ait pas à dupliquer la logique « gratuit si toutes lignes >= 2 ».
     from app.modules.shipping.rules import compute_home_shipping
     if items:
-        ship = compute_home_shipping([i.quantity for i in items])
+        ship = compute_home_shipping(
+            [(i.category, i.quantity) for i in items]
+        )
         shipping_ht = ship.ht_cents / 100
         shipping_ttc = ship.ttc_cents / 100
     else:

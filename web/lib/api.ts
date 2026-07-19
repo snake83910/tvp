@@ -32,6 +32,18 @@ export const VEHICLE_CATEGORIES: {
   { value: "agricole", label: "Agricole" },
 ];
 
+/** Quantité proposée par défaut : 2 (par essieu), sauf moto : 1
+ * (avant/arrière différents, on achète rarement par paire identique). */
+export function defaultQty(category?: string): number {
+  return category === "moto" ? 1 : 2;
+}
+
+/** La livraison moto est toujours offerte ; les autres familles sont
+ * offertes dès 2 pneus par référence. */
+export function isAlwaysFreeShipping(category?: string): boolean {
+  return category === "moto";
+}
+
 export interface TyreResult {
   supplier_ref: string;
   brand: string;

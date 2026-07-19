@@ -31,6 +31,7 @@ export interface CartItem {
   dimension?: string | null;
   image_url?: string | null;
   season?: string | null;
+  category?: string;
 }
 
 export interface Cart {

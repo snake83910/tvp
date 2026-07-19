@@ -40,6 +40,8 @@ class CartItemOut(BaseModel):
     dimension: str | None = None
     image_url: str | None = None
     season: str | None = None
+    # Famille de véhicule (frais de port + affichage adaptés)
+    category: str = "auto"
 
 
 class CartOut(BaseModel):

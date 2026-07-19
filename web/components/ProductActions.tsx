@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { TyreResult } from "@/lib/api";
+import { defaultQty, type TyreResult } from "@/lib/api";
 import { useCart } from "@/components/CartProvider";
 
-const DEFAULT_QTY = 2;
 const MIN_QTY = 1;
 const MAX_QTY = 20;
 
 export function ProductActions({ tyre }: { tyre: TyreResult }) {
   const { add } = useCart();
+  // Quantité par défaut selon la famille (moto : 1, sinon 2 par essieu)
+  const DEFAULT_QTY = defaultQty(tyre.category);
   // Quantité bornée au stock fournisseur (le backend refuse aussi)
   const maxQty =
     tyre.stock != null ? Math.min(MAX_QTY, Math.max(tyre.stock, 0)) : MAX_QTY;

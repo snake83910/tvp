@@ -1,18 +1,29 @@
 """
 Règles d'expédition.
 
-Politique métier (validée 2026) :
-- Livraison à domicile gratuite SEULEMENT si toutes les lignes du panier
-  ont une quantité >= 2 (autrement dit : aucune référence ne doit être
-  à 1 seul pneu).
-- Sinon 6,90 € HT + TVA 20 % = 8,28 € TTC.
+Politique métier (validée juillet 2026) — PAR FAMILLE de véhicule :
+
+  famille   | ligne à 1 pneu | toutes les lignes >= 2 pneus
+  ----------|----------------|------------------------------
+  auto      | 6,90 € HT      | gratuit
+  quad      | 6,90 € HT      | gratuit
+  camion    | 15,00 € HT     | gratuit
+  agricole  | 15,00 € HT     | gratuit
+  moto      | GRATUIT        | gratuit
+
+- Le seuil de gratuité s'apprécie PAR LIGNE (par référence) : une ligne
+  à 1 seul pneu déclenche le forfait de sa famille.
+- Le forfait s'applique à la COMMANDE, pas par ligne : si plusieurs
+  lignes déclenchent des frais, on facture le forfait le PLUS ÉLEVÉ
+  (une seule expédition), pas la somme.
 
 Cas concrets :
-  [2 Michelin]                -> gratuit (toutes >= 2)
-  [2 Michelin, 2 Continental] -> gratuit
-  [1 Michelin]                -> payant
-  [1 Michelin, 2 Continental] -> payant (Michelin < 2)
-  [4 Michelin]                -> gratuit
+  [2 Michelin auto]                    -> gratuit
+  [1 Michelin auto]                    -> 6,90 € HT
+  [1 pneu camion]                      -> 15,00 € HT
+  [1 auto, 1 camion]                   -> 15,00 € HT (max, pas 21,90)
+  [1 moto]                             -> gratuit (moto toujours offert)
+  [1 moto, 1 auto]                     -> 6,90 € HT (l'auto seule paie)
 
 Frais de port = service en France métropolitaine -> TVA 20 %.
 """
@@ -20,7 +31,14 @@ from dataclasses import dataclass
 from typing import Iterable
 
 # Montants en centimes (jamais de float pour l'argent)
-SHIPPING_FLAT_HT_CENTS = 690    # 6,90 € HT
+CATEGORY_FLAT_HT_CENTS: dict[str, int] = {
+    "auto": 690,       # 6,90 € HT
+    "quad": 690,
+    "camion": 1500,    # 15,00 € HT
+    "agricole": 1500,
+    "moto": 0,         # toujours offert
+}
+DEFAULT_FLAT_HT_CENTS = 690     # famille inconnue : forfait auto
 SHIPPING_VAT_RATE = 0.20        # 20 % TVA
 MIN_QTY_PER_LINE_FOR_FREE = 2   # toute ligne doit être >= 2 pour le gratuit
 
@@ -36,24 +54,30 @@ class ShippingQuote:
         return self.ht_cents + self.vat_cents
 
 
+def category_flat_ht_cents(category: str) -> int:
+    """Forfait HT (centimes) d'une famille de véhicule."""
+    return CATEGORY_FLAT_HT_CENTS.get(category, DEFAULT_FLAT_HT_CENTS)
+
+
 def compute_home_shipping(
-    line_quantities: Iterable[int],
+    lines: Iterable[tuple[str, int]],
 ) -> ShippingQuote:
     """
     Frais de port livraison à domicile.
 
     Args:
-        line_quantities: liste des quantités PAR LIGNE du panier
-                         (une entrée par référence distincte).
+        lines: (famille, quantité) PAR LIGNE du panier
+               (une entrée par référence distincte).
 
-    Règle : gratuit ssi toutes les lignes ont >= 2 pneus.
-    Un panier vide tombe en payant (sécurité, mais ne devrait pas arriver
-    car le checkout refuse les paniers vides en amont).
+    Un panier vide est gratuit (le checkout refuse les paniers vides en
+    amont ; la sérialisation panier gère le cas vide séparément).
     """
-    qtys = list(line_quantities)
-    if qtys and all(q >= MIN_QTY_PER_LINE_FOR_FREE for q in qtys):
-        return ShippingQuote(mode="home", ht_cents=0, vat_cents=0)
-
-    ht = SHIPPING_FLAT_HT_CENTS
+    fees = [
+        category_flat_ht_cents(category)
+        for category, qty in lines
+        if qty < MIN_QTY_PER_LINE_FOR_FREE
+        and category_flat_ht_cents(category) > 0
+    ]
+    ht = max(fees, default=0)
     vat = round(ht * SHIPPING_VAT_RATE)
     return ShippingQuote(mode="home", ht_cents=ht, vat_cents=vat)

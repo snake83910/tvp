@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { TyreResult } from "@/lib/api";
+import {
+  defaultQty,
+  isAlwaysFreeShipping,
+  type TyreResult,
+} from "@/lib/api";
 import { useCart } from "@/components/CartProvider";
 import { TyreImage } from "@/components/TyreImage";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -16,7 +20,6 @@ const SEASON: Record<string, string> = {
   inconnu: "—",
 };
 
-const DEFAULT_QTY = 2; // métier pneu : par essieu
 const MIN_QTY = 1;
 const MAX_QTY = 20;
 
@@ -46,6 +49,8 @@ function GradeDot({ label, value, title }: { label: string; value: unknown; titl
 
 export function TyreCard({ tyre }: { tyre: TyreResult }) {
   const { add } = useCart();
+  // Quantité par défaut selon la famille (moto : 1, sinon 2 par essieu)
+  const DEFAULT_QTY = defaultQty(tyre.category);
   // Quantité bornée au stock fournisseur : « 1 restant » ne doit pas
   // permettre d'en mettre 2 au panier (le backend refuse aussi).
   const maxQty =
@@ -270,13 +275,16 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
           </p>
         )}
 
-        {/* Règle métier : livraison offerte dès 2 pneus par référence */}
+        {/* Règle métier : moto toujours offerte ; sinon offerte dès
+            2 pneus par référence */}
         <p
           className={`mt-2 text-center text-[11px] font-semibold ${
-            qty >= 2 ? "text-ok" : "text-ink-muted"
+            isAlwaysFreeShipping(tyre.category) || qty >= 2
+              ? "text-ok"
+              : "text-ink-muted"
           }`}
         >
-          {qty >= 2
+          {isAlwaysFreeShipping(tyre.category) || qty >= 2
             ? "✓ Livraison offerte"
             : "Livraison offerte dès 2 pneus"}
         </p>
