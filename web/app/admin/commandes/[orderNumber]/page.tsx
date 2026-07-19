@@ -64,8 +64,15 @@ export default function AdminOrderDetail() {
 
   async function handleDownload() {
     setPdfLoading(true);
-    try { await downloadAdminInvoice(orderNumber); }
-    finally { setPdfLoading(false); }
+    try {
+      await downloadAdminInvoice(orderNumber);
+    } catch (e) {
+      // Sans ce catch, un échec était silencieux : le bouton revenait à
+      // son état normal et rien ne se passait, sans la moindre indication.
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   useEffect(() => {

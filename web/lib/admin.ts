@@ -2,6 +2,7 @@
 
 import { authFetch } from "@/lib/auth";
 import type { OrderDetail } from "@/lib/auth";
+import { invoiceError, saveBlob } from "@/lib/download";
 
 async function call<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const res = await authFetch(path, {
@@ -62,14 +63,8 @@ export interface AdminOrderDetail extends OrderDetail {
 
 export async function downloadAdminInvoice(orderNumber: string): Promise<void> {
   const res = await authFetch(`/admin/orders/${orderNumber}/invoice`);
-  if (!res.ok) throw new Error("Impossible de télécharger la facture");
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `facture-${orderNumber}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+  if (!res.ok) throw new Error(invoiceError(res.status));
+  saveBlob(await res.blob(), `facture-${orderNumber}.pdf`);
 }
 
 export const adminApi = {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { invoiceError, saveBlob } from "@/lib/download";
 
 const BROWSER_API =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -196,14 +197,8 @@ export interface OrderDetail {
 
 export async function downloadInvoice(orderNumber: string): Promise<void> {
   const res = await authFetch(`/me/orders/${orderNumber}/invoice`);
-  if (!res.ok) throw new Error("Impossible de télécharger la facture");
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `facture-${orderNumber}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+  if (!res.ok) throw new Error(invoiceError(res.status));
+  saveBlob(await res.blob(), `facture-${orderNumber}.pdf`);
 }
 
 export const accountApi = {
