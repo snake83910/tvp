@@ -380,6 +380,50 @@ export default function PaymentPage({
                   <PaymentSkeleton label="Chargement du formulaire bancaire…" />
                 )}
 
+                {/* Mise en page des champs Krypton : numéro pleine largeur,
+                    expiration + cryptogramme CÔTE À CÔTE, titulaire et
+                    bouton pleine largeur. !important requis : le thème
+                    neon-reset force ses propres styles. */}
+                <style>{`
+                  /* Le thème néon fige le formulaire à ~300px : on
+                     l'étend à la largeur de la carte de paiement */
+                  #soge-smartform .kr-smart-form,
+                  #soge-smartform .kr-smart-form-wrapper,
+                  #soge-smartform .kr-smart-form-methods,
+                  #soge-smartform .kr-methods-list,
+                  #soge-smartform .kr-methods-list-inner-wrapper,
+                  #soge-smartform .kr-methods-list-options,
+                  #soge-smartform .kr-methods-list-row,
+                  #soge-smartform .kr-methods-list-card-form-wrapper,
+                  #soge-smartform .kr-card-header,
+                  #soge-smartform .kr-card-form.kr-embedded {
+                    width: 100% !important;
+                    max-width: 100% !important;
+                  }
+                  #soge-smartform .kr-card-form.kr-embedded {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    flex-wrap: wrap !important;
+                    column-gap: 12px;
+                  }
+                  #soge-smartform .kr-card-form .kr-field-element,
+                  #soge-smartform .kr-card-form .kr-form-error,
+                  #soge-smartform .kr-card-form .kr-payment-button {
+                    flex: 0 0 100%;
+                    min-width: 0;
+                  }
+                  /* 50% - 8px + gap 12px = marge de 4px (anti-arrondi).
+                     border-box OBLIGATOIRE : en content-box les bordures
+                     et paddings du thème s'ajoutent aux 50% et forcent
+                     un retour à la ligne. */
+                  #soge-smartform .kr-card-form .kr-expiry,
+                  #soge-smartform .kr-card-form .kr-security-code {
+                    box-sizing: border-box !important;
+                    flex: 0 0 calc(50% - 8px) !important;
+                    width: calc(50% - 8px) !important;
+                  }
+                `}</style>
+
                 {/* smartForm Sogecommerce (thème néon) : carte + moyens de
                     paiement gérés par la banque, champs PCI-DSS isolés */}
                 <div
