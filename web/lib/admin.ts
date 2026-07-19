@@ -55,6 +55,23 @@ export interface AdminOrderSummary {
   customer_name: string | null;
 }
 
+export interface AdminCustomer {
+  id: string;
+  email: string;
+  name: string | null;
+  phone: string | null;
+  account_type: string;
+  role: string;
+  company_name: string | null;
+  email_verified: boolean;
+  created_at: string;
+  // Agrégats sur les commandes encaissées uniquement ; last_order_at
+  // couvre tous les statuts (une commande en attente reste un signal).
+  orders_count: number;
+  revenue_ttc: number;
+  last_order_at: string | null;
+}
+
 export interface AdminOrderDetail extends OrderDetail {
   customer_email: string;
   customer_name: string | null;
@@ -85,6 +102,18 @@ export const adminApi = {
     if (params?.max_amount != null) p.set("max_amount", String(params.max_amount));
     const qs = p.toString();
     return call<AdminOrderSummary[]>(`/admin/orders${qs ? `?${qs}` : ""}`);
+  },
+
+  listCustomers: (params?: {
+    q?: string; account_type?: string; sort?: string; page?: number;
+  }) => {
+    const p = new URLSearchParams();
+    if (params?.q) p.set("q", params.q);
+    if (params?.account_type) p.set("account_type", params.account_type);
+    if (params?.sort) p.set("sort", params.sort);
+    if (params?.page) p.set("page", String(params.page));
+    const qs = p.toString();
+    return call<AdminCustomer[]>(`/admin/customers${qs ? `?${qs}` : ""}`);
   },
 
   getOrder: (orderNumber: string) =>

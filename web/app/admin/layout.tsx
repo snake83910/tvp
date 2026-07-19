@@ -12,6 +12,7 @@ import { OnboardingTour } from "@/components/admin/OnboardingTour";
 const NAV = [
   { href: "/admin", label: "Tableau de bord", icon: "▦" },
   { href: "/admin/commandes", label: "Commandes", icon: "🛒" },
+  { href: "/admin/clients", label: "Clients", icon: "👥" },
   { href: "/admin/kanban", label: "Kanban", icon: "▤" },
   { href: "/admin/promo", label: "Codes promo", icon: "🏷" },
   { href: "/admin/calendrier", label: "Calendrier", icon: "📅" },

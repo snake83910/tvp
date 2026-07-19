@@ -4,6 +4,7 @@ Espace administration — réservé aux users avec role=admin.
 Endpoints :
   GET  /admin/stats                         Indicateurs globaux
   GET  /admin/orders                        Liste toutes les commandes
+  GET  /admin/customers                     Liste clients + agrégats
   GET  /admin/orders/{order_number}         Détail + infos client
   PATCH /admin/orders/{order_number}/status Changement de statut + email auto
 """
@@ -20,13 +21,14 @@ from app.core.audit import audit
 from app.core.deps import get_db, require_role
 from app.models.order import ALLOWED_TRANSITIONS, Order, OrderStatus
 from app.models.promo import PromoCode
-from app.models.user import User, UserRole
+from app.models.user import AccountType, ProProfile, User, UserRole
 from app.modules.mailer.service import (
     send_order_cancelled,
     send_order_delivered,
     send_order_shipped,
 )
 from app.schemas.order import (
+    AdminCustomer,
     AdminOrderDetail,
     AdminOrderSummary,
     AdminStats,
@@ -644,6 +646,108 @@ async def bulk_email(
     )
     await db.commit()
     return {"sent": len(emails)}
+
+
+# ── Clients ────────────────────────────────────────────────────────
+
+# Statuts qui comptent comme « commande encaissée ». Repris tel quel de
+# /admin/stats : les deux écrans doivent annoncer le même CA.
+_PAID_STATUSES = [
+    OrderStatus.paid,
+    OrderStatus.sent_to_supplier,
+    OrderStatus.shipped,
+    OrderStatus.delivered,
+]
+
+_CUSTOMER_SORTS = {
+    "recent": User.created_at.desc(),
+    "revenue": func.coalesce(
+        func.sum(Order.total_ttc_cents).filter(Order.status.in_(_PAID_STATUSES)), 0
+    ).desc(),
+    "orders": func.count(Order.id).filter(Order.status.in_(_PAID_STATUSES)).desc(),
+    "last_order": func.max(Order.created_at).desc().nullslast(),
+    "name": User.last_name.asc().nullslast(),
+}
+
+
+@router.get("/customers", response_model=list[AdminCustomer])
+async def list_customers(
+    q: str | None = Query(None, description="Recherche : email, nom, société"),
+    account_type: str | None = Query(None, description="particulier | pro"),
+    sort: str = Query("recent", description=" | ".join(_CUSTOMER_SORTS)),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Liste des clients avec leurs agrégats de commandes.
+
+    Les comptes effacés au titre du RGPD sont exclus : l'anonymisation
+    leur laisse un email factice et plus aucune donnée exploitable, les
+    lister n'apporterait que du bruit.
+    """
+    if sort not in _CUSTOMER_SORTS:
+        raise HTTPException(422, f"Tri inconnu : {sort}")
+
+    orders_count = func.count(Order.id).filter(
+        Order.status.in_(_PAID_STATUSES)
+    ).label("orders_count")
+    revenue = func.coalesce(
+        func.sum(Order.total_ttc_cents).filter(Order.status.in_(_PAID_STATUSES)), 0
+    ).label("revenue")
+
+    stmt = (
+        select(
+            User,
+            ProProfile.company_name,
+            orders_count,
+            revenue,
+            func.max(Order.created_at).label("last_order_at"),
+        )
+        # outerjoin : un client sans commande doit apparaître, avec des
+        # compteurs à zéro. Un inner join les ferait disparaître.
+        .outerjoin(Order, Order.user_id == User.id)
+        .outerjoin(ProProfile, ProProfile.user_id == User.id)
+        .where(User.email.notlike("deleted-%@anonymized.%"))
+        .group_by(User.id, ProProfile.company_name)
+        .order_by(_CUSTOMER_SORTS[sort])
+    )
+
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(
+            User.email.ilike(pattern)
+            | User.first_name.ilike(pattern)
+            | User.last_name.ilike(pattern)
+            | ProProfile.company_name.ilike(pattern)
+        )
+    if account_type:
+        try:
+            stmt = stmt.where(User.account_type == AccountType(account_type))
+        except ValueError:
+            raise HTTPException(
+                422, f"Type de compte inconnu : {account_type}"
+            ) from None
+
+    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+
+    return [
+        AdminCustomer(
+            id=u.id,
+            email=u.email,
+            name=" ".join(filter(None, [u.first_name, u.last_name])) or None,
+            phone=u.phone,
+            account_type=u.account_type.value,
+            role=u.role.value,
+            company_name=company,
+            email_verified=u.email_verified,
+            created_at=u.created_at,
+            orders_count=count or 0,
+            revenue_ttc=(rev or 0) / 100,
+            last_order_at=last,
+        )
+        for u, company, count, rev, last in (await db.execute(stmt)).all()
+    ]
 
 
 # ── Codes promo ────────────────────────────────────────────────────

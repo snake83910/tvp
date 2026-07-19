@@ -272,3 +272,26 @@ class AdminStats(BaseModel):
     # Comparatif période précédente (jours -30..-60)
     revenue_prev30_ttc: float = 0.0
     orders_prev30: int = 0
+
+
+class AdminCustomer(BaseModel):
+    """Ligne de la liste clients (admin).
+
+    Les agrégats portent sur les commandes RÉELLEMENT payées (paid,
+    sent_to_supplier, shipped, delivered) : même définition du chiffre
+    d'affaires que /admin/stats, pour que les deux écrans concordent.
+    last_order_at, lui, couvre tous les statuts — un panier en attente
+    de paiement reste un signe d'activité utile à voir.
+    """
+    id: uuid.UUID
+    email: str
+    name: str | None = None
+    phone: str | None = None
+    account_type: str
+    role: str
+    company_name: str | None = None
+    email_verified: bool
+    created_at: datetime
+    orders_count: int = 0
+    revenue_ttc: float = 0.0
+    last_order_at: datetime | None = None
