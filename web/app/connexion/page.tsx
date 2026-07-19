@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { AuthTabs } from "@/components/AuthTabs";
 import { PasswordField } from "@/components/PasswordField";
 import { auth } from "@/lib/auth";
 
@@ -49,16 +50,11 @@ function LoginForm() {
 
   return (
     <main className="mx-auto max-w-md px-6 py-16">
-      <h1 className="font-display text-3xl font-black tracking-tightest text-ink">
-        Connexion
-      </h1>
-      <p className="mt-2 text-sm text-ink-muted">
-        Accédez à vos commandes et adresses.
-      </p>
-
+      <div className="overflow-hidden rounded-2xl border border-line bg-paper shadow-card">
+        <AuthTabs active="login" />
       <form
         onSubmit={submit}
-        className="mt-8 space-y-5 rounded-2xl border border-line bg-paper p-6 shadow-card"
+        className="space-y-5 p-6 md:p-8"
       >
         {error && (
           <p className="rounded-lg bg-signal-light px-4 py-3 text-sm font-medium text-signal-dark">
@@ -86,6 +82,7 @@ function LoginForm() {
           {busy ? "Connexion…" : "Se connecter"}
         </button>
       </form>
+      </div>
 
       <p className="mt-6 text-center text-sm text-ink-muted">
         Pas encore de compte ?{" "}

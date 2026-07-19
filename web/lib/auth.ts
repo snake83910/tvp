@@ -261,12 +261,18 @@ export const auth = {
     first_name?: string;
     last_name?: string;
     phone?: string;
+    account_type?: "particulier" | "pro";
+    pro?: {
+      company_name: string;
+      siret?: string | null;
+      vat_number?: string | null;
+    } | null;
   }) =>
     call("/auth/register", "POST", {
-      ...data,
       account_type: "particulier",
+      ...data,
     }),
-    
+
 
   login: async (email: string, password: string) => {
     const r = await call<{
