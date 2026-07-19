@@ -5,7 +5,29 @@ extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N"]
-ignore = ["E501"]  # line too long — Pydantic/SQLAlchemy ont des lignes longues
+ignore = [
+    "E501",   # line too long — Pydantic/SQLAlchemy ont des lignes longues
+    # UP042 : convertir (str, Enum) en StrEnum changerait le résultat de
+    # str() sur les membres. Ces enums sont persistés en base et sérialisés
+    # en JSON : la migration n'est pas cosmétique, elle se ferait à part.
+    "UP042",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 interdit les appels de fonction en argument par défaut. Chez
+# FastAPI, `db: Session = Depends(get_db)` EST le motif imposé par le
+# framework : 109 des faux positifs venaient de là.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Security",
+]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -4,7 +4,6 @@ from pydantic import ValidationError
 
 from app.schemas.auth import AddressIn, ProInfo, _validate_siret_luhn
 
-
 # ── SIRET (Luhn) ──────────────────────────────────────────────────
 
 def test_siret_luhn_valid():

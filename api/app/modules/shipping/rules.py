@@ -30,8 +30,8 @@ Cas concrets :
 
 Frais de port = service en France métropolitaine -> TVA 20 %.
 """
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 # Montants en centimes (jamais de float pour l'argent)
 CATEGORY_FLAT_HT_CENTS: dict[str, int] = {

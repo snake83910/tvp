@@ -23,7 +23,7 @@ def test_zr():
     assert d.diameter == 17 and d.speed_rating == "Y"
 
 
-def test_utilitaire_C_garde_charge_et_vitesse():
+def test_utilitaire_c_garde_charge_et_vitesse():
     # Bug trouvé en test : le C cassait charge/vitesse. Doit rester corrigé.
     d = parse_dimension("235/65 R16C 115/113R")
     assert d.width == 235 and d.diameter == 16

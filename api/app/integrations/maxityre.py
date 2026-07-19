@@ -12,6 +12,7 @@ Le jour où l'API dropship officielle est disponible : créer une 2e classe
 implémentant SupplierConnector et changer le connecteur actif. Rien d'autre
 ne bouge.
 """
+import logging
 import time
 
 import httpx
@@ -205,6 +206,14 @@ class MaxityreConnector(SupplierConnector):
                 last_exc = exc
             if attempt < 2:
                 await _asyncio.sleep(0.5 * (attempt + 1))
+        # Les 3 tentatives ont échoué. On renvoie un résultat vide plutôt
+        # que de propager (la recherche ne doit pas casser la page), mais
+        # la cause était jusqu'ici perdue : sans trace, une panne
+        # fournisseur ressemblait à « aucun pneu trouvé ».
+        if last_exc is not None:
+            logging.getLogger(__name__).warning(
+                "Maxityre injoignable après 3 tentatives : %r", last_exc
+            )
         return {}
 
     async def search_by_dimension(

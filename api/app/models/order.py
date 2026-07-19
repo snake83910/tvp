@@ -16,7 +16,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 
-
 # --------------------------------------------------------------------------
 #  Machine à états de commande
 # --------------------------------------------------------------------------
@@ -55,13 +54,13 @@ ALLOWED_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
 }
 
 
-class InvalidTransition(Exception):
+class InvalidTransitionError(Exception):
     """Levée si on tente une transition d'état non autorisée."""
 
 
 def assert_transition(current: OrderStatus, target: OrderStatus) -> None:
     if target not in ALLOWED_TRANSITIONS.get(current, set()):
-        raise InvalidTransition(
+        raise InvalidTransitionError(
             f"Transition interdite : {current.value} -> {target.value}"
         )
 

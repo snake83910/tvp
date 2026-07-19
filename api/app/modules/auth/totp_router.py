@@ -18,11 +18,11 @@ from typing import Annotated
 import pyotp
 import qrcode
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/auth/2fa", tags=["auth"])
 
@@ -90,8 +90,9 @@ async def disable_totp(
 
     # Vérifier le reauth_token (preuve qu'on vient de saisir le mdp)
     reauth = payload.get("reauth_token") or ""
-    from app.core.security import decode_token
     from jose import JWTError
+
+    from app.core.security import decode_token
     try:
         rt_payload = decode_token(reauth)
         if rt_payload.get("type") != "reauth" or rt_payload.get("sub") != str(user.id):
@@ -100,7 +101,7 @@ async def disable_totp(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Veuillez re-saisir votre mot de passe via /auth/reauth",
-        )
+        ) from None
 
     code = (payload.get("code") or "").strip()
     if not pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
@@ -130,6 +131,7 @@ async def regenerate_backup_codes(
     """
     import secrets
     import string
+
     import bcrypt
 
     if not user.totp_enabled:

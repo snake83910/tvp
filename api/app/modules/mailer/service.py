@@ -17,6 +17,7 @@ réponse HTTP. Un email qui rate = log, jamais une commande qui plante.
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 from app.core.config import settings
 from app.models.order import Order
@@ -94,7 +95,7 @@ def send_password_reset(user: User, token: str) -> None:
 def send_login_alert(user: User, ip: str | None, user_agent: str | None) -> None:
     """Email d'alerte de connexion admin."""
     mailer = get_mailer()
-    from datetime import datetime, timezone as _tz
+    from datetime import datetime
     fire_and_forget(
         mailer.send_template(
             to=user.email,
@@ -102,7 +103,7 @@ def send_login_alert(user: User, ip: str | None, user_agent: str | None) -> None
             template="login_alert.html",
             civilite=_civilite(user),
             site_url=_site_url(),
-            login_time=datetime.now(_tz.utc).strftime("%d/%m/%Y à %H:%M UTC"),
+            login_time=datetime.now(UTC).strftime("%d/%m/%Y à %H:%M UTC"),
             login_ip=ip or "inconnue",
             login_ua=(user_agent or "inconnu")[:120],
         )

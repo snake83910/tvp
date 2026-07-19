@@ -3,7 +3,6 @@ import uuid
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
@@ -33,7 +32,7 @@ async def get_current_user(
         # ValueError : sub non-UUID -> 401, pas 500
         uid = uuid.UUID(user_id)
     except (JWTError, ValueError):
-        raise _credentials_exc
+        raise _credentials_exc from None
 
     user = await db.get(User, uid)
     if user is None or not user.is_active:
@@ -80,7 +79,7 @@ async def get_current_user_optional(
             raise _credentials_exc
         uid = uuid.UUID(user_id)
     except (JWTError, ValueError):
-        raise _credentials_exc
+        raise _credentials_exc from None
     user = await db.get(User, uid)
     if user is None or not user.is_active:
         raise _credentials_exc

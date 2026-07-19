@@ -5,7 +5,7 @@ Utilisée à deux endroits :
 - checkout : re-validation faisant foi au moment de créer la commande
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +50,7 @@ async def validate_promo(
     if promo is None or not promo.is_active:
         raise ValueError("Code promo invalide")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if promo.valid_from and now < promo.valid_from:
         raise ValueError("Ce code promo n'est pas encore actif")
     if promo.valid_until and now > promo.valid_until:

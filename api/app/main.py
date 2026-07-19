@@ -1,7 +1,7 @@
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +17,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
@@ -65,16 +65,21 @@ def _setup_sentry() -> None:
 _setup_sentry()
 
 
-from contextlib import asynccontextmanager
+# ruff: E402 assumé sur ce bloc. Sentry doit être initialisé AVANT que les
+# modules applicatifs ne soient importés, sinon son instrumentation ne
+# s'accroche pas aux bibliothèques déjà chargées. Remonter ces imports en
+# tête du fichier désactiverait silencieusement le monitoring.
+from contextlib import asynccontextmanager  # noqa: E402
 
-from app.modules.accounts.router import router as accounts_router
-from app.modules.admin.router import router as admin_router
-from app.modules.auth.router import router as auth_router
-from app.modules.auth.totp_router import router as totp_router
-from app.modules.cart.router import router as cart_router
-from app.modules.catalog.router import router as catalog_router
-from app.modules.cron.router import router as cron_router
-from app.modules.orders.payment_router import router as payment_router
+from app.modules.accounts.router import router as accounts_router  # noqa: E402
+from app.modules.admin.router import router as admin_router  # noqa: E402
+from app.modules.auth.router import router as auth_router  # noqa: E402
+from app.modules.auth.totp_router import router as totp_router  # noqa: E402
+from app.modules.cart.router import router as cart_router  # noqa: E402
+from app.modules.catalog.router import router as catalog_router  # noqa: E402
+from app.modules.cron.router import router as cron_router  # noqa: E402
+from app.modules.orders.payment_router import router as payment_router  # noqa: E402
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):

@@ -18,7 +18,7 @@ import asyncio
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -438,7 +438,10 @@ async def checkout(
     results = await asyncio.gather(
         *[_connector.search_by_dimension(w, r, d, c) for w, r, d, c in dims]
     )
-    tyres_by_dim = dict(zip(dims, results))
+    # strict=True : gather() rend exactement une entrée par dimension. Si
+    # ce n'était plus vrai, un zip silencieux tronquerait la revalidation
+    # et laisserait passer un prix non revérifié.
+    tyres_by_dim = dict(zip(dims, results, strict=True))
 
     for it in cart.items:
         pd = it.product_data
@@ -574,7 +577,7 @@ async def checkout(
     total_ttc = articles_ttc - discount_ttc + ship.ttc_cents
 
     n = (await db.execute(text("SELECT nextval('order_number_seq')"))).scalar()
-    year = datetime.now(timezone.utc).year
+    year = datetime.now(UTC).year
     order = Order(
         order_number=f"CMD-{year}-{n:06d}",
         user_id=user.id,

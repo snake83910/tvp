@@ -5,6 +5,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import get_redis
 from app.core.deps import get_current_user
 from app.core.rate_limit import rate_limit
 from app.core.security import (
@@ -14,10 +15,8 @@ from app.core.security import (
     decode_token,
     hash_password,
 )
-from app.models.user import UserRole
 from app.db.session import get_db
-from app.models.user import User
-from app.core.cache import get_redis
+from app.models.user import User, UserRole
 from app.modules.auth.service import (
     authenticate,
     issue_token_pair,
@@ -132,7 +131,7 @@ async def reset_password(
     try:
         payload = decode_token(data.token)
     except JWTError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide") from None
     if payload.get("type") != "password_reset":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
 
@@ -179,7 +178,7 @@ async def verify_email(
     try:
         payload = decode_token(data.token)
     except JWTError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide") from None
     if payload.get("type") != "email_verify":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
 
@@ -246,7 +245,7 @@ async def admin_verify_2fa(
     try:
         payload = decode_token(data.pre_2fa_token)
     except JWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expirée, recommencez")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expirée, recommencez") from None
     if payload.get("type") != "pre_2fa":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
 
@@ -303,7 +302,7 @@ def _check_reauth_token(token: str, user_id: str) -> None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Confirmation expirée, re-saisissez votre mot de passe",
-        )
+        ) from None
     if payload.get("type") != "reauth" or payload.get("sub") != user_id:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Confirmation invalide")
 
@@ -341,7 +340,7 @@ async def confirm_email_change(
     try:
         data = decode_token(payload.token)
     except JWTError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide ou expiré")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide ou expiré") from None
     if data.get("type") != "email_change":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
     user = await db.get(User, uuid.UUID(data["sub"]))

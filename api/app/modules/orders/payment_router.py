@@ -11,17 +11,17 @@ re-déclencher la transmission fournisseur.
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
 from sqlalchemy import select, text
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.config import settings
+from sqlalchemy.orm import selectinload
 
-from app.db.session import get_db
+from app.core.config import settings
 from app.core.deps import get_current_user
+from app.db.session import get_db
 from app.integrations.payment import get_payment_provider
 from app.models.order import Order, OrderStatus, Payment
 from app.models.user import User
@@ -138,7 +138,7 @@ async def payment_ipn(
         payment.status = "captured"
         if order.status == OrderStatus.pending_payment:
             order.transition_to(OrderStatus.paid)
-            order.paid_at = datetime.now(timezone.utc)
+            order.paid_at = datetime.now(UTC)
             order.invoice_number = (await db.execute(text("SELECT nextval('invoice_number_seq')"))).scalar()
             newly_paid = True
         # NOTE phase suivante : déclencher ici la transmission fournisseur
@@ -202,7 +202,7 @@ async def simulate_payment(
     payment.ipn_signature_ok = True
     payment.ipn_payload = {"simulated": True}
     order.transition_to(OrderStatus.paid)
-    order.paid_at = datetime.now(timezone.utc)
+    order.paid_at = datetime.now(UTC)
     order.invoice_number = (await db.execute(text("SELECT nextval('invoice_number_seq')"))).scalar()
     await db.commit()
 
@@ -289,7 +289,7 @@ async def sync_payment(
     payment.ipn_signature_ok = True
     payment.ipn_payload = answer
     order.transition_to(OrderStatus.paid)
-    order.paid_at = datetime.now(timezone.utc)
+    order.paid_at = datetime.now(UTC)
     order.invoice_number = (
         await db.execute(text("SELECT nextval('invoice_number_seq')"))
     ).scalar()
@@ -335,7 +335,7 @@ async def verify_kr_answer(
     try:
         answer = json.loads(kr_answer)
     except (ValueError, TypeError):
-        raise HTTPException(status_code=400, detail="kr-answer malformé")
+        raise HTTPException(status_code=400, detail="kr-answer malformé") from None
 
     order = await db.scalar(
         select(Order).where(Order.order_number == order_number)
@@ -402,7 +402,7 @@ async def verify_kr_answer(
     payment.ipn_signature_ok = True
     payment.ipn_payload = answer
     order.transition_to(OrderStatus.paid)
-    order.paid_at = datetime.now(timezone.utc)
+    order.paid_at = datetime.now(UTC)
     order.invoice_number = (
         await db.execute(text("SELECT nextval('invoice_number_seq')"))
     ).scalar()

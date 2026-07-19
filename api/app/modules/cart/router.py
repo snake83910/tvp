@@ -90,7 +90,7 @@ async def add_item(
             data.diameter, data.quantity, data.category,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     return _serialize(cart)
 
 
@@ -130,7 +130,7 @@ async def update_item(
             db, user, x_cart_session, item_id, data.quantity
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     return _serialize(cart)
 
 
@@ -146,7 +146,7 @@ async def delete_item(
             db, user, x_cart_session, item_id
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     return _serialize(cart)
 
 
@@ -231,7 +231,7 @@ async def checkout(
             billing_address_id=data.billing_address_id,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
  
     if order is None:
         # Prix modifiés : commande non créée, on renvoie les écarts

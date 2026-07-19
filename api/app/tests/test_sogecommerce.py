@@ -12,7 +12,6 @@ HMAC-SHA256 (kr-hash-key=sha256_hmac).
 import hashlib
 import hmac
 import json
-import os
 
 import pytest
 

@@ -6,12 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.order import Order
-from app.schemas.order import OrderDetail, OrderItemDetail, OrderSummary
 from app.core.deps import get_current_user
 from app.db.session import get_db
+from app.models.order import Order
 from app.models.user import Address, User
 from app.schemas.auth import AddressIn, AddressOut, UserOut
+from app.schemas.order import OrderDetail, OrderItemDetail, OrderSummary
 
 router = APIRouter(prefix="/me", tags=["account"])
 
@@ -367,8 +367,9 @@ async def delete_account(
     db: AsyncSession = Depends(get_db),
 ):
     # Re-auth : exige un token frais (obtenu via POST /auth/reauth)
-    from app.core.security import decode_token
     from jose import JWTError
+
+    from app.core.security import decode_token
     reauth = (payload or {}).get("reauth_token") or ""
     try:
         rt = decode_token(reauth)
@@ -378,14 +379,13 @@ async def delete_account(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Veuillez re-saisir votre mot de passe via /auth/reauth",
-        )
+        ) from None
     """Droit à l'effacement (RGPD art. 17).
 
     On anonymise plutôt que supprimer : les commandes/factures doivent
     être conservées 10 ans (obligation comptable). On supprime ce qui
     est strictement personnel et on rend le compte inutilisable.
     """
-    from datetime import datetime, timezone
     anon_email = f"deleted-{user.id}@anonymized.tousvospneus.com"
     user.email = anon_email
     user.password_hash = "DELETED"

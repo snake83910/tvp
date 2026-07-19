@@ -6,10 +6,9 @@ l'API en a souvent >1500. Ce test garantit que TOUTES les pages sont
 récupérées. Format réel constaté : details.nbResults / details.limit.
 """
 import asyncio
+from unittest.mock import patch
 
 import httpx
-import pytest
-from unittest.mock import patch
 
 from app.integrations.maxityre import MaxityreConnector
 

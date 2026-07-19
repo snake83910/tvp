@@ -8,7 +8,7 @@ Exemple crontab sur le VPS :
     0 * * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
         https://tousvospneus.com/api/cron/dunning >/dev/null
 """
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
@@ -47,11 +47,11 @@ async def dunning(
     - 1ère relance : commandes créées il y a 1h et toujours pending_payment
     - Abandon : commandes > 7j en pending_payment passent en cancelled
     """
-    from app.modules.mailer.service import send_order_cancelled
     from app.modules.mailer import get_mailer
     from app.modules.mailer.base import fire_and_forget
+    from app.modules.mailer.service import send_order_cancelled
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     threshold_relance = now - timedelta(hours=1)
     threshold_abandon = now - timedelta(days=7)
 

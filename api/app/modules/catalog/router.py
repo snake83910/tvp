@@ -18,13 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_get, cache_set
-from app.core.config import settings
 from app.core.deps import get_current_user_optional
-from app.integrations.supplier_base import VEHICLE_CATEGORIES
 from app.db.session import get_db
+from app.integrations.supplier_base import VEHICLE_CATEGORIES
 from app.models.catalog import PricingRule
 from app.models.user import ProProfile, User
-from app.modules.catalog.service import connector as _connector
 from app.modules.catalog.service import (
     load_detail as _load_detail,
 )
@@ -267,7 +265,7 @@ async def search_by_plate(
     except Exception as exc:
         raise HTTPException(
             status_code=502, detail=f"Service immatriculation indisponible : {exc}"
-        )
+        ) from exc
 
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Plaque non trouvée")

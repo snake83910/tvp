@@ -1,6 +1,6 @@
 """Tests de la validation des codes promo (DB mockée)."""
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -58,7 +58,7 @@ async def test_code_inactif_refuse():
 
 
 async def test_code_expire_refuse():
-    promo = _promo(valid_until=datetime.now(timezone.utc) - timedelta(days=1))
+    promo = _promo(valid_until=datetime.now(UTC) - timedelta(days=1))
     with pytest.raises(ValueError, match="expiré"):
         await validate_promo(_db(promo), "PROMO10", uuid.uuid4(), 10000)
 

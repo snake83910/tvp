@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
@@ -84,7 +84,7 @@ async def register_user(db: AsyncSession, data: RegisterIn) -> User:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Un compte existe déjà avec cet email",
-        )
+        ) from None
     await db.refresh(user)
     return user
 
@@ -101,7 +101,7 @@ async def authenticate(
     user = await db.scalar(select(User).where(User.email == email_norm))
 
     # Lockout : si bloqué, refuser même si le password est bon
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if user and user.locked_until and user.locked_until > now:
         db.add(LoginLog(user_id=user.id, email=email_norm, success=False,
                          reason="locked", ip=ip, user_agent=ua))
@@ -168,7 +168,7 @@ async def issue_token_pair(
     db.add(RefreshToken(
         user_id=user.id,
         token_hash=_hash_token(refresh_jwt),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days),
+        expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days),
         ip=ip,
     ))
     await db.commit()
@@ -186,7 +186,7 @@ async def revoke_all_refresh_tokens(db: AsyncSession, user_id) -> None:
     await db.execute(
         RefreshToken.__table__.update()
         .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(timezone.utc))
+        .values(revoked_at=datetime.now(UTC))
     )
 
 
@@ -199,13 +199,14 @@ async def rotate_refresh_token(
     REUTILISATION suspecte : on révoque toute la chaîne pour ce user.
     """
     import uuid
+
     from jose import JWTError
 
     from app.core.security import decode_token
     try:
         payload = decode_token(presented_refresh)
     except JWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide") from None
     if payload.get("type") != "refresh":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
 
@@ -215,7 +216,7 @@ async def rotate_refresh_token(
         # Token jamais émis ou ancien — refuse
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token inconnu")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if rt.expires_at <= now:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token expiré")
 
@@ -235,7 +236,7 @@ async def rotate_refresh_token(
     try:
         uid = uuid.UUID(payload["sub"])
     except (KeyError, ValueError):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide") from None
     user = await db.get(User, uid)
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Compte invalide")

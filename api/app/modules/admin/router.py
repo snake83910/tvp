@@ -8,15 +8,13 @@ Endpoints :
   PATCH /admin/orders/{order_number}/status Changement de statut + email auto
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from fastapi import Request
 
 from app.core.audit import audit
 from app.core.deps import get_db, require_role
@@ -134,7 +132,7 @@ async def get_stats(
         select(func.sum(Order.total_ttc_cents)).where(Order.status.in_(paid_statuses))
     )
 
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     today_row = await db.execute(
         select(func.count(Order.id), func.sum(Order.total_ttc_cents))
         .where(Order.created_at >= today, Order.status.in_(paid_statuses))
@@ -221,7 +219,9 @@ async def export_orders_csv(
     """Export CSV des commandes pour la comptabilité."""
     import csv
     import io
-    from datetime import date as _date, datetime as _dt, timedelta, timezone
+    from datetime import date as _date
+    from datetime import datetime as _dt
+    from datetime import timedelta
 
     stmt = (
         select(Order)
@@ -230,11 +230,11 @@ async def export_orders_csv(
     )
     if from_date:
         # Début de journée UTC
-        start = _dt.combine(_date.fromisoformat(from_date), _dt.min.time(), tzinfo=timezone.utc)
+        start = _dt.combine(_date.fromisoformat(from_date), _dt.min.time(), tzinfo=UTC)
         stmt = stmt.where(Order.created_at >= start)
     if to_date:
         # Fin de journée inclusive = début du jour suivant en UTC
-        end = _dt.combine(_date.fromisoformat(to_date) + timedelta(days=1), _dt.min.time(), tzinfo=timezone.utc)
+        end = _dt.combine(_date.fromisoformat(to_date) + timedelta(days=1), _dt.min.time(), tzinfo=UTC)
         stmt = stmt.where(Order.created_at < end)
 
     orders = list(await db.scalars(stmt))
@@ -295,7 +295,9 @@ async def list_orders(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_admin),
 ):
-    from datetime import date as _date, datetime as _dt, timedelta, timezone as _tz
+    from datetime import date as _date
+    from datetime import datetime as _dt
+    from datetime import timedelta
 
     stmt = (
         select(Order, User)
@@ -307,17 +309,17 @@ async def list_orders(
         try:
             stmt = stmt.where(Order.status == OrderStatus(status))
         except ValueError:
-            raise HTTPException(status_code=422, detail=f"Statut inconnu : {status}")
+            raise HTTPException(status_code=422, detail=f"Statut inconnu : {status}") from None
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(
             Order.order_number.ilike(pattern) | User.email.ilike(pattern)
         )
     if from_date:
-        start = _dt.combine(_date.fromisoformat(from_date), _dt.min.time(), tzinfo=_tz.utc)
+        start = _dt.combine(_date.fromisoformat(from_date), _dt.min.time(), tzinfo=UTC)
         stmt = stmt.where(Order.created_at >= start)
     if to_date:
-        end = _dt.combine(_date.fromisoformat(to_date) + timedelta(days=1), _dt.min.time(), tzinfo=_tz.utc)
+        end = _dt.combine(_date.fromisoformat(to_date) + timedelta(days=1), _dt.min.time(), tzinfo=UTC)
         stmt = stmt.where(Order.created_at < end)
     if min_amount is not None:
         stmt = stmt.where(Order.total_ttc_cents >= int(min_amount * 100))
@@ -400,14 +402,14 @@ async def update_status(
     try:
         target = OrderStatus(data.status)
     except ValueError:
-        raise HTTPException(status_code=422, detail=f"Statut inconnu : {data.status}")
+        raise HTTPException(status_code=422, detail=f"Statut inconnu : {data.status}") from None
 
     previous_status = order.status.value
 
     try:
         order.transition_to(target)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if target == OrderStatus.shipped:
         order.tracking_number = data.tracking_number or order.tracking_number
@@ -501,8 +503,9 @@ async def orders_attention(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_admin),
 ):
-    from datetime import datetime as _dt, timedelta, timezone as _tz
-    now = _dt.now(_tz.utc)
+    from datetime import datetime as _dt
+    from datetime import timedelta
+    now = _dt.now(UTC)
 
     # À expédier : paid (paiement OK, pas encore envoyé fournisseur)
     to_ship_rows = (await db.execute(
@@ -555,10 +558,13 @@ async def stats_sparkline(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_admin),
 ):
-    from datetime import datetime as _dt, timedelta, timezone as _tz
-    from sqlalchemy import cast, Date as _Date
+    from datetime import datetime as _dt
+    from datetime import timedelta
 
-    now = _dt.now(_tz.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    from sqlalchemy import Date as _Date
+    from sqlalchemy import cast
+
+    now = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     start = now - timedelta(days=29)
 
     paid = [

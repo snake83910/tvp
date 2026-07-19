@@ -7,7 +7,7 @@ Garantie critique : une commande ne peut JAMAIS sauter d'état
 import pytest
 
 from app.models.order import (
-    InvalidTransition,
+    InvalidTransitionError,
     OrderStatus,
     assert_transition,
 )
@@ -23,20 +23,20 @@ def test_transitions_valides():
 
 def test_saut_etat_interdit():
     # Expédier sans payer : interdit
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(InvalidTransitionError):
         assert_transition(OrderStatus.pending_payment, OrderStatus.shipped)
     # Tout sauter depuis le panier : interdit
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(InvalidTransitionError):
         assert_transition(OrderStatus.cart, OrderStatus.delivered)
 
 
 def test_retour_arriere_interdit():
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(InvalidTransitionError):
         assert_transition(OrderStatus.delivered, OrderStatus.paid)
 
 
 def test_etats_terminaux():
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(InvalidTransitionError):
         assert_transition(OrderStatus.cancelled, OrderStatus.paid)
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(InvalidTransitionError):
         assert_transition(OrderStatus.refunded, OrderStatus.shipped)
