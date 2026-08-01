@@ -38,14 +38,14 @@ export function PriceComparator({
 
       <ul className="mt-4 space-y-2">
         {/* Notre prix, mis en avant en tête de liste */}
-        <li className="flex items-center justify-between rounded-xl border-2 border-ok bg-ok/5 px-4 py-3">
-          <span className="flex items-center gap-2 text-sm font-bold text-ink">
-            <span className="inline-flex items-center rounded-full bg-ok px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+        <li className="flex items-center justify-between gap-3 rounded-xl border-2 border-ok bg-ok/5 px-3 py-3 sm:px-4">
+          <span className="flex min-w-0 items-center gap-2 text-sm font-bold text-ink">
+            <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-ok px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
               Notre prix
             </span>
-            tousvospneus.com
+            <span className="hidden min-w-0 break-all sm:inline">tousvospneus.com</span>
           </span>
-          <span className="font-display text-lg font-black text-ink">
+          <span className="shrink-0 font-display text-lg font-black text-ink">
             {formatEuro(ourPriceTtc)}
           </span>
         </li>
@@ -55,12 +55,12 @@ export function PriceComparator({
           return (
             <li
               key={`${m.host}-${m.price}`}
-              className="flex items-center justify-between rounded-xl border border-line px-4 py-3"
+              className="flex items-center justify-between gap-3 rounded-xl border border-line px-3 py-3 sm:px-4"
             >
-              <span className="text-sm text-ink-soft">
+              <span className="min-w-0 break-all text-sm text-ink-soft">
                 {cleanHost(m.host)}
               </span>
-              <span className="flex items-baseline gap-3">
+              <span className="flex shrink-0 items-baseline gap-2 sm:gap-3 whitespace-nowrap">
                 <span className="text-xs font-semibold text-signal">
                   +{formatEuro(saving)}
                 </span>
