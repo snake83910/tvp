@@ -8,6 +8,7 @@ import {
   type TyreResult,
 } from "@/lib/api";
 import { useCart } from "@/components/CartProvider";
+import { useCompare } from "@/components/CompareProvider";
 import { TyreImage } from "@/components/TyreImage";
 import { BrandLogo } from "@/components/BrandLogo";
 import { TierBadge } from "@/components/TierBadge";
@@ -50,6 +51,9 @@ function GradeDot({ label, value, title }: { label: string; value: unknown; titl
 
 export function TyreCard({ tyre }: { tyre: TyreResult }) {
   const { add } = useCart();
+  const compare = useCompare();
+  const compared = compare.isSelected(tyre.supplier_ref);
+  const compareFull = !compared && compare.count >= compare.max;
   // Quantité par défaut selon la famille (moto : 1, sinon 2 par essieu)
   const DEFAULT_QTY = defaultQty(tyre.category);
   // Quantité bornée au stock fournisseur : « 1 restant » ne doit pas
@@ -116,13 +120,35 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
 
   return (
     <article className="flex flex-col rounded-xl border border-line bg-paper p-5 shadow-card transition hover:border-signal hover:shadow-lift">
-      <Link href={detailHref} className="mb-4 block">
-        <TyreImage
-          src={tyre.image_url}
-          alt={`${tyre.brand} ${tyre.model} ${tyre.dimension}`}
-          className="h-40 w-full rounded-lg"
-        />
-      </Link>
+      <div className="relative mb-4">
+        <Link href={detailHref} className="block">
+          <TyreImage
+            src={tyre.image_url}
+            alt={`${tyre.brand} ${tyre.model} ${tyre.dimension}`}
+            className="h-40 w-full rounded-lg"
+          />
+        </Link>
+        <button
+          type="button"
+          onClick={() => compare.toggle(tyre)}
+          disabled={compareFull}
+          aria-pressed={compared}
+          className={`absolute left-2 top-2 rounded-full border px-2.5 py-1 text-[11px] font-bold transition ${
+            compared
+              ? "border-signal bg-signal text-white"
+              : "border-line bg-paper/90 text-ink-soft hover:border-signal hover:text-signal disabled:cursor-not-allowed disabled:opacity-40"
+          }`}
+          title={
+            compareFull
+              ? "Comparateur plein (3 pneus maximum)"
+              : compared
+                ? "Retirer du comparateur"
+                : "Ajouter au comparateur"
+          }
+        >
+          {compared ? "✓ Comparé" : "⇄ Comparer"}
+        </button>
+      </div>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-1 h-6">

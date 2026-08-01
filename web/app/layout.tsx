@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
 import { CartProvider } from "@/components/CartProvider";
+import { CompareProvider } from "@/components/CompareProvider";
+import { CompareBar } from "@/components/CompareBar";
 import { CookieBanner } from "@/components/CookieBanner";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ConditionalFooter } from "@/components/ConditionalFooter";
@@ -39,8 +41,11 @@ export default function RootLayout({
           Aller au contenu principal
         </a>
         <CartProvider>
-          <div id="main-content">{children}</div>
-          <ConditionalFooter />
+          <CompareProvider>
+            <div id="main-content">{children}</div>
+            <ConditionalFooter />
+            <CompareBar />
+          </CompareProvider>
         </CartProvider>
         <CookieBanner />
         <ScrollToTop />
