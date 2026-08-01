@@ -6,6 +6,7 @@ import { EprelLabel } from "@/components/EprelLabel";
 import { TyreBadges } from "@/components/TyreBadges";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PriceComparator } from "@/components/PriceComparator";
 import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
@@ -167,6 +168,11 @@ export function TyreDetail({
 
               <ProductActions tyre={tyre} />
             </div>
+
+            <PriceComparator
+              ourPriceTtc={tyre.price_ttc}
+              marketPrices={tyre.market_prices}
+            />
 
             <dl className="rounded-2xl border border-line bg-paper p-6 text-sm shadow-card">
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
