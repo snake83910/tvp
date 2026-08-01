@@ -30,6 +30,7 @@ export function SiteFooter() {
             Service client
           </p>
           <ul className="space-y-2 text-sm">
+            <li><Link href="/a-propos" className="text-ink-soft hover:text-signal">À propos de nous</Link></li>
             <li><Link href="/compte" className="text-ink-soft hover:text-signal">Mon compte</Link></li>
             <li><Link href="/cgv" className="text-ink-soft hover:text-signal">Conditions générales</Link></li>
             <li>

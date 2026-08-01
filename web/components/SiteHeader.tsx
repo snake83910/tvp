@@ -99,6 +99,7 @@ export function SiteHeader() {
               <Link onClick={() => setMobileOpen(false)} href={accountHref} className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">{accountLabel}</Link>
               <Link onClick={() => setMobileOpen(false)} href="/panier" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Panier ({count})</Link>
               <hr className="my-3 border-line" />
+              <Link onClick={() => setMobileOpen(false)} href="/a-propos" className="block px-3 py-1.5 text-xs text-ink-muted hover:text-signal">À propos</Link>
               <Link onClick={() => setMobileOpen(false)} href="/cgv" className="block px-3 py-1.5 text-xs text-ink-muted hover:text-signal">CGV</Link>
               <Link onClick={() => setMobileOpen(false)} href="/mentions-legales" className="block px-3 py-1.5 text-xs text-ink-muted hover:text-signal">Mentions légales</Link>
               <Link onClick={() => setMobileOpen(false)} href="/confidentialite" className="block px-3 py-1.5 text-xs text-ink-muted hover:text-signal">Confidentialité</Link>
