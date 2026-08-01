@@ -197,6 +197,13 @@ export function TyreDetail({
               {wet && <Row k="Adhérence sur sol mouillé" v={`Classe ${wet}`} />}
               {tyre.ean && <Row k="EAN" v={tyre.ean} />}
             </dl>
+
+            <p className="text-center text-sm text-ink-muted">
+              Besoin d&apos;aide pour choisir ?{" "}
+              <Link href="/guide" className="font-semibold text-signal hover:underline">
+                Consultez notre guide du pneu
+              </Link>
+            </p>
           </div>
         </div>
 
