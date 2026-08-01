@@ -90,6 +90,41 @@ export interface AdminOrderDetail extends OrderDetail {
   allowed_transitions: string[];
 }
 
+export interface Garage {
+  id: string;
+  name: string;
+  slug: string;
+  address: string;
+  postal_code: string;
+  city: string;
+  lat: number | null;
+  lng: number | null;
+  phone: string | null;
+  email: string | null;
+  description: string | null;
+  hours: Record<string, string>;
+  mounting_price_cents: number;
+  services: string[];
+  photo_url: string | null;
+  is_published: boolean;
+  owner_user_id: string | null;
+}
+
+export interface GaragePayload {
+  name: string;
+  address: string;
+  postal_code: string;
+  city: string;
+  phone?: string | null;
+  email?: string | null;
+  description?: string | null;
+  hours?: Record<string, string>;
+  mounting_price_cents?: number;
+  services?: string[];
+  photo_url?: string | null;
+  is_published?: boolean;
+}
+
 export async function downloadAdminInvoice(orderNumber: string): Promise<void> {
   const res = await authFetch(`/admin/orders/${orderNumber}/invoice`);
   if (!res.ok) throw new Error(invoiceError(res.status));
@@ -158,4 +193,13 @@ export const adminApi = {
 
   bulkEmail: (order_numbers: string[], subject: string, body: string) =>
     call<{ sent: number }>(`/admin/bulk-email`, "POST", { order_numbers, subject, body }),
+
+  listGarages: () => call<Garage[]>("/admin/garages"),
+  createGarage: (data: GaragePayload) => call<Garage>("/admin/garages", "POST", data),
+  updateGarage: (id: string, data: Partial<GaragePayload>) =>
+    call<Garage>(`/admin/garages/${id}`, "PATCH", data),
+  deleteGarage: async (id: string) => {
+    const res = await authFetch(`/admin/garages/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  },
 };

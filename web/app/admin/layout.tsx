@@ -15,6 +15,7 @@ const NAV = [
   { href: "/admin/clients", label: "Clients", icon: "👥" },
   { href: "/admin/kanban", label: "Kanban", icon: "▤" },
   { href: "/admin/promo", label: "Codes promo", icon: "🏷" },
+  { href: "/admin/garages", label: "Garages", icon: "🔧" },
   { href: "/admin/calendrier", label: "Calendrier", icon: "📅" },
   { href: "/admin/profil", label: "Mon profil", icon: "👤" },
   { href: "/admin/securite", label: "Sécurité 2FA", icon: "🔐" },

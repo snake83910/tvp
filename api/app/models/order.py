@@ -152,10 +152,16 @@ class Order(Base):
     # découpler de toute modification future côté compte) + mode.
     delivery_mode: Mapped[str] = mapped_column(
         String(20), default="home"
-    )  # home | partner_garage (à venir)
+    )  # home | partner_garage
     shipping_address: Mapped[dict] = mapped_column(
         JSONB, default=dict
     )
+    # Montage en garage partenaire : garage choisi + snapshot figé (nom,
+    # adresse) pour découpler des modifications ultérieures du garage.
+    garage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("garages.id", ondelete="SET NULL"), index=True
+    )
+    garage_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Facturation : adresse figée elle aussi. Toujours renseignée (recopie
     # de la livraison si le client n'en a pas choisi une distincte), pour
     # que la facture n'ait jamais à deviner.
