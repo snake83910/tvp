@@ -14,16 +14,17 @@ export default function ConfidentialitePage() {
           Politique de confidentialité
         </h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Dernière mise à jour : <strong>[date]</strong>
+          Dernière mise à jour : <strong>1er août 2026</strong>
         </p>
 
         <article className="mt-8 space-y-6 text-sm leading-relaxed text-ink-soft">
           <section>
             <h2 className="font-display text-lg font-bold text-ink">Responsable du traitement</h2>
             <p>
-              [À COMPLÉTER — raison sociale], dont le siège social est situé à [adresse],
-              est responsable du traitement des données personnelles collectées sur le site
-              tousvospneus.com.
+              TOUSVOSPNEUS.COM, société par actions simplifiée au capital de 500,00 €,
+              dont le siège social est situé au 35B Chemin des Beaumouilles, 13710 Fuveau
+              (R.C.S. Aix-en-Provence 977 671 965), est responsable du traitement des
+              données personnelles collectées sur le site tousvospneus.com.
             </p>
           </section>
 
