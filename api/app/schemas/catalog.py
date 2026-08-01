@@ -9,6 +9,15 @@ class VehicleDimension(BaseModel):
     speed_rating: str
 
 
+class MarketPrice(BaseModel):
+    """Relevé de prix chez un site concurrent (comparateur)."""
+
+    price: float          # prix TTC constaté chez le concurrent
+    host: str             # nom de domaine du concurrent
+    url: str | None = None
+    date: str | None = None  # ISO 8601 : date du relevé
+
+
 class TyreResult(BaseModel):
     supplier_ref: str
     brand: str
@@ -43,6 +52,8 @@ class TyreResult(BaseModel):
     is_studded: bool = False
     stock: int | None = None
     delivery_estimate: str | None = None
+    # Relevés de prix concurrents (comparateur fiche produit)
+    market_prices: list[MarketPrice] = []
 
 
 class SearchFacets(BaseModel):

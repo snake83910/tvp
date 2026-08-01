@@ -44,6 +44,9 @@ class SupplierTyre:
     is_studded: bool = False           # cloutable
     stock: int | None = None
     delivery_estimate: str | None = None  # ISO 8601
+    # Relevés de prix concurrents (comparateur). Liste de dicts JSON-sérialisables
+    # (le cache Redis stocke __dict__) : {price, host, url, date}.
+    market_prices: list[dict] = field(default_factory=list)
 
 
 class SupplierConnector(ABC):

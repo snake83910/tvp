@@ -97,6 +97,7 @@ def _to_priced_tyre(
         is_studded=raw.get("is_studded", False),
         stock=raw.get("stock"),
         delivery_estimate=raw.get("delivery_estimate"),
+        market_prices=raw.get("market_prices") or [],
         category=category,
     )
 

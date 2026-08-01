@@ -4,6 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
 import { EuLabel } from "@/components/EuLabel";
+import { PriceComparator } from "@/components/PriceComparator";
 import { api } from "@/lib/api";
 import { formatEuro } from "@/lib/money";
 
@@ -170,6 +171,11 @@ export default async function ProductPage({
                   </div>
                   <ProductActions tyre={tyre} />
                 </div>
+
+                <PriceComparator
+                  ourPriceTtc={tyre.price_ttc}
+                  marketPrices={tyre.market_prices}
+                />
 
                 <dl className="rounded-2xl border border-line bg-paper p-6 text-sm shadow-card">
                   <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">

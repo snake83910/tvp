@@ -30,6 +30,30 @@ def _fmt_dim(value: float | int) -> str:
     f = float(value)
     return str(int(f)) if f.is_integer() else str(f)
 
+
+def _parse_market_prices(item: dict) -> list[dict]:
+    """Extrait les relevés de prix concurrents de la fiche fournisseur.
+
+    Renvoie une liste de dicts JSON-sérialisables (le résultat transite par
+    le cache Redis) : {price, host, url, date}. Les entrées sans prix
+    exploitable sont ignorées.
+    """
+    out: list[dict] = []
+    for mp in item.get("marketPrices") or []:
+        try:
+            price = float(mp["prix"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append(
+            {
+                "price": price,
+                "host": (mp.get("host") or "").strip(),
+                "url": mp.get("url_site") or None,
+                "date": mp.get("date") or None,
+            }
+        )
+    return out
+
 # Client httpx PARTAGÉ : les connexions TCP/TLS sont réutilisées entre
 # les appels (une recherche = des dizaines de pages, un handshake TLS
 # par page coûterait cher). Fermé proprement au shutdown (main.lifespan).
@@ -345,6 +369,7 @@ class MaxityreConnector(SupplierConnector):
             speed = item.get("vitesse") or None
 
             return SupplierTyre(
+                market_prices=_parse_market_prices(item),
                 supplier_ref=str(item.get("id") or item.get("articleReference")),
                 brand=marque.get("marque", "") or "",
                 model=profil.get("profil", "") or "",

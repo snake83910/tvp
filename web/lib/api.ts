@@ -72,6 +72,14 @@ export interface TyreResult {
   is_studded?: boolean;
   stock?: number | null;
   delivery_estimate?: string | null;
+  market_prices?: MarketPrice[];
+}
+
+export interface MarketPrice {
+  price: number;
+  host: string;
+  url?: string | null;
+  date?: string | null;
 }
 
 export interface SearchFacets {
