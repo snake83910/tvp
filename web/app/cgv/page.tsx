@@ -295,7 +295,7 @@ const content: Node[] = [
   { t: "p", s: "En cas de Force Majeure ayant pour effet un empêchement définitif de la Partie débitrice, le Contrat est résolu de plein droit et les Parties sont libérées de leurs obligations. En cas de Force Majeure ayant pour effet un empêchement temporaire, l'exécution de l'obligation est suspendue, à moins que le retard qui en résulterait ne justifie la résolution du Contrat." },
 
   { t: "h2", s: "14. Données à caractère personnel" },
-  { t: "p", s: "Les données à caractère personnel collectées par le Vendeur au sujet du Client dans le cadre de la Vente font l'objet d'un traitement automatisé pour lequel le Vendeur est seul à définir les moyens et la finalité et est, à ce titre, responsable de ce traitement. Le Client est invité à consulter la Charte de Confidentialité et la page Cookies du Site pour connaître les conditions dans lesquelles les données à caractère personnel sont traitées et conservées par le Vendeur." },
+  { t: "p", s: "Les données à caractère personnel collectées par le Vendeur au sujet du Client dans le cadre de la Vente font l'objet d'un traitement automatisé pour lequel le Vendeur est seul à définir les moyens et la finalité et est, à ce titre, responsable de ce traitement au sens du Règlement (UE) 2016/679 du 27 avril 2016 (RGPD) et de la loi n° 78-17 du 6 janvier 1978 modifiée relative à l'informatique, aux fichiers et aux libertés. Le Client est invité à consulter la Charte de Confidentialité et la page Cookies du Site pour connaître les conditions dans lesquelles les données à caractère personnel sont traitées et conservées par le Vendeur." },
 
   { t: "h2", s: "15. Documents contractuels" },
   { t: "p", s: "Le Contrat est constitué des documents contractuels suivants : les présentes Conditions Générales de Vente ; le Bon de Commande ; le Bon de Livraison ; la Facture de Vente." },
@@ -317,7 +317,7 @@ const content: Node[] = [
   { t: "p", s: "Conformément aux articles L. 611-1 à L. 615-4 du Code de la consommation français, le Client Consommateur a la possibilité, en cas de litige, de recourir à la médiation de la consommation en s'adressant à AME Conso, 11 place Dauphine, 75001 Paris, et à sa plateforme d'e-médiation : mediationconso-ame.com." },
 
   { t: "h2", s: "21. Loi applicable" },
-  { t: "p", s: "Les relations contractuelles entre le Vendeur et le Client Consommateur situé sur le territoire de l'Union européenne sont régies par la loi de l'État membre sur lequel ce dernier est établi, en ce qui concerne sa protection au titre du droit de la consommation dudit État membre. Pour toute autre question, la loi française sera applicable." },
+  { t: "p", s: "Les présentes CGV et le Contrat sont régis par le droit français. Le Client Consommateur résidant dans un autre État membre de l'Union européenne conserve toutefois le bénéfice des dispositions impératives plus protectrices que la loi de son pays de résidence lui accorde au titre du droit de la consommation. À défaut de résolution amiable, tout litige relève de la compétence des juridictions françaises, sous réserve des règles de compétence impératives applicables au Consommateur." },
 ];
 
 export default function CGVPage() {
