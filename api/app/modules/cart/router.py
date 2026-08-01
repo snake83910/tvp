@@ -229,6 +229,7 @@ async def checkout(
             db, user, data.address_id, data.delivery_mode,
             promo_code=data.promo_code,
             billing_address_id=data.billing_address_id,
+            garage_id=data.garage_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

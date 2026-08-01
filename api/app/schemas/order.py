@@ -70,6 +70,8 @@ class CheckoutIn(BaseModel):
     # None = facturation identique à la livraison
     billing_address_id: uuid.UUID | None = None
     delivery_mode: str = "home"
+    # Requis si delivery_mode == "partner_garage" : garage de montage choisi
+    garage_id: uuid.UUID | None = None
     accept_terms: bool
     promo_code: str | None = None
 

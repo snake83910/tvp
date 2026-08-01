@@ -6,7 +6,9 @@ import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { CheckoutSteps } from "@/components/CheckoutSteps";
 import { useCart } from "@/components/CartProvider";
+import { GaragePicker } from "@/components/GaragePicker";
 import { cartApi } from "@/lib/cart";
+import type { GarageNearby } from "@/lib/api";
 import {
   accountApi,
   useCurrentUser,
@@ -50,6 +52,8 @@ export default function CheckoutPage() {
     country: "FR",
   });
   const [showNewBilling, setShowNewBilling] = useState(false);
+  const [deliveryMode, setDeliveryMode] = useState<"home" | "partner_garage">("home");
+  const [selectedGarage, setSelectedGarage] = useState<GarageNearby | null>(null);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,8 +175,15 @@ export default function CheckoutPage() {
         }
       }
 
+      if (deliveryMode === "partner_garage" && !selectedGarage) {
+        setError("Veuillez sélectionner un garage partenaire pour le montage.");
+        setBusy(false);
+        return;
+      }
+
       const res = await cartApi.checkout(
-        addressId, true, "home", promo?.code ?? null, billingAddressId,
+        addressId, true, deliveryMode, promo?.code ?? null, billingAddressId,
+        deliveryMode === "partner_garage" ? selectedGarage?.id ?? null : null,
       );
       if (res.price_changes.length > 0) {
         // Prix fournisseur modifiés : tableau avant/après explicite
@@ -287,7 +298,15 @@ export default function CheckoutPage() {
             {/* Livraison */}
             <Section title="2 · Mode de livraison">
               <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-lg border-2 border-signal bg-signal-light p-4">
+                <button
+                  type="button"
+                  onClick={() => { setDeliveryMode("home"); setSelectedGarage(null); }}
+                  className={`flex w-full items-center justify-between rounded-lg border-2 p-4 text-left transition ${
+                    deliveryMode === "home"
+                      ? "border-signal bg-signal-light"
+                      : "border-line hover:border-signal/50"
+                  }`}
+                >
                   <div>
                     <p className="font-semibold text-ink">
                       Livraison à domicile
@@ -298,20 +317,40 @@ export default function CheckoutPage() {
                         : `${formatEuro(cart.shipping_ht)} HT — gratuite si chaque référence est à 2 pneus minimum`}
                     </p>
                   </div>
-                  <span className="text-sm font-bold text-signal">
-                    Sélectionné
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-line bg-paper-dim p-4 opacity-60">
+                  {deliveryMode === "home" && (
+                    <span className="text-sm font-bold text-signal">Sélectionné</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("partner_garage")}
+                  className={`flex w-full items-center justify-between rounded-lg border-2 p-4 text-left transition ${
+                    deliveryMode === "partner_garage"
+                      ? "border-signal bg-signal-light"
+                      : "border-line hover:border-signal/50"
+                  }`}
+                >
                   <div>
-                    <p className="font-semibold text-ink-soft">
+                    <p className="font-semibold text-ink">
                       Montage chez un garage partenaire
                     </p>
                     <p className="text-sm text-ink-muted">
-                      Bientôt disponible
+                      Vos pneus sont livrés au garage, prêt à les monter.
+                      Montage réglé sur place.
                     </p>
                   </div>
-                </div>
+                  {deliveryMode === "partner_garage" && (
+                    <span className="text-sm font-bold text-signal">Sélectionné</span>
+                  )}
+                </button>
+
+                {deliveryMode === "partner_garage" && (
+                  <GaragePicker
+                    selectedId={selectedGarage?.id ?? null}
+                    onSelect={setSelectedGarage}
+                  />
+                )}
               </div>
             </Section>
 

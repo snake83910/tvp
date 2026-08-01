@@ -129,6 +129,7 @@ export const cartApi = {
     promoCode?: string | null,
     // null = facturation identique à la livraison
     billingAddressId?: string | null,
+    garageId?: string | null,
   ) =>
     call<{
       order_number: string | null;
@@ -144,6 +145,7 @@ export const cartApi = {
       address_id: addressId,
       billing_address_id: billingAddressId || null,
       delivery_mode: deliveryMode,
+      garage_id: garageId || null,
       accept_terms: acceptTerms,
       promo_code: promoCode || null,
     }),

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.cache import get_redis
+from app.models.garage import Garage
 from app.models.order import Cart, CartItem, Order, OrderItem, OrderStatus
 from app.models.user import Address, ProProfile, User
 from app.modules.catalog.service import connector as _connector
@@ -373,6 +374,7 @@ async def checkout(
     delivery_mode: str = "home",
     promo_code: str | None = None,
     billing_address_id: uuid.UUID | None = None,
+    garage_id: uuid.UUID | None = None,
 ) -> tuple[Order | None, list[PriceChange]]:
     """
     Transforme le panier en commande.
@@ -394,10 +396,18 @@ async def checkout(
         if billing is None or billing.user_id != user.id:
             raise ValueError("Adresse de facturation introuvable")
 
-    if delivery_mode != "home":
-        raise ValueError(
-            "Seule la livraison à domicile est disponible pour l'instant"
-        )
+    # Montage en garage partenaire : les pneus sont livrés AU garage choisi.
+    # Le prix de montage est réglé sur place (non collecté en ligne) : les
+    # montants de la commande ne changent pas.
+    garage: Garage | None = None
+    if delivery_mode == "partner_garage":
+        if garage_id is None:
+            raise ValueError("Aucun garage de montage sélectionné")
+        garage = await db.get(Garage, garage_id)
+        if garage is None or not garage.is_published:
+            raise ValueError("Garage de montage introuvable ou indisponible")
+    elif delivery_mode != "home":
+        raise ValueError("Mode de livraison inconnu")
 
     # FOR UPDATE : verrouille la ligne panier le temps du checkout.
     # Sans ce verrou, un double-clic (deux requêtes simultanées) lisait
@@ -576,6 +586,33 @@ async def checkout(
     total_ht = articles_ht - discount_ht + ship.ht_cents
     total_ttc = articles_ttc - discount_ttc + ship.ttc_cents
 
+    # Montage garage : la commande est livrée au garage (snapshot figé) et
+    # rattachée à celui-ci ; sinon livraison à l'adresse client.
+    if garage is not None:
+        order_delivery_mode = "partner_garage"
+        shipping_snapshot = {
+            "label": garage.name,
+            "line1": garage.address,
+            "line2": None,
+            "postal_code": garage.postal_code,
+            "city": garage.city,
+            "country": "France",
+        }
+        garage_snapshot = {
+            "id": str(garage.id),
+            "name": garage.name,
+            "address": garage.address,
+            "postal_code": garage.postal_code,
+            "city": garage.city,
+            "phone": garage.phone,
+            "email": garage.email,
+            "mounting_price_cents": garage.mounting_price_cents,
+        }
+    else:
+        order_delivery_mode = ship.mode
+        shipping_snapshot = _address_snapshot(address)
+        garage_snapshot = {}
+
     n = (await db.execute(text("SELECT nextval('order_number_seq')"))).scalar()
     year = datetime.now(UTC).year
     order = Order(
@@ -585,9 +622,11 @@ async def checkout(
         account_type_snapshot=account_type,
         promo_code=promo_code_final,
         discount_ttc_cents=discount_ttc,
-        delivery_mode=ship.mode,
-        shipping_address=_address_snapshot(address),
+        delivery_mode=order_delivery_mode,
+        shipping_address=shipping_snapshot,
         billing_address=_address_snapshot(billing),
+        garage_id=garage.id if garage is not None else None,
+        garage_snapshot=garage_snapshot,
         shipping_ht_cents=ship.ht_cents,
         shipping_vat_cents=ship.vat_cents,
         total_ht_cents=total_ht,

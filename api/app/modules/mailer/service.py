@@ -193,6 +193,39 @@ def send_order_confirmation(order: Order, user: User) -> None:
     )
 
 
+def send_garage_order_notification(order: Order, user: User) -> None:
+    """Notifie le garage partenaire qu'une commande lui est destinée.
+
+    Le garage voit les pneus à monter et les coordonnées du client, mais
+    JAMAIS les prix de vente (règle métier)."""
+    garage = order.garage_snapshot or {}
+    to = garage.get("email")
+    if not to:
+        return  # garage sans email : rien à envoyer
+    mailer = get_mailer()
+    items_view = [
+        {"label": it.label_snapshot, "qty": it.quantity}
+        for it in order.items
+    ]
+    customer_name = (
+        " ".join(p for p in [user.first_name, user.last_name] if p)
+        or user.email
+    )
+    fire_and_forget(
+        mailer.send_template(
+            to=to,
+            subject=f"Nouvelle commande à monter — {order.order_number}",
+            template="garage_new_order.html",
+            garage_name=garage.get("name", ""),
+            order_number=order.order_number,
+            customer_name=customer_name,
+            customer_phone=user.phone,
+            items=items_view,
+            site_url=_site_url(),
+        )
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 # Expédition
 # ─────────────────────────────────────────────────────────────────

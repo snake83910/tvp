@@ -114,6 +114,21 @@ export interface SearchResponse {
   facets: SearchFacets;
 }
 
+export interface GarageNearby {
+  id: string;
+  name: string;
+  slug: string;
+  address: string;
+  postal_code: string;
+  city: string;
+  phone: string | null;
+  hours: Record<string, string>;
+  mounting_price_cents: number;
+  services: string[];
+  photo_url: string | null;
+  distance_km: number | null;
+}
+
 export interface VehicleDimension {
   width: number;
   height: number;
@@ -177,6 +192,12 @@ export const api = {
   searchByPlate: (plate: string) => {
     const q = new URLSearchParams({ plate });
     return request<VehicleDimension[]>(`/search/by-plate?${q.toString()}`);
+  },
+
+  nearestGarages: (postcode: string, q?: string) => {
+    const p = new URLSearchParams({ postcode });
+    if (q) p.set("q", q);
+    return request<GarageNearby[]>(`/garages/nearest?${p.toString()}`);
   },
 
   searchByDimensions: (

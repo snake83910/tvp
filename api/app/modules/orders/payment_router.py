@@ -25,7 +25,10 @@ from app.db.session import get_db
 from app.integrations.payment import get_payment_provider
 from app.models.order import Order, OrderStatus, Payment
 from app.models.user import User
-from app.modules.mailer.service import send_order_confirmation
+from app.modules.mailer.service import (
+    send_garage_order_notification,
+    send_order_confirmation,
+)
 from app.schemas.order import PaymentInitOut
 
 router = APIRouter(prefix="/payment", tags=["payment"])
@@ -157,6 +160,8 @@ async def payment_ipn(
         order_user = await db.get(User, order.user_id)
         if order_full and order_user:
             send_order_confirmation(order_full, order_user)
+            if order_full.garage_id:
+                send_garage_order_notification(order_full, order_user)
 
     return {"status": "ok", "order_status": order.status.value}
 
@@ -213,6 +218,8 @@ async def simulate_payment(
     )
     if order_full:
         send_order_confirmation(order_full, user)
+        if order_full.garage_id:
+            send_garage_order_notification(order_full, user)
 
     return {"status": "ok", "order_status": order.status.value}
 
