@@ -88,6 +88,7 @@ def _to_priced_tyre(
         display_price=disp,
         display_mode="HT" if account_type == "pro" else "TTC",
         brand_slug=raw.get("brand_slug"),
+        brand_tier=raw.get("brand_tier"),
         ean=raw.get("ean"),
         eprel_id=raw.get("eprel_id"),
         description_html=raw.get("description_html"),
@@ -135,6 +136,10 @@ async def search_by_dimensions(
         description="Une ou plusieurs marques séparées par des virgules",
     ),
     season: str | None = Query(None, examples=["ete"]),
+    tier: str | None = Query(
+        None, examples=["premium"],
+        description="Gamme(s) de marque séparées par des virgules : premium, quality, discount",
+    ),
     three_pmsf: bool | None = Query(
         None, description="true = uniquement les pneus homologués 3PMSF (Loi Montagne)"
     ),
@@ -175,6 +180,7 @@ async def search_by_dimensions(
         brands=sorted(brand_counts),
         brand_counts=brand_counts,
         seasons=sorted({t.season for t in priced_all if t.season}),
+        tiers=sorted({t.brand_tier for t in priced_all if t.brand_tier}),
         price_min=round(
             min((t.display_price for t in priced_all), default=0), 2
         ),
@@ -190,6 +196,9 @@ async def search_by_dimensions(
         filtered = [t for t in filtered if t.brand in wanted]
     if season:
         filtered = [t for t in filtered if t.season == season]
+    if tier:
+        wanted_tiers = {x.strip() for x in tier.split(",") if x.strip()}
+        filtered = [t for t in filtered if t.brand_tier in wanted_tiers]
     if three_pmsf:
         filtered = [t for t in filtered if t.is_3pmsf]
     if min_price is not None:

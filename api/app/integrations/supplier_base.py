@@ -34,6 +34,8 @@ class SupplierTyre:
     image_url: str | None = None
     eu_label: dict = field(default_factory=dict)  # bruit / adhérence / conso
     brand_slug: str | None = None  # slug brand pour récupérer le logo CDN
+    # Gamme de la marque : "premium" / "quality" / "discount" (fournisseur)
+    brand_tier: str | None = None
     # Enrichissements (optionnels, dépendent du fournisseur)
     ean: str | None = None             # code-barre EAN-13
     eprel_id: int | None = None        # identifiant étiquette EPREL UE

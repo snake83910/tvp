@@ -2,7 +2,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import type { SearchFacets } from "@/lib/api";
+import {
+  BRAND_TIER_ORDER,
+  brandTierLabel,
+  type SearchFacets,
+} from "@/lib/api";
 
 const SEASON_LABEL: Record<string, string> = {
   ete: "Été",
@@ -41,6 +45,10 @@ export function FilterBar({
     .map((b) => b.trim())
     .filter(Boolean);
   const currentSeason = params.get("season") ?? "";
+  const currentTiers = (params.get("tier") ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
   const currentSort = params.get("sort") ?? "price_asc";
   const current3pmsf = params.get("three_pmsf") === "1";
   const currentMin = params.get("min_price") ?? "";
@@ -53,6 +61,18 @@ export function FilterBar({
     setParam("brand", next.length ? next.join(",") : null);
   }
 
+  function toggleTier(tier: string) {
+    const next = currentTiers.includes(tier)
+      ? currentTiers.filter((t) => t !== tier)
+      : [...currentTiers, tier];
+    setParam("tier", next.length ? next.join(",") : null);
+  }
+
+  // Gammes triées premium → budget, limitées à celles présentes
+  const tierOptions = BRAND_TIER_ORDER.filter((t) =>
+    (facets.tiers ?? []).includes(t),
+  ).concat((facets.tiers ?? []).filter((t) => !BRAND_TIER_ORDER.includes(t)));
+
   // Chips des filtres actifs, effaçables individuellement
   const activeChips: { label: string; clear: () => void }[] = [
     ...currentBrands.map((b) => ({
@@ -62,6 +82,10 @@ export function FilterBar({
     ...(currentSeason
       ? [{ label: SEASON_LABEL[currentSeason] ?? currentSeason, clear: () => setParam("season", null) }]
       : []),
+    ...currentTiers.map((t) => ({
+      label: brandTierLabel(t) ?? t,
+      clear: () => toggleTier(t),
+    })),
     ...(current3pmsf
       ? [{ label: "❄ 3PMSF", clear: () => setParam("three_pmsf", null) }]
       : []),
@@ -75,7 +99,7 @@ export function FilterBar({
 
   function clearAll() {
     const q = new URLSearchParams(params.toString());
-    ["brand", "season", "three_pmsf", "min_price", "max_price", "page"].forEach(
+    ["brand", "season", "tier", "three_pmsf", "min_price", "max_price", "page"].forEach(
       (k) => q.delete(k),
     );
     router.push(`/recherche?${q.toString()}`);
@@ -145,6 +169,27 @@ export function FilterBar({
           </span>
         </label>
       </FilterGroup>
+
+      {tierOptions.length > 0 && (
+        <FilterGroup label="Gamme">
+          <div className="space-y-1.5">
+            {tierOptions.map((t) => (
+              <label
+                key={t}
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink-soft transition hover:bg-paper-dim"
+              >
+                <input
+                  type="checkbox"
+                  checked={currentTiers.includes(t)}
+                  onChange={() => toggleTier(t)}
+                  className="accent-signal"
+                />
+                <span className="flex-1">{brandTierLabel(t)}</span>
+              </label>
+            ))}
+          </div>
+        </FilterGroup>
+      )}
 
       <FilterGroup label="Marque">
         <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">

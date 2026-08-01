@@ -43,6 +43,8 @@ class TyreResult(BaseModel):
     display_mode: str  # "HT" ou "TTC"
     # Enrichissements (optionnels)
     brand_slug: str | None = None
+    # Gamme de la marque : "premium" / "quality" / "discount"
+    brand_tier: str | None = None
     ean: str | None = None
     eprel_id: int | None = None
     description_html: str | None = None
@@ -65,6 +67,8 @@ class SearchFacets(BaseModel):
     # d'afficher "Michelin (12)" dans les cases à cocher.
     brand_counts: dict[str, int] = {}
     seasons: list[str]
+    # Gammes présentes dans les résultats (premium / quality / discount)
+    tiers: list[str] = []
     price_min: float
     price_max: float
 

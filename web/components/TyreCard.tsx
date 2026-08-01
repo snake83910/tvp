@@ -10,6 +10,7 @@ import {
 import { useCart } from "@/components/CartProvider";
 import { TyreImage } from "@/components/TyreImage";
 import { BrandLogo } from "@/components/BrandLogo";
+import { TierBadge } from "@/components/TierBadge";
 import { productUrl } from "@/lib/slug";
 import { formatEuro } from "@/lib/money";
 
@@ -134,6 +135,9 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
           >
             {tyre.model}
           </Link>
+          {tyre.brand_tier && (
+            <TierBadge tier={tyre.brand_tier} className="mt-1.5" />
+          )}
         </div>
         <span className="shrink-0 rounded-full bg-paper-dim px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
           {SEASON[tyre.season] ?? tyre.season}

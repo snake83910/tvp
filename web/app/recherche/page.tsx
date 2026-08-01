@@ -19,6 +19,7 @@ type SP = {
   category?: string;
   brand?: string;
   season?: string;
+  tier?: string;
   three_pmsf?: string;
   min_price?: string;
   max_price?: string;
@@ -55,6 +56,7 @@ export default async function SearchPage({
         category,
         brand: searchParams.brand,
         season: searchParams.season,
+        tier: searchParams.tier,
         threePmsf: searchParams.three_pmsf === "1",
         minPrice: searchParams.min_price
           ? Number(searchParams.min_price)

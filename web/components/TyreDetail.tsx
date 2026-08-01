@@ -4,6 +4,7 @@ import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
 import { EprelLabel } from "@/components/EprelLabel";
 import { TyreBadges } from "@/components/TyreBadges";
+import { TierBadge } from "@/components/TierBadge";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PriceComparator } from "@/components/PriceComparator";
@@ -124,6 +125,7 @@ export function TyreDetail({
                 <span className="inline-block rounded-full bg-paper-dim px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
                   {SEASON[tyre.season] ?? tyre.season}
                 </span>
+                <TierBadge tier={tyre.brand_tier} />
                 <TyreBadges tyre={tyre} />
               </div>
               <div className="mt-3 flex items-center gap-3">

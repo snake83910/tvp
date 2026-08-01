@@ -63,6 +63,7 @@ export interface TyreResult {
   display_price: number;
   display_mode: "HT" | "TTC";
   brand_slug?: string | null;
+  brand_tier?: string | null;
   ean?: string | null;
   eprel_id?: number | null;
   description_html?: string | null;
@@ -86,8 +87,22 @@ export interface SearchFacets {
   brands: string[];
   brand_counts?: Record<string, number>;
   seasons: string[];
+  tiers?: string[];
   price_min: number;
   price_max: number;
+}
+
+/** Gammes de marque : libellés FR + ordre d'affichage (premium → budget). */
+export const BRAND_TIER_LABELS: Record<string, string> = {
+  premium: "Premium",
+  quality: "Milieu de gamme",
+  discount: "Budget",
+};
+export const BRAND_TIER_ORDER = ["premium", "quality", "discount"];
+
+export function brandTierLabel(tier?: string | null): string | null {
+  if (!tier) return null;
+  return BRAND_TIER_LABELS[tier] ?? tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
 export interface SearchResponse {
@@ -172,6 +187,7 @@ export const api = {
       category?: string;
       brand?: string;
       season?: string;
+      tier?: string;
       threePmsf?: boolean;
       minPrice?: number;
       maxPrice?: number;
@@ -189,6 +205,7 @@ export const api = {
       q.set("category", params.category);
     if (params.brand) q.set("brand", params.brand);
     if (params.season) q.set("season", params.season);
+    if (params.tier) q.set("tier", params.tier);
     if (params.threePmsf) q.set("three_pmsf", "true");
     if (params.minPrice != null)
       q.set("min_price", String(params.minPrice));

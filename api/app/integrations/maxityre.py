@@ -171,6 +171,7 @@ class MaxityreConnector(SupplierConnector):
                     "wet": item.get("wet"),
                 },
                 brand_slug=marque.get("url") or None,
+                brand_tier=marque.get("category") or None,
                 # Enrichissements
                 ean=str(item.get("ean")) if item.get("ean") else None,
                 eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
@@ -393,6 +394,7 @@ class MaxityreConnector(SupplierConnector):
                     "wet": item.get("wet"),
                 },
                 brand_slug=marque.get("url") or None,
+                brand_tier=marque.get("category") or None,
                 ean=str(item.get("ean")) if item.get("ean") else None,
                 eprel_id=int(item["eprelId"]) if item.get("eprelId") else None,
                 description_html=sanitize_supplier_html(
