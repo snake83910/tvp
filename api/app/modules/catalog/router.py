@@ -120,10 +120,11 @@ async def _resolve_account(
 
 @router.get("/dimensions", response_model=SearchResponse)
 async def search_by_dimensions(
-    # Bornes larges : autos (205/55 R16) mais aussi agricole (650/65 R38)
-    # et poids lourd (315/70 R22.5 — diamètre DÉCIMAL)
-    width: int = Query(..., ge=50, le=1200, examples=[205]),
-    ratio: int = Query(..., ge=20, le=110, examples=[55]),
+    # Bornes larges : autos (205/55 R16), agricole (650/65 R38), poids lourd
+    # (315/70 R22.5 — diamètre DÉCIMAL) et quad en pouces (25X8-12 : largeur=8,
+    # hauteur=25) qui descend bien en-dessous des minima tourisme.
+    width: int = Query(..., ge=8, le=1200, examples=[205]),
+    ratio: int = Query(..., ge=8, le=110, examples=[55]),
     diameter: float = Query(..., ge=8, le=60, examples=[16]),
     category: str = Query(
         "auto",
@@ -315,8 +316,8 @@ async def search_by_plate(
 @router.get("/product/{ref}", response_model=TyreResult)
 async def get_product(
     ref: str,
-    width: int = Query(..., ge=50, le=1200),
-    ratio: int = Query(..., ge=20, le=110),
+    width: int = Query(..., ge=8, le=1200),
+    ratio: int = Query(..., ge=8, le=110),
     diameter: float = Query(..., ge=8, le=60),
     category: str = Query("auto"),
     db: AsyncSession = Depends(get_db),

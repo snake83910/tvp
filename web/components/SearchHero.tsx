@@ -42,11 +42,17 @@ const DIMS: Record<
     diameters: [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21],
     ph: ["120", "70", "17"],
   },
+  // Quad/ATV : cotes en POUCES, notées « hauteur × largeur - jante »
+  // (ex. 25×8-12). Le fournisseur indexe : width=largeur section (8-13),
+  // height=diamètre hors-tout (10-35), diameter=jante (11/12/14).
   quad: {
-    widths: [165, 175, 195, 205, 225, 255, 270],
-    ratios: [40, 50, 55, 60, 70, 80, 100],
-    diameters: [8, 9, 10, 11, 12, 14],
-    ph: ["205", "80", "12"],
+    widths: [8, 9, 10, 11, 12, 13],
+    ratios: [
+      10, 13, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+      29, 30, 32, 35,
+    ],
+    diameters: [11, 12, 14],
+    ph: ["8", "25", "12"],
   },
   camion: {
     widths: [
@@ -342,11 +348,23 @@ export function SearchHero({
               onSubmit={submitDim}
               className="flex flex-col gap-4 md:flex-row md:items-end"
             >
-              <DimSelect label="Largeur" value={w} set={setW} options={dims.widths} ph={dims.ph[0]} />
-              <span className="hidden pb-3 text-2xl text-ink-muted md:block">/</span>
-              <DimSelect label="Hauteur" value={h} set={setH} options={dims.ratios} ph={dims.ph[1]} />
-              <span className="hidden pb-3 text-2xl text-ink-muted md:block">R</span>
-              <DimSelect label="Diamètre" value={d} set={setD} options={dims.diameters} ph={dims.ph[2]} />
+              {cat === "quad" ? (
+                <>
+                  <DimSelect label="Hauteur" value={h} set={setH} options={dims.ratios} ph={dims.ph[1]} />
+                  <span className="hidden pb-3 text-2xl text-ink-muted md:block">×</span>
+                  <DimSelect label="Largeur" value={w} set={setW} options={dims.widths} ph={dims.ph[0]} />
+                  <span className="hidden pb-3 text-2xl text-ink-muted md:block">-</span>
+                  <DimSelect label="Jante" value={d} set={setD} options={dims.diameters} ph={dims.ph[2]} />
+                </>
+              ) : (
+                <>
+                  <DimSelect label="Largeur" value={w} set={setW} options={dims.widths} ph={dims.ph[0]} />
+                  <span className="hidden pb-3 text-2xl text-ink-muted md:block">/</span>
+                  <DimSelect label="Hauteur" value={h} set={setH} options={dims.ratios} ph={dims.ph[1]} />
+                  <span className="hidden pb-3 text-2xl text-ink-muted md:block">R</span>
+                  <DimSelect label="Diamètre" value={d} set={setD} options={dims.diameters} ph={dims.ph[2]} />
+                </>
+              )}
               <button
                 type="submit"
                 className="rounded-lg bg-signal px-8 py-3 font-display text-base font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
@@ -355,7 +373,7 @@ export function SearchHero({
               </button>
             </form>
 
-            <SidewallHelp ph={dims.ph} />
+            <SidewallHelp ph={dims.ph} category={cat} />
           </div>
         )}
       </div>
@@ -407,8 +425,15 @@ function DimSelect({
  * Décomposition colorée du marquage — LE point de friction des novices.
  * L'exemple s'adapte à la famille de véhicule sélectionnée.
  */
-function SidewallHelp({ ph }: { ph: [string, string, string] }) {
+function SidewallHelp({
+  ph,
+  category,
+}: {
+  ph: [string, string, string];
+  category: VehicleCategory;
+}) {
   const [open, setOpen] = useState(false);
+  const isQuad = category === "quad";
   return (
     <div className="mt-4">
       <button
@@ -425,23 +450,41 @@ function SidewallHelp({ ph }: { ph: [string, string, string] }) {
             La dimension est inscrite sur le flanc (côté) de vos pneus
             actuels, par exemple&nbsp;:
           </p>
-          <p className="mb-4 select-none font-mono text-2xl font-black tracking-wider md:text-3xl">
-            <span className="border-b-4 border-signal text-ink">{ph[0]}</span>
-            <span className="text-ink-muted">/</span>
-            <span className="border-b-4 border-amber-500 text-ink">{ph[1]}</span>
-            <span className="text-ink-muted"> R</span>
-            <span className="border-b-4 border-blue-500 text-ink">{ph[2]}</span>
-          </p>
+          {isQuad ? (
+            <p className="mb-4 select-none font-mono text-2xl font-black tracking-wider md:text-3xl">
+              <span className="border-b-4 border-amber-500 text-ink">{ph[1]}</span>
+              <span className="text-ink-muted">×</span>
+              <span className="border-b-4 border-signal text-ink">{ph[0]}</span>
+              <span className="text-ink-muted">-</span>
+              <span className="border-b-4 border-blue-500 text-ink">{ph[2]}</span>
+            </p>
+          ) : (
+            <p className="mb-4 select-none font-mono text-2xl font-black tracking-wider md:text-3xl">
+              <span className="border-b-4 border-signal text-ink">{ph[0]}</span>
+              <span className="text-ink-muted">/</span>
+              <span className="border-b-4 border-amber-500 text-ink">{ph[1]}</span>
+              <span className="text-ink-muted"> R</span>
+              <span className="border-b-4 border-blue-500 text-ink">{ph[2]}</span>
+            </p>
+          )}
           <ul className="space-y-1.5 text-sm">
-            <li>
-              <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-signal align-middle" />
-              <strong className="text-ink">{ph[0]}</strong>
-              <span className="text-ink-muted"> — largeur du pneu en millimètres</span>
-            </li>
             <li>
               <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-amber-500 align-middle" />
               <strong className="text-ink">{ph[1]}</strong>
-              <span className="text-ink-muted"> — hauteur du flanc (en % de la largeur)</span>
+              <span className="text-ink-muted">
+                {isQuad
+                  ? " — hauteur (diamètre hors-tout) en pouces"
+                  : " — hauteur du flanc (en % de la largeur)"}
+              </span>
+            </li>
+            <li>
+              <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-signal align-middle" />
+              <strong className="text-ink">{ph[0]}</strong>
+              <span className="text-ink-muted">
+                {isQuad
+                  ? " — largeur du pneu en pouces"
+                  : " — largeur du pneu en millimètres"}
+              </span>
             </li>
             <li>
               <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-blue-500 align-middle" />
