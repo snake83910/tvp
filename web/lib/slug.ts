@@ -34,6 +34,43 @@ export function productUrl(args: {
 }
 
 /**
+ * URL propre d'une page d'atterrissage dimension.
+ * Ex: dimensionUrl(205, 55, 16) -> "/pneus/205-55-r16"
+ */
+export function dimensionUrl(
+  width: number,
+  ratio: number,
+  diameter: number,
+): string {
+  return `/pneus/${width}-${ratio}-r${diameter}`;
+}
+
+/** Formatte une dimension pour l'affichage : "205/55 R16". */
+export function formatDimension(
+  width: number,
+  ratio: number,
+  diameter: number,
+): string {
+  return `${width}/${ratio} R${diameter}`;
+}
+
+/**
+ * Parse le segment dimension d'URL (ex. "205-55-r16") en dimensions.
+ * Renvoie null si le format est invalide.
+ */
+export function parseDimSlug(
+  dim: string,
+): { width: number; ratio: number; diameter: number } | null {
+  const m = dim.match(/^(\d+)-(\d+)-r(\d+(?:\.\d)?)$/i);
+  if (!m) return null;
+  return {
+    width: Number(m[1]),
+    ratio: Number(m[2]),
+    diameter: Number(m[3]),
+  };
+}
+
+/**
  * Parse l'URL et extrait ref + dimensions. Renvoie null si invalide.
  * Le diamètre peut être décimal (poids lourd : r22.5).
  */
