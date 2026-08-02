@@ -129,6 +129,23 @@ export interface GarageNearby {
   distance_km: number | null;
 }
 
+export interface GaragePublic {
+  name: string;
+  slug: string;
+  address: string;
+  postal_code: string;
+  city: string;
+  phone: string | null;
+  email: string | null;
+  description: string | null;
+  hours: Record<string, string>;
+  mounting_price_cents: number;
+  services: string[];
+  photo_url: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
 export interface VehicleDimension {
   width: number;
   height: number;
@@ -199,6 +216,9 @@ export const api = {
     if (q) p.set("q", q);
     return request<GarageNearby[]>(`/garages/nearest?${p.toString()}`);
   },
+
+  getGarage: (slug: string) =>
+    request<GaragePublic>(`/garages/${encodeURIComponent(slug)}`),
 
   searchByDimensions: (
     params: {
