@@ -52,6 +52,7 @@ class GarageOut(GarageBase):
     lng: float | None = None
     owner_user_id: uuid.UUID | None = None
     siret: str | None = None
+    siret_verified: bool = False
     kbis_path: str | None = None
 
 

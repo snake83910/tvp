@@ -25,6 +25,7 @@ from app.core.rate_limit import rate_limit
 from app.core.security import create_password_reset_token, hash_password
 from app.core.storage import document_path, save_document
 from app.integrations.geocode import geocode, haversine_km
+from app.integrations.sirene import verify_siret
 from app.models.garage import Garage
 from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
@@ -324,6 +325,8 @@ async def partner_register(
         raise HTTPException(
             status_code=409, detail="Un compte existe déjà avec cet email"
         )
+    # Vérification Sirene (best-effort : n'empêche jamais l'inscription).
+    sirene = await verify_siret(siret_clean)
     user = User(
         email=email,
         password_hash=hash_password(password),
@@ -344,6 +347,7 @@ async def partner_register(
         phone=phone,
         email=email,
         siret=siret_clean,
+        siret_verified=bool(sirene["exists"] and sirene["active"]),
         is_published=False,  # publication après validation admin
     )
     g.slug = await _unique_slug(db, _slugify(garage_name))
@@ -357,7 +361,7 @@ async def partner_register(
     await db.commit()
 
     send_welcome(user)
-    send_admin_new_garage(g)
+    send_admin_new_garage(g, sirene=sirene)
     return await issue_token_pair(db, user, request)
 
 

@@ -292,6 +292,16 @@ export default function AdminGaragesPage() {
                   <span className="mb-2 text-xs text-ink-muted">Pas de Kbis</span>
                 )}
               </div>
+              {editing && (
+                <p className="text-xs">
+                  SIRET :{" "}
+                  {editing.siret_verified ? (
+                    <span className="font-semibold text-ok">✓ vérifié auprès de la base Sirene (actif)</span>
+                  ) : (
+                    <span className="font-semibold text-signal">⚠ non vérifié Sirene — à contrôler manuellement</span>
+                  )}
+                </p>
+              )}
               <Field
                 label="Prix du montage / pneu (€ TTC)"
                 type="number"

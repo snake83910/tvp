@@ -226,11 +226,20 @@ def send_garage_order_notification(order: Order, user: User) -> None:
     )
 
 
-def send_admin_new_garage(garage) -> None:
+def send_admin_new_garage(garage, sirene: dict | None = None) -> None:
     """Notifie l'équipe qu'un nouveau garage partenaire attend validation."""
     to = settings.admin_email or settings.smtp_sender
     if not to:
         return
+    sirene = sirene or {}
+    if not sirene.get("checked"):
+        siret_status = "non vérifié (Sirene indisponible)"
+    elif not sirene.get("exists"):
+        siret_status = "⚠ INTROUVABLE dans la base Sirene"
+    elif not sirene.get("active"):
+        siret_status = "⚠ établissement fermé (Sirene)"
+    else:
+        siret_status = "vérifié — actif (Sirene)"
     mailer = get_mailer()
     fire_and_forget(
         mailer.send_template(
@@ -239,6 +248,8 @@ def send_admin_new_garage(garage) -> None:
             template="admin_new_garage.html",
             garage_name=garage.name,
             siret=garage.siret or "—",
+            siret_status=siret_status,
+            sirene_name=sirene.get("name") or "—",
             address=f"{garage.address}, {garage.postal_code} {garage.city}",
             email=garage.email or "—",
             phone=garage.phone or "—",

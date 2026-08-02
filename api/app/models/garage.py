@@ -52,6 +52,8 @@ class Garage(Base):
     # Numéro SIRET (14 chiffres) et chemin du Kbis uploadé — vérification
     # anti-fraude à la validation par l'admin.
     siret: Mapped[str | None] = mapped_column(String(20))
+    # Vérifié auprès de la base Sirene (existe + établissement actif)
+    siret_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     kbis_path: Mapped[str | None] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
     # Horaires libres par jour : {"lundi": "08:00-18:00", ...}

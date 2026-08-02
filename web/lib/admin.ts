@@ -102,6 +102,7 @@ export interface Garage {
   phone: string | null;
   email: string | null;
   siret: string | null;
+  siret_verified: boolean;
   kbis_path: string | null;
   description: string | null;
   hours: Record<string, string>;
