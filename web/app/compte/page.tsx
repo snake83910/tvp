@@ -55,7 +55,13 @@ function AccountContent() {
   const [addresses, setAddresses] = useState<Address[] | null>(null);
 
   useEffect(() => {
-    if (!loading && !user) router.push("/connexion");
+    if (loading) return;
+    if (!user) {
+      router.push("/connexion");
+      return;
+    }
+    // Un compte garage n'a pas d'espace client : renvoi vers son espace.
+    if (user.role === "garage") router.replace("/partenaire");
   }, [loading, user, router]);
 
   useEffect(() => {
@@ -87,7 +93,7 @@ function AccountContent() {
       </>
     );
   }
-  if (!user) return null;
+  if (!user || user.role === "garage") return null;
 
   return (
     <>

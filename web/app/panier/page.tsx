@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { TyreImage } from "@/components/TyreImage";
 import { useCart } from "@/components/CartProvider";
 import { getToken } from "@/lib/auth";
+import { useCustomerOnly } from "@/lib/guards";
 import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
@@ -20,12 +21,15 @@ export default function CartPage() {
   // redessine la page immédiatement (plus besoin de refresh manuel ni
   // de F5).
   const { cart, refresh, updateQty, removeItem } = useCart();
+  const { isGarage } = useCustomerOnly();
   const [busy, setBusy] = useState<string | null>(null);
   const [qtyError, setQtyError] = useState<string | null>(null);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  if (isGarage) return null;
 
   async function changeQty(itemId: string, q: number) {
     if (q < 1) return;

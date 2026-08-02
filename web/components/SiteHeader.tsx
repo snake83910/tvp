@@ -10,6 +10,9 @@ export function SiteHeader() {
   const { user, loading } = useCurrentUser();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Un compte garage n'est PAS un client : pas de « Mon compte », pas de
+  // panier — uniquement l'accès à son espace partenaire.
+  const isGarage = user?.role === "garage";
   const accountHref = user ? "/compte" : "/connexion";
   const accountLabel = user
     ? user.first_name ? `Bonjour ${user.first_name}` : "Mon compte"
@@ -30,42 +33,50 @@ export function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-7 text-sm font-semibold text-ink-soft md:flex">
-          <Link href="/recherche" className="transition hover:text-signal">Rechercher</Link>
-          {user?.role === "garage" && (
-            <Link href="/partenaire" className="transition hover:text-signal">
+          {isGarage ? (
+            <Link
+              href="/partenaire"
+              className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-paper transition hover:bg-signal"
+            >
               Espace partenaire
             </Link>
+          ) : (
+            <>
+              <Link href="/recherche" className="transition hover:text-signal">Rechercher</Link>
+              <Link href={accountHref} className="transition hover:text-signal">
+                {loading ? "Mon compte" : accountLabel}
+              </Link>
+              <Link
+                href="/panier"
+                className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-paper transition hover:bg-signal"
+              >
+                Panier
+                {count > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-signal px-1.5 text-xs font-bold text-white">
+                    {count}
+                  </span>
+                )}
+              </Link>
+            </>
           )}
-          <Link href={accountHref} className="transition hover:text-signal">
-            {loading ? "Mon compte" : accountLabel}
-          </Link>
-          <Link
-            href="/panier"
-            className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-paper transition hover:bg-signal"
-          >
-            Panier
-            {count > 0 && (
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-signal px-1.5 text-xs font-bold text-white">
-                {count}
-              </span>
-            )}
-          </Link>
         </nav>
 
         {/* Mobile : panier + hamburger */}
         <div className="flex items-center gap-2 md:hidden">
-          <Link
-            href="/panier"
-            className="flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-sm font-semibold text-paper"
-            aria-label="Panier"
-          >
-            <span aria-hidden>🛒</span>
-            {count > 0 && (
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-signal px-1.5 text-xs font-bold text-white">
-                {count}
-              </span>
-            )}
-          </Link>
+          {!isGarage && (
+            <Link
+              href="/panier"
+              className="flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-sm font-semibold text-paper"
+              aria-label="Panier"
+            >
+              <span aria-hidden>🛒</span>
+              {count > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-signal px-1.5 text-xs font-bold text-white">
+                  {count}
+                </span>
+              )}
+            </Link>
+          )}
           <button
             onClick={() => setMobileOpen(true)}
             className="rounded-lg border border-line p-2 text-ink-soft"
@@ -100,12 +111,15 @@ export function SiteHeader() {
             </div>
             <nav className="space-y-2 text-sm font-semibold">
               <Link onClick={() => setMobileOpen(false)} href="/" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Accueil</Link>
-              <Link onClick={() => setMobileOpen(false)} href="/recherche" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Rechercher des pneus</Link>
-              <Link onClick={() => setMobileOpen(false)} href={accountHref} className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">{accountLabel}</Link>
-              {user?.role === "garage" && (
+              {isGarage ? (
                 <Link onClick={() => setMobileOpen(false)} href="/partenaire" className="block rounded-lg px-3 py-2.5 font-semibold text-signal hover:bg-paper-dim">Espace partenaire</Link>
+              ) : (
+                <>
+                  <Link onClick={() => setMobileOpen(false)} href="/recherche" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Rechercher des pneus</Link>
+                  <Link onClick={() => setMobileOpen(false)} href={accountHref} className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">{accountLabel}</Link>
+                  <Link onClick={() => setMobileOpen(false)} href="/panier" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Panier ({count})</Link>
+                </>
               )}
-              <Link onClick={() => setMobileOpen(false)} href="/panier" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Panier ({count})</Link>
               <hr className="my-3 border-line" />
               <Link onClick={() => setMobileOpen(false)} href="/a-propos" className="block px-3 py-1.5 text-xs text-ink-muted hover:text-signal">À propos</Link>
               <Link onClick={() => setMobileOpen(false)} href="/cgv" className="block px-3 py-1.5 text-xs text-ink-muted hover:text-signal">CGV</Link>
