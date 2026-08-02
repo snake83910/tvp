@@ -76,6 +76,18 @@ class OwnerIn(BaseModel):
     email: EmailStr
 
 
+class PartnerRegisterIn(BaseModel):
+    """Auto-inscription d'un garage partenaire (compte + fiche garage)."""
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    garage_name: str = Field(min_length=1, max_length=200)
+    address: str = Field(min_length=1, max_length=300)
+    postal_code: str = Field(min_length=4, max_length=10)
+    city: str = Field(min_length=1, max_length=120)
+    phone: str | None = None
+
+
 class PartnerOrderItem(BaseModel):
     label: str
     quantity: int

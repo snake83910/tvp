@@ -85,8 +85,14 @@ export default function PartnerLoginPage() {
         </form>
 
         <p className="mt-6 text-center text-sm text-ink-muted">
+          Pas encore partenaire ?{" "}
+          <Link href="/partenaire/inscription" className="font-semibold text-signal hover:underline">
+            Créer un compte
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-xs text-ink-muted">
           Vous êtes un particulier ?{" "}
-          <Link href="/connexion" className="font-semibold text-signal hover:underline">
+          <Link href="/connexion" className="hover:text-signal hover:underline">
             Connexion client
           </Link>
         </p>

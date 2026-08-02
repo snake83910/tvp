@@ -5,18 +5,21 @@ import secrets
 import unicodedata
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_db, require_role
+from app.core.rate_limit import rate_limit
 from app.core.security import create_password_reset_token, hash_password
 from app.integrations.geocode import geocode, haversine_km
 from app.models.garage import Garage
 from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
-from app.modules.mailer.service import send_password_reset
+from app.modules.auth.service import issue_token_pair
+from app.modules.mailer.service import send_password_reset, send_welcome
+from app.schemas.auth import TokenPair
 from app.schemas.garage import (
     GarageCreate,
     GarageNearby,
@@ -26,6 +29,7 @@ from app.schemas.garage import (
     OwnerIn,
     PartnerOrder,
     PartnerOrderItem,
+    PartnerRegisterIn,
 )
 
 router = APIRouter(tags=["garages"])
@@ -258,6 +262,52 @@ async def public_garage(slug: str, db: AsyncSession = Depends(get_db)):
 # --------------------------------------------------------------------------
 #  Portail partenaire (rôle garage) : gère sa page + voit ses commandes
 # --------------------------------------------------------------------------
+
+@router.post("/partner/register", response_model=TokenPair, status_code=201)
+async def partner_register(
+    data: PartnerRegisterIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Auto-inscription d'un garage : crée le compte (rôle garage) et sa
+    fiche garage (non publiée, en attente de validation admin), puis
+    connecte directement le partenaire."""
+    await rate_limit(request, "partner_register", max_attempts=3, window_seconds=3600)
+    email = str(data.email).lower().strip()
+    existing = await db.scalar(select(User).where(User.email == email))
+    if existing is not None:
+        raise HTTPException(
+            status_code=409, detail="Un compte existe déjà avec cet email"
+        )
+    user = User(
+        email=email,
+        password_hash=hash_password(data.password),
+        role=UserRole.garage,
+        is_active=True,
+        email_verified=True,
+        phone=data.phone,
+    )
+    db.add(user)
+    await db.flush()
+
+    g = Garage(
+        owner_user_id=user.id,
+        name=data.garage_name,
+        address=data.address,
+        postal_code=data.postal_code,
+        city=data.city,
+        phone=data.phone,
+        email=email,
+        is_published=False,  # publication après validation admin
+    )
+    g.slug = await _unique_slug(db, _slugify(data.garage_name))
+    await _geocode_into(g)
+    db.add(g)
+    await db.commit()
+
+    send_welcome(user)
+    return await issue_token_pair(db, user, request)
+
 
 async def _own_garage(db: AsyncSession, user: User) -> Garage:
     g = await db.scalar(select(Garage).where(Garage.owner_user_id == user.id))
