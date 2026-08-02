@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     # URL publique du site (utilisée dans les liens des emails)
     public_site_url: str = "http://localhost:3000"
 
+    # Email de l'équipe (notifications internes : nouveau garage à valider…).
+    # Vide -> repli sur smtp_sender.
+    admin_email: str = ""
+    # Dossier de stockage des fichiers uploadés (Kbis…). Monté sur un volume
+    # persistant en production.
+    upload_dir: str = "/app/uploads"
+
     # Sentry — error tracking. Vide = désactivé. Format DSN public Sentry :
     # https://xxxxx@oxxxx.ingest.sentry.io/xxxxx
     sentry_dsn: str = ""

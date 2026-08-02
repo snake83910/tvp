@@ -226,6 +226,28 @@ def send_garage_order_notification(order: Order, user: User) -> None:
     )
 
 
+def send_admin_new_garage(garage) -> None:
+    """Notifie l'équipe qu'un nouveau garage partenaire attend validation."""
+    to = settings.admin_email or settings.smtp_sender
+    if not to:
+        return
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=to,
+            subject=f"Nouveau garage partenaire à valider — {garage.name}",
+            template="admin_new_garage.html",
+            garage_name=garage.name,
+            siret=garage.siret or "—",
+            address=f"{garage.address}, {garage.postal_code} {garage.city}",
+            email=garage.email or "—",
+            phone=garage.phone or "—",
+            has_kbis="oui" if garage.kbis_path else "non",
+            admin_url=f"{_site_url()}/admin/garages",
+        )
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 # Expédition
 # ─────────────────────────────────────────────────────────────────

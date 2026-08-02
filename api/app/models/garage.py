@@ -49,6 +49,10 @@ class Garage(Base):
 
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(320))
+    # Numéro SIRET (14 chiffres) et chemin du Kbis uploadé — vérification
+    # anti-fraude à la validation par l'admin.
+    siret: Mapped[str | None] = mapped_column(String(20))
+    kbis_path: Mapped[str | None] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
     # Horaires libres par jour : {"lundi": "08:00-18:00", ...}
     hours: Mapped[dict] = mapped_column(JSONB, default=dict)

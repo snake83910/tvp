@@ -10,6 +10,7 @@ class GarageBase(BaseModel):
     city: str = Field(min_length=1, max_length=120)
     phone: str | None = None
     email: EmailStr | None = None
+    siret: str | None = None
     description: str | None = None
     hours: dict = {}
     mounting_price_cents: int = Field(default=0, ge=0)
@@ -31,6 +32,7 @@ class GarageUpdate(BaseModel):
     city: str | None = Field(default=None, max_length=120)
     phone: str | None = None
     email: EmailStr | None = None
+    siret: str | None = None
     description: str | None = None
     hours: dict | None = None
     mounting_price_cents: int | None = Field(default=None, ge=0)
@@ -49,6 +51,8 @@ class GarageOut(GarageBase):
     lat: float | None = None
     lng: float | None = None
     owner_user_id: uuid.UUID | None = None
+    siret: str | None = None
+    kbis_path: str | None = None
 
 
 class GaragePublic(BaseModel):

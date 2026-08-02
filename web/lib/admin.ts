@@ -101,6 +101,8 @@ export interface Garage {
   lng: number | null;
   phone: string | null;
   email: string | null;
+  siret: string | null;
+  kbis_path: string | null;
   description: string | null;
   hours: Record<string, string>;
   mounting_price_cents: number;
@@ -117,6 +119,7 @@ export interface GaragePayload {
   city: string;
   phone?: string | null;
   email?: string | null;
+  siret?: string | null;
   description?: string | null;
   hours?: Record<string, string>;
   mounting_price_cents?: number;
@@ -205,3 +208,11 @@ export const adminApi = {
   setGarageOwner: (id: string, email: string) =>
     call<Garage>(`/admin/garages/${id}/owner`, "PUT", { email }),
 };
+
+export async function downloadGarageKbis(id: string, slug: string): Promise<void> {
+  const res = await authFetch(`/admin/garages/${id}/kbis`);
+  if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  const blob = await res.blob();
+  const ext = blob.type.includes("pdf") ? "pdf" : blob.type.includes("png") ? "png" : "jpg";
+  saveBlob(blob, `kbis-${slug}.${ext}`);
+}

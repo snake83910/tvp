@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { adminApi, type Garage, type GaragePayload } from "@/lib/admin";
+import {
+  adminApi,
+  downloadGarageKbis,
+  type Garage,
+  type GaragePayload,
+} from "@/lib/admin";
 import { useToast } from "@/components/admin/Toast";
 import { formatEuro } from "@/lib/money";
 
@@ -12,6 +17,7 @@ type FormState = {
   city: string;
   phone: string;
   email: string;
+  siret: string;
   mounting_price_eur: string;
   services: string;
   hours: string;
@@ -27,6 +33,7 @@ const EMPTY: FormState = {
   city: "",
   phone: "",
   email: "",
+  siret: "",
   mounting_price_eur: "",
   services: "",
   hours: "",
@@ -43,6 +50,7 @@ function toForm(g: Garage): FormState {
     city: g.city,
     phone: g.phone ?? "",
     email: g.email ?? "",
+    siret: g.siret ?? "",
     mounting_price_eur: (g.mounting_price_cents / 100).toFixed(2),
     services: (g.services ?? []).join(", "),
     hours: (g.hours && g.hours.text) || "",
@@ -61,6 +69,7 @@ function toPayload(f: FormState): GaragePayload {
     city: f.city.trim(),
     phone: f.phone.trim() || null,
     email: f.email.trim() || null,
+    siret: f.siret.trim() || null,
     description: f.description.trim() || null,
     mounting_price_cents: cents,
     services: f.services
@@ -181,6 +190,7 @@ export default function AdminGaragesPage() {
                 <th className="p-3">Ville</th>
                 <th className="p-3">Montage / pneu</th>
                 <th className="p-3">Géoloc.</th>
+                <th className="p-3">Kbis</th>
                 <th className="p-3">Publié</th>
                 <th className="p-3" />
               </tr>
@@ -200,6 +210,18 @@ export default function AdminGaragesPage() {
                       <span className="text-ok">✓ géocodé</span>
                     ) : (
                       <span className="text-signal">⚠ non géocodé</span>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    {g.kbis_path ? (
+                      <button
+                        onClick={() => downloadGarageKbis(g.id, g.slug)}
+                        className="font-semibold text-signal hover:underline"
+                      >
+                        ↓ voir
+                      </button>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
                     )}
                   </td>
                   <td className="p-3">
@@ -253,6 +275,22 @@ export default function AdminGaragesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Téléphone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
                 <Field label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+              </div>
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <Field label="SIRET" value={form.siret} onChange={(v) => setForm({ ...form, siret: v })} />
+                </div>
+                {editing?.kbis_path ? (
+                  <button
+                    type="button"
+                    onClick={() => downloadGarageKbis(editing.id, editing.slug)}
+                    className="mb-0.5 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-signal hover:border-signal"
+                  >
+                    ↓ Kbis
+                  </button>
+                ) : (
+                  <span className="mb-2 text-xs text-ink-muted">Pas de Kbis</span>
+                )}
               </div>
               <Field
                 label="Prix du montage / pneu (€ TTC)"

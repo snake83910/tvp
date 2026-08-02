@@ -49,3 +49,6 @@ web/test-results/
 web/playwright-report/
 web/blob-report/
 web/.next-e2e/
+
+# Fichiers uploadés (Kbis garages) — stockés hors dépôt
+api/uploads/

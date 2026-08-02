@@ -1,0 +1,38 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    Nouveau garage partenaire à valider
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Un garage vient de créer un compte partenaire. Sa fiche est
+    <strong>en attente de validation</strong> et n'est pas encore visible au
+    checkout.
+  </p>
+
+  <div style="margin:20px 0;padding:14px 16px;background:#f6f6f4;border-radius:8px;">
+    <div style="color:#17181a;line-height:1.7;">
+      <strong>{{ garage_name }}</strong><br />
+      {{ address }}<br />
+      SIRET : {{ siret }}<br />
+      Email : {{ email }}<br />
+      Tél. : {{ phone }}<br />
+      Document Kbis fourni : <strong>{{ has_kbis }}</strong>
+    </div>
+  </div>
+
+  <p style="margin:0 0 20px 0;">
+    Vérifiez le SIRET et le Kbis, puis publiez la fiche depuis
+    l'administration.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ admin_url }}" style="display:inline-block;background:#e4002b;color:#ffffff;padding:12px 24px;border-radius:9999px;font-weight:800;text-decoration:none;">
+      Gérer les garages
+    </a>
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    Notification interne — Tous Vos Pneus
+  </p>
+{% endblock %}

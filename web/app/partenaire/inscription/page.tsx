@@ -15,8 +15,10 @@ export default function PartnerRegisterPage() {
     address: "",
     postal_code: "",
     city: "",
+    siret: "",
     phone: "",
   });
+  const [kbis, setKbis] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -36,7 +38,9 @@ export default function PartnerRegisterPage() {
         address: f.address.trim(),
         postal_code: f.postal_code.trim(),
         city: f.city.trim(),
+        siret: f.siret.trim(),
         phone: f.phone.trim() || null,
+        kbis,
       });
       router.push("/partenaire");
     } catch (err) {
@@ -73,6 +77,27 @@ export default function PartnerRegisterPage() {
             <Field label="Ville" value={f.city} onChange={(v) => set("city", v)} required />
           </div>
           <Field label="Téléphone" value={f.phone} onChange={(v) => set("phone", v)} />
+          <Field
+            label="SIRET (14 chiffres)"
+            value={f.siret}
+            onChange={(v) => set("siret", v)}
+            required
+          />
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-ink-muted">
+              Extrait Kbis (PDF, JPG ou PNG — 5 Mo max)
+            </label>
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png"
+              onChange={(e) => setKbis(e.target.files?.[0] ?? null)}
+              className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm outline-none file:mr-3 file:rounded-md file:border-0 file:bg-paper-dim file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-ink-soft focus:border-signal"
+            />
+            <p className="mt-1 text-xs text-ink-muted">
+              Nous vérifions votre Kbis pour garantir que vous êtes un garage
+              professionnel avant de publier votre page.
+            </p>
+          </div>
           <hr className="border-line" />
           <Field label="Email de connexion" type="email" value={f.email} onChange={(v) => set("email", v)} required autoComplete="email" />
           <PasswordField

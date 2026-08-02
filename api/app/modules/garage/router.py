@@ -5,7 +5,17 @@ import secrets
 import unicodedata
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,12 +23,17 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import get_db, require_role
 from app.core.rate_limit import rate_limit
 from app.core.security import create_password_reset_token, hash_password
+from app.core.storage import document_path, save_document
 from app.integrations.geocode import geocode, haversine_km
 from app.models.garage import Garage
 from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
 from app.modules.auth.service import issue_token_pair
-from app.modules.mailer.service import send_password_reset, send_welcome
+from app.modules.mailer.service import (
+    send_admin_new_garage,
+    send_password_reset,
+    send_welcome,
+)
 from app.schemas.auth import TokenPair
 from app.schemas.garage import (
     GarageCreate,
@@ -29,7 +44,6 @@ from app.schemas.garage import (
     OwnerIn,
     PartnerOrder,
     PartnerOrderItem,
-    PartnerRegisterIn,
 )
 
 router = APIRouter(tags=["garages"])
@@ -245,6 +259,22 @@ async def admin_set_owner(
     return g
 
 
+@router.get("/admin/garages/{garage_id}/kbis")
+async def admin_download_kbis(
+    garage_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Télécharge le Kbis d'un garage (vérification anti-fraude)."""
+    g = await _get_garage(garage_id, db)
+    if not g.kbis_path:
+        raise HTTPException(status_code=404, detail="Aucun Kbis pour ce garage")
+    path = document_path(g.kbis_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Fichier introuvable")
+    return FileResponse(path, filename=f"kbis-{g.slug}{path.suffix}")
+
+
 # --------------------------------------------------------------------------
 #  Page publique d'un garage
 # --------------------------------------------------------------------------
@@ -265,15 +295,30 @@ async def public_garage(slug: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/partner/register", response_model=TokenPair, status_code=201)
 async def partner_register(
-    data: PartnerRegisterIn,
     request: Request,
+    email: str = Form(...),
+    password: str = Form(..., min_length=8, max_length=128),
+    garage_name: str = Form(..., min_length=1, max_length=200),
+    address: str = Form(..., min_length=1, max_length=300),
+    postal_code: str = Form(..., min_length=4, max_length=10),
+    city: str = Form(..., min_length=1, max_length=120),
+    siret: str = Form(..., min_length=9, max_length=20),
+    phone: str | None = Form(None),
+    kbis: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_db),
 ):
     """Auto-inscription d'un garage : crée le compte (rôle garage) et sa
-    fiche garage (non publiée, en attente de validation admin), puis
-    connecte directement le partenaire."""
+    fiche garage (non publiée, en attente de validation admin), stocke le
+    SIRET et le Kbis, puis connecte directement le partenaire."""
     await rate_limit(request, "partner_register", max_attempts=3, window_seconds=3600)
-    email = str(data.email).lower().strip()
+    email = email.lower().strip()
+    if "@" not in email:
+        raise HTTPException(status_code=422, detail="Email invalide")
+    siret_clean = "".join(c for c in siret if c.isdigit())
+    if len(siret_clean) != 14:
+        raise HTTPException(
+            status_code=422, detail="Le SIRET doit comporter 14 chiffres"
+        )
     existing = await db.scalar(select(User).where(User.email == email))
     if existing is not None:
         raise HTTPException(
@@ -281,31 +326,38 @@ async def partner_register(
         )
     user = User(
         email=email,
-        password_hash=hash_password(data.password),
+        password_hash=hash_password(password),
         role=UserRole.garage,
         is_active=True,
         email_verified=True,
-        phone=data.phone,
+        phone=phone,
     )
     db.add(user)
     await db.flush()
 
     g = Garage(
         owner_user_id=user.id,
-        name=data.garage_name,
-        address=data.address,
-        postal_code=data.postal_code,
-        city=data.city,
-        phone=data.phone,
+        name=garage_name,
+        address=address,
+        postal_code=postal_code,
+        city=city,
+        phone=phone,
         email=email,
+        siret=siret_clean,
         is_published=False,  # publication après validation admin
     )
-    g.slug = await _unique_slug(db, _slugify(data.garage_name))
+    g.slug = await _unique_slug(db, _slugify(garage_name))
     await _geocode_into(g)
     db.add(g)
+    await db.flush()
+
+    if kbis is not None and kbis.filename:
+        g.kbis_path = await save_document("kbis", str(g.id), kbis)
+
     await db.commit()
 
     send_welcome(user)
+    send_admin_new_garage(g)
     return await issue_token_pair(db, user, request)
 
 

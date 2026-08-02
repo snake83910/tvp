@@ -17,7 +17,10 @@ services:
     restart: unless-stopped
 
   api:
-    volumes: !reset []        # Pas de montage source en prod
+    # Pas de montage source en prod, mais un volume persistant pour les
+    # fichiers uploadés (Kbis des garages).
+    volumes: !override
+      - uploads:/app/uploads
     command: >
       uvicorn app.main:app
       --host 0.0.0.0
@@ -29,3 +32,6 @@ services:
 
   web:
     restart: unless-stopped
+
+volumes:
+  uploads:
