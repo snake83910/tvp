@@ -307,6 +307,8 @@ async def sync_payment(
     )
     if order_full:
         send_order_confirmation(order_full, user)
+        if order_full.garage_id:
+            send_garage_order_notification(order_full, user)
 
     return {"status": "synced", "order_status": OrderStatus.paid.value}
 
@@ -420,5 +422,7 @@ async def verify_kr_answer(
     )
     if order_full:
         send_order_confirmation(order_full, user)
+        if order_full.garage_id:
+            send_garage_order_notification(order_full, user)
 
     return {"status": "ok", "order_status": OrderStatus.paid.value}
