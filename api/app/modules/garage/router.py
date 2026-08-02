@@ -1,25 +1,54 @@
-"""Garages partenaires : CRUD admin + recherche publique du plus proche."""
+"""Garages partenaires : CRUD admin, portail partenaire, pages publiques
+et recherche du plus proche."""
 import re
+import secrets
 import unicodedata
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_db, require_role
+from app.core.security import create_password_reset_token, hash_password
 from app.integrations.geocode import geocode, haversine_km
 from app.models.garage import Garage
+from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
+from app.modules.mailer.service import send_password_reset
 from app.schemas.garage import (
     GarageCreate,
     GarageNearby,
     GarageOut,
+    GaragePublic,
     GarageUpdate,
+    OwnerIn,
+    PartnerOrder,
+    PartnerOrderItem,
 )
 
 router = APIRouter(tags=["garages"])
 _admin = require_role(UserRole.admin)
+_garage_user = require_role(UserRole.garage)
+
+# Statuts d'une commande visibles par le garage : à partir du paiement.
+_VISIBLE_ORDER_STATUSES = {
+    OrderStatus.paid,
+    OrderStatus.sent_to_supplier,
+    OrderStatus.shipped,
+    OrderStatus.delivered,
+}
+
+
+def _dimension_of(product_data: dict | None) -> str | None:
+    pd = product_data or {}
+    if pd.get("dimension"):
+        return str(pd["dimension"])
+    w, r, d = pd.get("width"), pd.get("ratio"), pd.get("diameter")
+    if w and r and d:
+        return f"{w}/{r} R{d}"
+    return None
 
 
 def _slugify(text: str) -> str:
@@ -170,3 +199,150 @@ async def nearest_garages(
     # Tri par distance (les garages sans distance calculable en dernier)
     items.sort(key=lambda i: i.distance_km if i.distance_km is not None else 1e9)
     return items[:limit]
+
+
+# --------------------------------------------------------------------------
+#  Admin : rattachement d'un compte gérant
+# --------------------------------------------------------------------------
+
+@router.put("/admin/garages/{garage_id}/owner", response_model=GarageOut)
+async def admin_set_owner(
+    garage_id: uuid.UUID,
+    data: OwnerIn,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Rattache (ou crée) le compte gérant du garage (rôle garage).
+
+    Compte inexistant -> création + email pour définir le mot de passe.
+    """
+    g = await _get_garage(garage_id, db)
+    email = str(data.email).lower().strip()
+    user = await db.scalar(select(User).where(User.email == email))
+    invited = False
+    if user is None:
+        user = User(
+            email=email,
+            password_hash=hash_password(secrets.token_urlsafe(24)),
+            role=UserRole.garage,
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+        invited = True
+    elif user.role == UserRole.client:
+        user.role = UserRole.garage
+    g.owner_user_id = user.id
+    await db.commit()
+    await db.refresh(g)
+    if invited:
+        send_password_reset(user, create_password_reset_token(str(user.id)))
+    return g
+
+
+# --------------------------------------------------------------------------
+#  Page publique d'un garage
+# --------------------------------------------------------------------------
+
+@router.get("/garages/{slug}", response_model=GaragePublic)
+async def public_garage(slug: str, db: AsyncSession = Depends(get_db)):
+    g = await db.scalar(
+        select(Garage).where(Garage.slug == slug, Garage.is_published.is_(True))
+    )
+    if g is None:
+        raise HTTPException(status_code=404, detail="Garage introuvable")
+    return g
+
+
+# --------------------------------------------------------------------------
+#  Portail partenaire (rôle garage) : gère sa page + voit ses commandes
+# --------------------------------------------------------------------------
+
+async def _own_garage(db: AsyncSession, user: User) -> Garage:
+    g = await db.scalar(select(Garage).where(Garage.owner_user_id == user.id))
+    if g is None:
+        raise HTTPException(
+            status_code=404, detail="Aucun garage associé à ce compte"
+        )
+    return g
+
+
+@router.get("/partner/garage", response_model=GarageOut)
+async def partner_get_garage(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    return await _own_garage(db, user)
+
+
+@router.patch("/partner/garage", response_model=GarageOut)
+async def partner_update_garage(
+    data: GarageUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    g = await _own_garage(db, user)
+    fields = data.model_dump(exclude_unset=True)
+    # La publication reste une décision admin.
+    fields.pop("is_published", None)
+    address_changed = any(
+        k in fields and fields[k] != getattr(g, k)
+        for k in ("address", "postal_code", "city")
+    )
+    if "email" in fields and fields["email"] is not None:
+        fields["email"] = str(fields["email"])
+    for k, v in fields.items():
+        setattr(g, k, v)
+    if "name" in fields and fields["name"]:
+        g.slug = await _unique_slug(db, _slugify(g.name), exclude_id=g.id)
+    if address_changed:
+        await _geocode_into(g)
+    await db.commit()
+    await db.refresh(g)
+    return g
+
+
+@router.get("/partner/orders", response_model=list[PartnerOrder])
+async def partner_orders(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    """Commandes rattachées au garage, SANS les prix (montage payé sur place)."""
+    g = await _own_garage(db, user)
+    orders = list(
+        await db.scalars(
+            select(Order)
+            .where(
+                Order.garage_id == g.id,
+                Order.status.in_(_VISIBLE_ORDER_STATUSES),
+            )
+            .options(selectinload(Order.items))
+            .order_by(Order.created_at.desc())
+        )
+    )
+    out: list[PartnerOrder] = []
+    for o in orders:
+        cust = await db.get(User, o.user_id)
+        name = None
+        if cust:
+            name = f"{cust.first_name or ''} {cust.last_name or ''}".strip() or None
+        out.append(
+            PartnerOrder(
+                order_number=o.order_number,
+                status=o.status.value,
+                created_at=o.created_at.isoformat(),
+                customer_name=name,
+                customer_phone=cust.phone if cust else None,
+                customer_email=cust.email if cust else None,
+                items=[
+                    PartnerOrderItem(
+                        label=it.label_snapshot,
+                        quantity=it.quantity,
+                        dimension=_dimension_of(it.product_data),
+                    )
+                    for it in o.items
+                ],
+            )
+        )
+    return out

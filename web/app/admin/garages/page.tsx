@@ -17,6 +17,7 @@ type FormState = {
   hours: string;
   description: string;
   is_published: boolean;
+  owner_email: string;
 };
 
 const EMPTY: FormState = {
@@ -31,6 +32,7 @@ const EMPTY: FormState = {
   hours: "",
   description: "",
   is_published: true,
+  owner_email: "",
 };
 
 function toForm(g: Garage): FormState {
@@ -46,6 +48,7 @@ function toForm(g: Garage): FormState {
     hours: (g.hours && g.hours.text) || "",
     description: g.description ?? "",
     is_published: g.is_published,
+    owner_email: "",
   };
 }
 
@@ -110,12 +113,19 @@ export default function AdminGaragesPage() {
     setSaving(true);
     try {
       const payload = toPayload(form);
+      let garageId = editing?.id;
       if (editing) {
         await adminApi.updateGarage(editing.id, payload);
         toast("Garage mis à jour", "success");
       } else {
-        await adminApi.createGarage(payload);
+        const created = await adminApi.createGarage(payload);
+        garageId = created.id;
         toast("Garage créé", "success");
+      }
+      const ownerEmail = form.owner_email.trim();
+      if (ownerEmail && garageId) {
+        await adminApi.setGarageOwner(garageId, ownerEmail);
+        toast("Compte gérant rattaché", "success");
       }
       setShowForm(false);
       await load();
@@ -282,6 +292,21 @@ export default function AdminGaragesPage() {
                 />
                 Publié (visible au checkout)
               </label>
+
+              <div className="rounded-lg border border-line bg-paper-dim p-3">
+                <Field
+                  label="Email du gérant (accès au portail partenaire)"
+                  type="email"
+                  value={form.owner_email}
+                  onChange={(v) => setForm({ ...form, owner_email: v })}
+                  placeholder="gerant@garage.fr"
+                />
+                <p className="mt-1 text-xs text-ink-muted">
+                  {editing?.owner_user_id
+                    ? "Un compte gérant est déjà rattaché. Saisir un email le remplace."
+                    : "Rattache (ou crée) le compte qui gérera la page et verra les commandes. Un email d'accès est envoyé si le compte est créé."}
+                </p>
+              </div>
             </div>
 
             <div className="mt-6 flex justify-end gap-3">

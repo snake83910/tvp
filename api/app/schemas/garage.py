@@ -51,6 +51,49 @@ class GarageOut(GarageBase):
     owner_user_id: uuid.UUID | None = None
 
 
+class GaragePublic(BaseModel):
+    """Fiche publique d'un garage (page /garages/{slug})."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    slug: str
+    address: str
+    postal_code: str
+    city: str
+    phone: str | None = None
+    email: EmailStr | None = None
+    description: str | None = None
+    hours: dict = {}
+    mounting_price_cents: int = 0
+    services: list[str] = []
+    photo_url: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+
+
+class OwnerIn(BaseModel):
+    email: EmailStr
+
+
+class PartnerOrderItem(BaseModel):
+    label: str
+    quantity: int
+    dimension: str | None = None
+
+
+class PartnerOrder(BaseModel):
+    """Commande vue par le garage : PAS de prix (montage réglé sur place)."""
+
+    order_number: str
+    status: str
+    created_at: str
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    customer_email: str | None = None
+    items: list[PartnerOrderItem] = []
+
+
 class GarageNearby(BaseModel):
     """Vue publique : ce que le client voit au checkout. Pas de propriétaire."""
 

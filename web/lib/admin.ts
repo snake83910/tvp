@@ -202,4 +202,6 @@ export const adminApi = {
     const res = await authFetch(`/admin/garages/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error(`Erreur ${res.status}`);
   },
+  setGarageOwner: (id: string, email: string) =>
+    call<Garage>(`/admin/garages/${id}/owner`, "PUT", { email }),
 };
