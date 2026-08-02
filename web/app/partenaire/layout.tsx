@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useCurrentUser } from "@/lib/auth";
 
@@ -12,17 +12,29 @@ export default function PartnerLayout({
 }) {
   const { user, loading } = useCurrentUser();
   const router = useRouter();
+  const pathname = usePathname();
+  const isLoginPage = pathname === "/partenaire/login";
 
   useEffect(() => {
-    if (loading) return;
+    if (isLoginPage || loading) return;
     if (!user) {
-      router.replace("/connexion?next=/partenaire");
+      router.replace("/partenaire/login");
       return;
     }
     if (user.role !== "garage") {
       router.replace("/");
     }
-  }, [loading, user, router]);
+  }, [loading, user, router, isLoginPage]);
+
+  // La page de connexion partenaire n'est pas protégée.
+  if (isLoginPage) {
+    return (
+      <>
+        <SiteHeader />
+        {children}
+      </>
+    );
+  }
 
   if (loading) {
     return (

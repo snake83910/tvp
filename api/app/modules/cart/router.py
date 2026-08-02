@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import get_current_user, get_current_user_optional
 from app.db.session import get_db
 from app.models.order import Cart
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.modules.cart import service
 from app.schemas.order import (
     AddItemIn,
@@ -219,6 +219,14 @@ async def checkout(
       crée PAS la commande : on renvoie les écarts pour confirmation
       explicite côté frontend (anti-litige).
     """
+    if user.role == UserRole.garage:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Les comptes partenaires ne peuvent pas passer commande. "
+                "Utilisez votre espace partenaire."
+            ),
+        )
     if not data.accept_terms:
         raise HTTPException(
             status_code=400,

@@ -213,6 +213,30 @@ export default function CheckoutPage() {
     );
   }
 
+  // Les comptes partenaires (garages) ne passent pas commande comme un client.
+  if (user.role === "garage") {
+    return (
+      <>
+        <SiteHeader />
+        <main className="mx-auto max-w-3xl px-6 py-16 text-center">
+          <h1 className="font-display text-2xl font-black text-ink">
+            Compte partenaire
+          </h1>
+          <p className="mt-3 text-ink-muted">
+            Les comptes partenaires ne peuvent pas passer commande. Retrouvez
+            vos commandes et votre page dans votre espace.
+          </p>
+          <Link
+            href="/partenaire"
+            className="mt-6 inline-block rounded-full bg-signal px-6 py-3 text-sm font-bold text-white hover:bg-signal-dark"
+          >
+            Aller à mon espace partenaire
+          </Link>
+        </main>
+      </>
+    );
+  }
+
   if (!cart || cart.items.length === 0) {
     return (
       <>

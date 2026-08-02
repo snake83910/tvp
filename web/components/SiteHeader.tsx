@@ -31,6 +31,11 @@ export function SiteHeader() {
 
         <nav className="hidden items-center gap-7 text-sm font-semibold text-ink-soft md:flex">
           <Link href="/recherche" className="transition hover:text-signal">Rechercher</Link>
+          {user?.role === "garage" && (
+            <Link href="/partenaire" className="transition hover:text-signal">
+              Espace partenaire
+            </Link>
+          )}
           <Link href={accountHref} className="transition hover:text-signal">
             {loading ? "Mon compte" : accountLabel}
           </Link>
@@ -97,6 +102,9 @@ export function SiteHeader() {
               <Link onClick={() => setMobileOpen(false)} href="/" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Accueil</Link>
               <Link onClick={() => setMobileOpen(false)} href="/recherche" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Rechercher des pneus</Link>
               <Link onClick={() => setMobileOpen(false)} href={accountHref} className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">{accountLabel}</Link>
+              {user?.role === "garage" && (
+                <Link onClick={() => setMobileOpen(false)} href="/partenaire" className="block rounded-lg px-3 py-2.5 font-semibold text-signal hover:bg-paper-dim">Espace partenaire</Link>
+              )}
               <Link onClick={() => setMobileOpen(false)} href="/panier" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Panier ({count})</Link>
               <hr className="my-3 border-line" />
               <Link onClick={() => setMobileOpen(false)} href="/a-propos" className="block px-3 py-1.5 text-xs text-ink-muted hover:text-signal">À propos</Link>

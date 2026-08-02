@@ -40,7 +40,10 @@ function LoginForm() {
     setBusy(true);
     try {
       await auth.login(email, password);
-      router.push(next);
+      // Un compte garage est dirigé vers son espace partenaire, pas la
+      // boutique : connexion client et partenaire restent distinctes.
+      const me = await auth.me();
+      router.push(me.role === "garage" ? "/partenaire" : next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible");
     } finally {
