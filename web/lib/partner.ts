@@ -88,9 +88,28 @@ export type {
   GaragePricingRow,
 } from "@/lib/admin";
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/** URL publique d'une photo de garage à partir de son chemin relatif. */
+export function mediaUrl(path: string): string {
+  return `${API_BASE}/garages/media/${path}`;
+}
+
+async function upload(path: string, file: File): Promise<Garage> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await authFetch(path, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  return res.json() as Promise<Garage>;
+}
+
 export const partnerApi = {
   getGarage: () => call<Garage>("/partner/garage"),
   updateGarage: (data: Partial<GaragePayload>) =>
     call<Garage>("/partner/garage", "PATCH", data),
   listOrders: () => call<PartnerOrder[]>("/partner/orders"),
+  addPhoto: (file: File) => upload("/partner/garage/photos", file),
+  removePhoto: (path: string) =>
+    call<Garage>(`/partner/garage/photos?path=${encodeURIComponent(path)}`, "DELETE"),
 };

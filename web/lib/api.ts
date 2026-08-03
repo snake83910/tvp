@@ -138,10 +138,19 @@ export interface GaragePublic {
   phone: string | null;
   email: string | null;
   description: string | null;
-  hours: Record<string, string>;
+  hours: Record<string, unknown>;
   mounting_price_cents: number;
   services: string[];
   photo_url: string | null;
+  payment_methods: string[];
+  pricing: {
+    vehicle: string;
+    size_min: number;
+    size_max: number;
+    price_cents: number;
+    label?: string;
+  }[];
+  photos: string[];
   lat: number | null;
   lng: number | null;
 }

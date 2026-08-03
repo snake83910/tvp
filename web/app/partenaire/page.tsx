@@ -9,6 +9,7 @@ import { CongesTab } from "@/components/partner/tabs/CongesTab";
 import { TarifsTab } from "@/components/partner/tabs/TarifsTab";
 import { PaiementTab } from "@/components/partner/tabs/PaiementTab";
 import { CommandesTab } from "@/components/partner/tabs/CommandesTab";
+import { MediaTab } from "@/components/partner/tabs/MediaTab";
 
 const TABS = [
   { key: "dashboard", label: "Tableau de bord" },
@@ -124,7 +125,8 @@ export default function PartnerDashboard() {
         {tab === "tarifs" && <TarifsTab garage={garage} save={save} saving={saving} />}
         {tab === "paiement" && <PaiementTab garage={garage} save={save} saving={saving} />}
         {tab === "commandes" && <CommandesTab orders={orders} />}
-        {(tab === "media" || tab === "avis" || tab === "rdv") && (
+        {tab === "media" && <MediaTab garage={garage} onChange={setGarage} />}
+        {(tab === "avis" || tab === "rdv") && (
           <div className="rounded-xl border border-line bg-paper p-8 text-center text-ink-muted">
             Bientôt disponible.
           </div>

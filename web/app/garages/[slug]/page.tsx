@@ -5,10 +5,12 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { api, type GaragePublic } from "@/lib/api";
 import { formatEuro } from "@/lib/money";
+import { paymentLabel, vehicleLabel } from "@/components/partner/constants";
 
 export const dynamic = "force-dynamic";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
+const MEDIA_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function load(slug: string): Promise<GaragePublic | null> {
   try {
@@ -85,6 +87,20 @@ export default async function GaragePage({
           Garage partenaire pour le montage de vos pneus à {g.city}.
         </p>
 
+        {g.photos.length > 0 && (
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {g.photos.map((p) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={p}
+                src={`${MEDIA_BASE}/garages/media/${p}`}
+                alt={`${g.name}`}
+                className="h-40 w-full rounded-xl border border-line object-cover"
+              />
+            ))}
+          </div>
+        )}
+
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <InfoCard title="Adresse">
             <p className="text-ink-soft">
@@ -110,10 +126,8 @@ export default async function GaragePage({
                 </a>
               </p>
             )}
-            {g.hours?.text && (
-              <p className="mt-1 text-sm text-ink-soft">{g.hours.text}</p>
-            )}
-            {g.mounting_price_cents > 0 && (
+            <HoursDisplay hours={g.hours} />
+            {g.mounting_price_cents > 0 && g.pricing.length === 0 && (
               <p className="mt-2 text-sm">
                 Montage :{" "}
                 <strong className="text-ink">
@@ -122,8 +136,42 @@ export default async function GaragePage({
                 <span className="text-ink-muted">(réglé sur place)</span>
               </p>
             )}
+            {g.payment_methods.length > 0 && (
+              <p className="mt-2 text-sm text-ink-soft">
+                Paiement : {g.payment_methods.map(paymentLabel).join(", ")}
+              </p>
+            )}
           </InfoCard>
         </div>
+
+        {g.pricing.length > 0 && (
+          <section className="mt-6">
+            <h2 className="font-display text-lg font-bold text-ink">Tarifs de montage</h2>
+            <div className="mt-3 overflow-x-auto rounded-xl border border-line">
+              <table className="w-full min-w-[420px] text-sm">
+                <thead>
+                  <tr className="border-b border-line bg-paper-dim text-left text-xs uppercase tracking-wider text-ink-muted">
+                    <th className="p-3">Véhicule</th>
+                    <th className="p-3">Prestation</th>
+                    <th className="p-3">Jantes</th>
+                    <th className="p-3">Prix / pneu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.pricing.map((r, i) => (
+                    <tr key={i} className="border-b border-line last:border-0">
+                      <td className="p-3 text-ink">{vehicleLabel(r.vehicle)}</td>
+                      <td className="p-3 text-ink-soft">{r.label || "—"}</td>
+                      <td className="p-3 text-ink-soft">{r.size_min}″ → {r.size_max}″</td>
+                      <td className="p-3 font-semibold text-ink">{formatEuro(r.price_cents / 100)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1 text-xs text-ink-muted">Montage réglé sur place, au garage.</p>
+          </section>
+        )}
 
         {g.services.length > 0 && (
           <section className="mt-6">
@@ -174,6 +222,38 @@ export default async function GaragePage({
       />
     </>
   );
+}
+
+const DAY_ORDER = [
+  ["lundi", "Lun"],
+  ["mardi", "Mar"],
+  ["mercredi", "Mer"],
+  ["jeudi", "Jeu"],
+  ["vendredi", "Ven"],
+  ["samedi", "Sam"],
+  ["dimanche", "Dim"],
+] as const;
+
+function HoursDisplay({ hours }: { hours: Record<string, unknown> }) {
+  if (!hours) return null;
+  const text = hours.text;
+  if (typeof text === "string" && text) {
+    return <p className="mt-1 text-sm text-ink-soft">{text}</p>;
+  }
+  const rows = DAY_ORDER.map(([key, label]) => {
+    const d = hours[key] as { open?: string; close?: string; closed?: boolean } | undefined;
+    if (!d) return null;
+    const value = d.closed ? "Fermé" : d.open && d.close ? `${d.open} – ${d.close}` : null;
+    if (!value) return null;
+    return (
+      <div key={key} className="flex justify-between gap-4">
+        <span className="text-ink-muted">{label}</span>
+        <span className="text-ink-soft">{value}</span>
+      </div>
+    );
+  }).filter(Boolean);
+  if (rows.length === 0) return null;
+  return <div className="mt-2 space-y-0.5 text-sm">{rows}</div>;
 }
 
 function InfoCard({

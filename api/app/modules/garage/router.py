@@ -304,6 +304,17 @@ async def admin_download_kbis(
 #  Page publique d'un garage
 # --------------------------------------------------------------------------
 
+@router.get("/garages/media/{path:path}")
+async def garage_media(path: str):
+    """Sert une photo de garage (public). Restreint au dossier des photos."""
+    if not path.startswith("garage-photos/") or ".." in path:
+        raise HTTPException(status_code=404, detail="Introuvable")
+    fp = document_path(path)
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Introuvable")
+    return FileResponse(fp)
+
+
 @router.get("/garages/{slug}", response_model=GaragePublic)
 async def public_garage(slug: str, db: AsyncSession = Depends(get_db)):
     g = await db.scalar(
@@ -435,6 +446,40 @@ async def partner_update_garage(
         await _geocode_into(g)
     if siret_needs_check:
         await _verify_siret_into(g)
+    await db.commit()
+    await db.refresh(g)
+    return g
+
+
+@router.post("/partner/garage/photos", response_model=GarageOut)
+async def partner_add_photo(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    g = await _own_garage(db, user)
+    rel = await save_document(f"garage-photos/{g.id}", uuid.uuid4().hex, file)
+    g.photos = list(g.photos or []) + [rel]
+    await db.commit()
+    await db.refresh(g)
+    return g
+
+
+@router.delete("/partner/garage/photos", response_model=GarageOut)
+async def partner_remove_photo(
+    path: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    g = await _own_garage(db, user)
+    g.photos = [p for p in (g.photos or []) if p != path]
+    if path.startswith("garage-photos/") and ".." not in path:
+        try:
+            fp = document_path(path)
+            if fp.exists():
+                fp.unlink()
+        except OSError:
+            pass
     await db.commit()
     await db.refresh(g)
     return g
