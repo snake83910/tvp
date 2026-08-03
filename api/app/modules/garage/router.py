@@ -64,16 +64,6 @@ _VISIBLE_ORDER_STATUSES = {
 }
 
 
-def _dimension_of(product_data: dict | None) -> str | None:
-    pd = product_data or {}
-    if pd.get("dimension"):
-        return str(pd["dimension"])
-    w, r, d = pd.get("width"), pd.get("ratio"), pd.get("diameter")
-    if w and r and d:
-        return f"{w}/{r} R{d}"
-    return None
-
-
 def _slugify(text: str) -> str:
     text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode()
     text = re.sub(r"[^a-zA-Z0-9]+", "-", text).strip("-").lower()
@@ -588,7 +578,7 @@ def _partner_order_view(order: Order, cust: User | None) -> PartnerOrder:
             PartnerOrderItem(
                 label=it.label_snapshot,
                 quantity=it.quantity,
-                dimension=_dimension_of(it.product_data),
+                dimension=None,  # la dimension est déjà incluse dans le libellé
             )
             for it in order.items
         ],
