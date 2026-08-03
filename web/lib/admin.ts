@@ -106,12 +106,30 @@ export interface Garage {
   siret_company_name: string | null;
   kbis_path: string | null;
   description: string | null;
-  hours: Record<string, string>;
+  hours: Record<string, unknown>;
   mounting_price_cents: number;
   services: string[];
   photo_url: string | null;
+  payment_methods: string[];
+  closures: GarageClosure[];
+  pricing: GaragePricingRow[];
+  photos: string[];
   is_published: boolean;
   owner_user_id: string | null;
+}
+
+export interface GarageClosure {
+  start: string; // YYYY-MM-DD
+  end: string; // YYYY-MM-DD
+  label?: string;
+}
+
+export interface GaragePricingRow {
+  vehicle: string; // voiture | suv | utilitaire | moto | runflat …
+  size_min: number; // diamètre jante mini (pouces)
+  size_max: number; // diamètre jante maxi (pouces)
+  price_cents: number;
+  label?: string;
 }
 
 export interface GaragePayload {
@@ -123,7 +141,10 @@ export interface GaragePayload {
   email?: string | null;
   siret?: string | null;
   description?: string | null;
-  hours?: Record<string, string>;
+  payment_methods?: string[];
+  closures?: GarageClosure[];
+  pricing?: GaragePricingRow[];
+  hours?: Record<string, unknown>;
   mounting_price_cents?: number;
   services?: string[];
   photo_url?: string | null;

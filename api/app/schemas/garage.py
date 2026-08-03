@@ -16,6 +16,9 @@ class GarageBase(BaseModel):
     mounting_price_cents: int = Field(default=0, ge=0)
     services: list[str] = []
     photo_url: str | None = None
+    payment_methods: list[str] = []
+    closures: list[dict] = []
+    pricing: list[dict] = []
     is_published: bool = True
 
 
@@ -38,6 +41,9 @@ class GarageUpdate(BaseModel):
     mounting_price_cents: int | None = Field(default=None, ge=0)
     services: list[str] | None = None
     photo_url: str | None = None
+    payment_methods: list[str] | None = None
+    closures: list[dict] | None = None
+    pricing: list[dict] | None = None
     is_published: bool | None = None
 
 
@@ -55,6 +61,7 @@ class GarageOut(GarageBase):
     siret_verified: bool = False
     siret_company_name: str | None = None
     kbis_path: str | None = None
+    photos: list = []
 
 
 class GaragePublic(BaseModel):
@@ -74,6 +81,9 @@ class GaragePublic(BaseModel):
     mounting_price_cents: int = 0
     services: list[str] = []
     photo_url: str | None = None
+    payment_methods: list[str] = []
+    pricing: list[dict] = []
+    photos: list = []
     lat: float | None = None
     lng: float | None = None
 

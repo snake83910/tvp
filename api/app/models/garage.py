@@ -58,13 +58,23 @@ class Garage(Base):
     siret_company_name: Mapped[str | None] = mapped_column(String(300))
     kbis_path: Mapped[str | None] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
-    # Horaires libres par jour : {"lundi": "08:00-18:00", ...}
+    # Horaires par jour : {"lundi": {"open": "08:00", "close": "18:00"}, ...}
+    # ou libre {"text": "..."} (rétro-compat).
     hours: Mapped[dict] = mapped_column(JSONB, default=dict)
-    # Prix du montage par pneu, en centimes
+    # Prix du montage par pneu, en centimes (repli si pas de grille tarifaire)
     mounting_price_cents: Mapped[int] = mapped_column(Integer, default=0)
     # Prestations incluses : ["equilibrage", "valve", "recyclage", ...]
     services: Mapped[list] = mapped_column(JSONB, default=list)
     photo_url: Mapped[str | None] = mapped_column(String(500))
+    # Moyens de paiement acceptés : ["cb", "cheque", "especes", ...]
+    payment_methods: Mapped[list] = mapped_column(JSONB, default=list)
+    # Périodes de fermeture : [{"start": "2026-08-01", "end": "2026-08-15", "label": "Congés"}]
+    closures: Mapped[list] = mapped_column(JSONB, default=list)
+    # Grille tarifaire montage : [{"vehicle": "voiture", "size_min": 14,
+    # "size_max": 17, "price_cents": 1500, "label": "Toutes jantes"}]
+    pricing: Mapped[list] = mapped_column(JSONB, default=list)
+    # Photos du centre : liste de chemins relatifs (upload)
+    photos: Mapped[list] = mapped_column(JSONB, default=list)
 
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
 

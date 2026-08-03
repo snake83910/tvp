@@ -53,7 +53,7 @@ function toForm(g: Garage): FormState {
     siret: g.siret ?? "",
     mounting_price_eur: (g.mounting_price_cents / 100).toFixed(2),
     services: (g.services ?? []).join(", "),
-    hours: (g.hours && g.hours.text) || "",
+    hours: (g.hours?.text as string | undefined) ?? "",
     description: g.description ?? "",
     is_published: g.is_published,
     owner_email: "",

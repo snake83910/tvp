@@ -81,7 +81,12 @@ export interface PartnerOrder {
   items: PartnerOrderItem[];
 }
 
-export type { Garage, GaragePayload };
+export type {
+  Garage,
+  GaragePayload,
+  GarageClosure,
+  GaragePricingRow,
+} from "@/lib/admin";
 
 export const partnerApi = {
   getGarage: () => call<Garage>("/partner/garage"),
