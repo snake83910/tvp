@@ -79,6 +79,8 @@ export interface PartnerOrder {
   customer_phone: string | null;
   customer_email: string | null;
   items: PartnerOrderItem[];
+  mounting_at: string | null;
+  mounting_note: string | null;
 }
 
 export type {
@@ -109,6 +111,11 @@ export const partnerApi = {
   updateGarage: (data: Partial<GaragePayload>) =>
     call<Garage>("/partner/garage", "PATCH", data),
   listOrders: () => call<PartnerOrder[]>("/partner/orders"),
+  setAppointment: (orderNumber: string, mounting_at: string | null, note: string | null) =>
+    call<PartnerOrder>(`/partner/orders/${orderNumber}/appointment`, "PATCH", {
+      mounting_at,
+      note,
+    }),
   addPhoto: (file: File) => upload("/partner/garage/photos", file),
   removePhoto: (path: string) =>
     call<Garage>(`/partner/garage/photos?path=${encodeURIComponent(path)}`, "DELETE"),

@@ -10,6 +10,7 @@ import { TarifsTab } from "@/components/partner/tabs/TarifsTab";
 import { PaiementTab } from "@/components/partner/tabs/PaiementTab";
 import { CommandesTab } from "@/components/partner/tabs/CommandesTab";
 import { MediaTab } from "@/components/partner/tabs/MediaTab";
+import { RdvTab } from "@/components/partner/tabs/RdvTab";
 
 const TABS = [
   { key: "dashboard", label: "Tableau de bord" },
@@ -47,6 +48,12 @@ export default function PartnerDashboard() {
       }
     })();
   }, []);
+
+  function updateOrder(updated: PartnerOrder) {
+    setOrders((prev) =>
+      prev.map((o) => (o.order_number === updated.order_number ? updated : o)),
+    );
+  }
 
   async function save(patch: Partial<GaragePayload>) {
     setSaving(true);
@@ -124,9 +131,12 @@ export default function PartnerDashboard() {
         {tab === "conges" && <CongesTab garage={garage} save={save} saving={saving} />}
         {tab === "tarifs" && <TarifsTab garage={garage} save={save} saving={saving} />}
         {tab === "paiement" && <PaiementTab garage={garage} save={save} saving={saving} />}
-        {tab === "commandes" && <CommandesTab orders={orders} />}
+        {tab === "commandes" && (
+          <CommandesTab orders={orders} onOrderUpdate={updateOrder} />
+        )}
         {tab === "media" && <MediaTab garage={garage} onChange={setGarage} />}
-        {(tab === "avis" || tab === "rdv") && (
+        {tab === "rdv" && <RdvTab orders={orders} />}
+        {tab === "avis" && (
           <div className="rounded-xl border border-line bg-paper p-8 text-center text-ink-muted">
             Bientôt disponible.
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { PartnerOrder } from "@/lib/partner";
+import { partnerApi, type PartnerOrder } from "@/lib/partner";
 import { TabHeader } from "@/components/partner/ui";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -11,7 +11,22 @@ const STATUS_LABEL: Record<string, string> = {
   delivered: "Livrée",
 };
 
-export function CommandesTab({ orders }: { orders: PartnerOrder[] }) {
+/** ISO -> valeur pour <input type="datetime-local"> (YYYY-MM-DDTHH:mm). */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function CommandesTab({
+  orders,
+  onOrderUpdate,
+}: {
+  orders: PartnerOrder[];
+  onOrderUpdate: (o: PartnerOrder) => void;
+}) {
   const [q, setQ] = useState("");
 
   const filtered = useMemo(() => {
@@ -45,50 +60,133 @@ export function CommandesTab({ orders }: { orders: PartnerOrder[] }) {
       ) : (
         <div className="space-y-4">
           {filtered.map((o) => (
-            <div key={o.order_number} className="rounded-xl border border-line bg-paper p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-mono text-sm font-bold text-ink">{o.order_number}</span>
-                <span className="rounded-full bg-paper-dim px-3 py-0.5 text-xs font-bold text-ink-soft">
-                  {STATUS_LABEL[o.status] ?? o.status}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-ink-muted">
-                {new Date(o.created_at).toLocaleDateString("fr-FR", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </p>
-
-              <ul className="mt-3 space-y-1 text-sm text-ink-soft">
-                {o.items.map((it, i) => (
-                  <li key={i} className="flex justify-between gap-3">
-                    <span>
-                      <strong className="text-ink">{it.quantity}×</strong> {it.label}
-                    </span>
-                    {it.dimension && (
-                      <span className="font-mono text-ink-muted">{it.dimension}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-3 border-t border-line pt-3 text-sm">
-                <p className="font-semibold text-ink">Client à contacter</p>
-                <p className="text-ink-soft">
-                  {o.customer_name ?? "—"}
-                  {o.customer_phone && ` · ${o.customer_phone}`}
-                </p>
-                {o.customer_email && (
-                  <a href={`mailto:${o.customer_email}`} className="text-signal hover:underline">
-                    {o.customer_email}
-                  </a>
-                )}
-              </div>
-            </div>
+            <OrderCard key={o.order_number} order={o} onUpdate={onOrderUpdate} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function OrderCard({
+  order: o,
+  onUpdate,
+}: {
+  order: PartnerOrder;
+  onUpdate: (o: PartnerOrder) => void;
+}) {
+  const [when, setWhen] = useState(toLocalInput(o.mounting_at));
+  const [note, setNote] = useState(o.mounting_note ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function save(cancel = false) {
+    setSaving(true);
+    try {
+      const updated = await partnerApi.setAppointment(
+        o.order_number,
+        cancel ? null : when || null,
+        cancel ? null : note || null,
+      );
+      onUpdate(updated);
+      if (cancel) {
+        setWhen("");
+        setNote("");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-line bg-paper p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-sm font-bold text-ink">{o.order_number}</span>
+        <span className="rounded-full bg-paper-dim px-3 py-0.5 text-xs font-bold text-ink-soft">
+          {STATUS_LABEL[o.status] ?? o.status}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-ink-muted">
+        {new Date(o.created_at).toLocaleDateString("fr-FR", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        })}
+      </p>
+
+      <ul className="mt-3 space-y-1 text-sm text-ink-soft">
+        {o.items.map((it, i) => (
+          <li key={i} className="flex justify-between gap-3">
+            <span>
+              <strong className="text-ink">{it.quantity}×</strong> {it.label}
+            </span>
+            {it.dimension && <span className="font-mono text-ink-muted">{it.dimension}</span>}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-3 border-t border-line pt-3 text-sm">
+        <p className="font-semibold text-ink">Client à contacter</p>
+        <p className="text-ink-soft">
+          {o.customer_name ?? "—"}
+          {o.customer_phone && ` · ${o.customer_phone}`}
+        </p>
+        {o.customer_email && (
+          <a href={`mailto:${o.customer_email}`} className="text-signal hover:underline">
+            {o.customer_email}
+          </a>
+        )}
+      </div>
+
+      {/* Rendez-vous de montage */}
+      <div className="mt-3 rounded-lg bg-paper-dim p-3">
+        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-muted">
+          Rendez-vous de montage
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <input
+            type="datetime-local"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            className="rounded-lg border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-signal"
+          />
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Note (optionnel)"
+            className="min-w-[140px] flex-1 rounded-lg border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-signal"
+          />
+          <button
+            onClick={() => save(false)}
+            disabled={saving || !when}
+            className="rounded-lg bg-signal px-4 py-1.5 text-sm font-bold text-white transition hover:bg-signal-dark disabled:opacity-50"
+          >
+            {saving ? "…" : "Enregistrer le RDV"}
+          </button>
+          {o.mounting_at && (
+            <button
+              onClick={() => save(true)}
+              disabled={saving}
+              className="text-xs font-semibold text-ink-muted underline hover:text-signal"
+            >
+              Annuler le RDV
+            </button>
+          )}
+        </div>
+        {o.mounting_at && (
+          <p className="mt-2 text-sm text-ok">
+            ✓ RDV fixé le{" "}
+            {new Date(o.mounting_at).toLocaleString("fr-FR", {
+              weekday: "long",
+              day: "2-digit",
+              month: "long",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+            {o.mounting_note ? ` — ${o.mounting_note}` : ""}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

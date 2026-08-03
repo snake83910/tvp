@@ -4,6 +4,7 @@ import re
 import secrets
 import unicodedata
 import uuid
+from datetime import datetime
 
 from fastapi import (
     APIRouter,
@@ -45,6 +46,7 @@ from app.schemas.garage import (
     OwnerIn,
     PartnerOrder,
     PartnerOrderItem,
+    AppointmentIn,
 )
 
 router = APIRouter(tags=["garages"])
@@ -485,6 +487,30 @@ async def partner_remove_photo(
     return g
 
 
+def _partner_order_view(order: Order, cust: User | None) -> PartnerOrder:
+    name = None
+    if cust:
+        name = f"{cust.first_name or ''} {cust.last_name or ''}".strip() or None
+    return PartnerOrder(
+        order_number=order.order_number,
+        status=order.status.value,
+        created_at=order.created_at.isoformat(),
+        customer_name=name,
+        customer_phone=cust.phone if cust else None,
+        customer_email=cust.email if cust else None,
+        items=[
+            PartnerOrderItem(
+                label=it.label_snapshot,
+                quantity=it.quantity,
+                dimension=_dimension_of(it.product_data),
+            )
+            for it in order.items
+        ],
+        mounting_at=order.mounting_at.isoformat() if order.mounting_at else None,
+        mounting_note=order.mounting_note,
+    )
+
+
 @router.get("/partner/orders", response_model=list[PartnerOrder])
 async def partner_orders(
     db: AsyncSession = Depends(get_db),
@@ -506,25 +532,37 @@ async def partner_orders(
     out: list[PartnerOrder] = []
     for o in orders:
         cust = await db.get(User, o.user_id)
-        name = None
-        if cust:
-            name = f"{cust.first_name or ''} {cust.last_name or ''}".strip() or None
-        out.append(
-            PartnerOrder(
-                order_number=o.order_number,
-                status=o.status.value,
-                created_at=o.created_at.isoformat(),
-                customer_name=name,
-                customer_phone=cust.phone if cust else None,
-                customer_email=cust.email if cust else None,
-                items=[
-                    PartnerOrderItem(
-                        label=it.label_snapshot,
-                        quantity=it.quantity,
-                        dimension=_dimension_of(it.product_data),
-                    )
-                    for it in o.items
-                ],
-            )
-        )
+        out.append(_partner_order_view(o, cust))
     return out
+
+
+@router.patch(
+    "/partner/orders/{order_number}/appointment", response_model=PartnerOrder
+)
+async def partner_set_appointment(
+    order_number: str,
+    data: AppointmentIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    """Fixe (ou annule) le rendez-vous de montage d'une commande du garage."""
+    g = await _own_garage(db, user)
+    order = await db.scalar(
+        select(Order)
+        .where(Order.order_number == order_number, Order.garage_id == g.id)
+        .options(selectinload(Order.items))
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+    if data.mounting_at:
+        try:
+            order.mounting_at = datetime.fromisoformat(data.mounting_at)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail="Date invalide") from e
+    else:
+        order.mounting_at = None
+    order.mounting_note = (data.note or "").strip() or None
+    await db.commit()
+    await db.refresh(order)
+    cust = await db.get(User, order.user_id)
+    return _partner_order_view(order, cust)

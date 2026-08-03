@@ -120,6 +120,13 @@ class PartnerOrder(BaseModel):
     customer_phone: str | None = None
     customer_email: str | None = None
     items: list[PartnerOrderItem] = []
+    mounting_at: str | None = None
+    mounting_note: str | None = None
+
+
+class AppointmentIn(BaseModel):
+    mounting_at: str | None = None  # ISO 8601 ; None = annuler le RDV
+    note: str | None = None
 
 
 class GarageNearby(BaseModel):

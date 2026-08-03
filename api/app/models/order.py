@@ -162,6 +162,9 @@ class Order(Base):
         UUID(as_uuid=True), ForeignKey("garages.id", ondelete="SET NULL"), index=True
     )
     garage_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Rendez-vous de montage fixé par le garage
+    mounting_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mounting_note: Mapped[str | None] = mapped_column(String(500))
     # Facturation : adresse figée elle aussi. Toujours renseignée (recopie
     # de la livraison si le client n'en a pas choisi une distincte), pour
     # que la facture n'ait jamais à deviner.
