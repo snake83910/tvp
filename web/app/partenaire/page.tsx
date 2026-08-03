@@ -34,19 +34,28 @@ export default function PartnerDashboard() {
   const [orders, setOrders] = useState<PartnerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [noGarage, setNoGarage] = useState(false);
+  const [ordersError, setOrdersError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
+      // 1) La fiche garage détermine l'accès à l'espace.
       try {
         setGarage(await partnerApi.getGarage());
-        setOrders(await partnerApi.listOrders());
       } catch {
         setNoGarage(true);
-      } finally {
         setLoading(false);
+        return;
       }
+      // 2) Les commandes sont secondaires : une erreur ici ne doit PAS
+      //    masquer tout l'espace (on garde l'accès, on signale l'incident).
+      try {
+        setOrders(await partnerApi.listOrders());
+      } catch {
+        setOrdersError(true);
+      }
+      setLoading(false);
     })();
   }, []);
 
@@ -106,6 +115,13 @@ export default function PartnerDashboard() {
           </span>
         )}
       </div>
+
+      {ordersError && (
+        <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Vos commandes n&apos;ont pas pu être chargées pour le moment. Le reste
+          de votre espace reste accessible.
+        </p>
+      )}
 
       {/* Onglets */}
       <div className="mt-6 flex flex-wrap gap-1 border-b border-line">
