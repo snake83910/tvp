@@ -99,6 +99,21 @@ async def _geocode_into(g: Garage) -> None:
         g.lat, g.lng = coords
 
 
+async def _verify_siret_into(g: Garage) -> None:
+    """Normalise le SIRET du garage, le vérifie auprès de Sirene et remplit
+    siret_verified + siret_company_name (best effort)."""
+    digits = "".join(c for c in (g.siret or "") if c.isdigit())
+    if len(digits) != 14:
+        g.siret = digits or None
+        g.siret_verified = False
+        g.siret_company_name = None
+        return
+    g.siret = digits
+    sirene = await verify_siret(digits)
+    g.siret_verified = bool(sirene["exists"] and sirene["active"])
+    g.siret_company_name = sirene.get("name")
+
+
 # --------------------------------------------------------------------------
 #  Admin : CRUD
 # --------------------------------------------------------------------------
@@ -124,6 +139,8 @@ async def admin_create_garage(
     )
     g.slug = await _unique_slug(db, _slugify(data.name))
     await _geocode_into(g)
+    if g.siret:
+        await _verify_siret_into(g)
     db.add(g)
     await db.commit()
     await db.refresh(g)
@@ -159,6 +176,11 @@ async def admin_update_garage(
         k in fields and fields[k] != getattr(g, k)
         for k in ("address", "postal_code", "city")
     )
+    # SIRET changé (ou nom Sirene manquant -> backfill) : on (re)vérifie.
+    new_siret = "".join(c for c in (fields.get("siret") or "") if c.isdigit())
+    siret_needs_check = "siret" in fields and (
+        new_siret != (g.siret or "") or g.siret_company_name is None
+    )
     if "email" in fields and fields["email"] is not None:
         fields["email"] = str(fields["email"])
     for k, v in fields.items():
@@ -167,6 +189,8 @@ async def admin_update_garage(
         g.slug = await _unique_slug(db, _slugify(g.name), exclude_id=g.id)
     if address_changed:
         await _geocode_into(g)
+    if siret_needs_check:
+        await _verify_siret_into(g)
     await db.commit()
     await db.refresh(g)
     return g
@@ -397,6 +421,10 @@ async def partner_update_garage(
         k in fields and fields[k] != getattr(g, k)
         for k in ("address", "postal_code", "city")
     )
+    new_siret = "".join(c for c in (fields.get("siret") or "") if c.isdigit())
+    siret_needs_check = "siret" in fields and (
+        new_siret != (g.siret or "") or g.siret_company_name is None
+    )
     if "email" in fields and fields["email"] is not None:
         fields["email"] = str(fields["email"])
     for k, v in fields.items():
@@ -405,6 +433,8 @@ async def partner_update_garage(
         g.slug = await _unique_slug(db, _slugify(g.name), exclude_id=g.id)
     if address_changed:
         await _geocode_into(g)
+    if siret_needs_check:
+        await _verify_siret_into(g)
     await db.commit()
     await db.refresh(g)
     return g
