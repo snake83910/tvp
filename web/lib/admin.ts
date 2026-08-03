@@ -103,6 +103,7 @@ export interface Garage {
   email: string | null;
   siret: string | null;
   siret_verified: boolean;
+  siret_company_name: string | null;
   kbis_path: string | null;
   description: string | null;
   hours: Record<string, string>;

@@ -293,14 +293,22 @@ export default function AdminGaragesPage() {
                 )}
               </div>
               {editing && (
-                <p className="text-xs">
-                  SIRET :{" "}
-                  {editing.siret_verified ? (
-                    <span className="font-semibold text-ok">✓ vérifié auprès de la base Sirene (actif)</span>
-                  ) : (
-                    <span className="font-semibold text-signal">⚠ non vérifié Sirene — à contrôler manuellement</span>
+                <div className="text-xs">
+                  <p>
+                    SIRET :{" "}
+                    {editing.siret_verified ? (
+                      <span className="font-semibold text-ok">✓ vérifié auprès de la base Sirene (actif)</span>
+                    ) : (
+                      <span className="font-semibold text-signal">⚠ non vérifié Sirene — à contrôler manuellement</span>
+                    )}
+                  </p>
+                  {editing.siret_company_name && (
+                    <p className="mt-0.5 text-ink-muted">
+                      Raison sociale Sirene :{" "}
+                      <span className="font-semibold text-ink">{editing.siret_company_name}</span>
+                    </p>
                   )}
-                </p>
+                </div>
               )}
               <Field
                 label="Prix du montage / pneu (€ TTC)"

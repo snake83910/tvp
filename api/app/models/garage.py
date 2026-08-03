@@ -54,6 +54,8 @@ class Garage(Base):
     siret: Mapped[str | None] = mapped_column(String(20))
     # Vérifié auprès de la base Sirene (existe + établissement actif)
     siret_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Raison sociale officielle renvoyée par Sirene (pour comparaison admin)
+    siret_company_name: Mapped[str | None] = mapped_column(String(300))
     kbis_path: Mapped[str | None] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
     # Horaires libres par jour : {"lundi": "08:00-18:00", ...}

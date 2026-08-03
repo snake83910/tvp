@@ -53,6 +53,7 @@ class GarageOut(GarageBase):
     owner_user_id: uuid.UUID | None = None
     siret: str | None = None
     siret_verified: bool = False
+    siret_company_name: str | None = None
     kbis_path: str | None = None
 
 

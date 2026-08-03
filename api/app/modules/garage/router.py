@@ -348,6 +348,7 @@ async def partner_register(
         email=email,
         siret=siret_clean,
         siret_verified=bool(sirene["exists"] and sirene["active"]),
+        siret_company_name=sirene.get("name"),
         is_published=False,  # publication après validation admin
     )
     g.slug = await _unique_slug(db, _slugify(garage_name))
