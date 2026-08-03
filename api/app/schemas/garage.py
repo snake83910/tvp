@@ -69,6 +69,7 @@ class GaragePublic(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    id: uuid.UUID
     name: str
     slug: str
     address: str
@@ -127,6 +128,20 @@ class PartnerOrder(BaseModel):
 class AppointmentIn(BaseModel):
     mounting_at: str | None = None  # ISO 8601 ; None = annuler le RDV
     note: str | None = None
+
+
+class ReviewIn(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class ReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    author_name: str
+    rating: int
+    comment: str | None = None
+    created_at: str
 
 
 class GarageNearby(BaseModel):

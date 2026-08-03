@@ -129,7 +129,15 @@ export interface GarageNearby {
   distance_km: number | null;
 }
 
+export interface GarageReview {
+  author_name: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
 export interface GaragePublic {
+  id: string;
   name: string;
   slug: string;
   address: string;
@@ -228,6 +236,9 @@ export const api = {
 
   getGarage: (slug: string) =>
     request<GaragePublic>(`/garages/${encodeURIComponent(slug)}`),
+
+  getGarageReviews: (slug: string) =>
+    request<GarageReview[]>(`/garages/${encodeURIComponent(slug)}/reviews`),
 
   searchByDimensions: (
     params: {

@@ -11,6 +11,7 @@ import { PaiementTab } from "@/components/partner/tabs/PaiementTab";
 import { CommandesTab } from "@/components/partner/tabs/CommandesTab";
 import { MediaTab } from "@/components/partner/tabs/MediaTab";
 import { RdvTab } from "@/components/partner/tabs/RdvTab";
+import { AvisTab } from "@/components/partner/tabs/AvisTab";
 
 const TABS = [
   { key: "dashboard", label: "Tableau de bord" },
@@ -136,11 +137,7 @@ export default function PartnerDashboard() {
         )}
         {tab === "media" && <MediaTab garage={garage} onChange={setGarage} />}
         {tab === "rdv" && <RdvTab orders={orders} />}
-        {tab === "avis" && (
-          <div className="rounded-xl border border-line bg-paper p-8 text-center text-ink-muted">
-            Bientôt disponible.
-          </div>
-        )}
+        {tab === "avis" && <AvisTab />}
       </div>
     </main>
   );

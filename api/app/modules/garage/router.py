@@ -21,13 +21,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import get_db, require_role
+from app.core.deps import get_current_user, get_db, require_role
 from app.core.rate_limit import rate_limit
 from app.core.security import create_password_reset_token, hash_password
 from app.core.storage import document_path, save_document
 from app.integrations.geocode import geocode, haversine_km
 from app.integrations.sirene import verify_siret
-from app.models.garage import Garage
+from app.models.garage import Garage, GarageReview
 from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
 from app.modules.auth.service import issue_token_pair
@@ -47,6 +47,8 @@ from app.schemas.garage import (
     PartnerOrder,
     PartnerOrderItem,
     AppointmentIn,
+    ReviewIn,
+    ReviewOut,
 )
 
 router = APIRouter(tags=["garages"])
@@ -315,6 +317,90 @@ async def garage_media(path: str):
     if not fp.exists():
         raise HTTPException(status_code=404, detail="Introuvable")
     return FileResponse(fp)
+
+
+def _review_view(r: GarageReview) -> ReviewOut:
+    return ReviewOut(
+        author_name=r.author_name,
+        rating=r.rating,
+        comment=r.comment,
+        created_at=r.created_at.isoformat(),
+    )
+
+
+@router.get("/garages/{slug}/reviews", response_model=list[ReviewOut])
+async def public_reviews(slug: str, db: AsyncSession = Depends(get_db)):
+    g = await db.scalar(select(Garage).where(Garage.slug == slug))
+    if g is None:
+        raise HTTPException(status_code=404, detail="Garage introuvable")
+    rows = await db.scalars(
+        select(GarageReview)
+        .where(GarageReview.garage_id == g.id, GarageReview.is_published.is_(True))
+        .order_by(GarageReview.created_at.desc())
+    )
+    return [_review_view(r) for r in rows]
+
+
+@router.post("/garages/{garage_id}/reviews", response_model=ReviewOut, status_code=201)
+async def create_review(
+    garage_id: uuid.UUID,
+    data: ReviewIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Un client ayant commandé chez ce garage laisse un avis (un seul)."""
+    g = await db.get(Garage, garage_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Garage introuvable")
+    eligible = await db.scalar(
+        select(Order.id)
+        .where(
+            Order.user_id == user.id,
+            Order.garage_id == garage_id,
+            Order.status.in_(_VISIBLE_ORDER_STATUSES),
+        )
+        .limit(1)
+    )
+    if not eligible:
+        raise HTTPException(
+            status_code=403,
+            detail="Vous devez avoir commandé chez ce garage pour laisser un avis",
+        )
+    existing = await db.scalar(
+        select(GarageReview.id).where(
+            GarageReview.garage_id == garage_id, GarageReview.user_id == user.id
+        )
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409, detail="Vous avez déjà laissé un avis pour ce garage"
+        )
+    author = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Client"
+    r = GarageReview(
+        garage_id=garage_id,
+        user_id=user.id,
+        author_name=author,
+        rating=data.rating,
+        comment=(data.comment or "").strip() or None,
+    )
+    db.add(r)
+    await db.commit()
+    await db.refresh(r)
+    return _review_view(r)
+
+
+@router.get("/partner/reviews", response_model=list[ReviewOut])
+async def partner_reviews(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    g = await _own_garage(db, user)
+    rows = await db.scalars(
+        select(GarageReview)
+        .where(GarageReview.garage_id == g.id)
+        .order_by(GarageReview.created_at.desc())
+    )
+    return [_review_view(r) for r in rows]
 
 
 @router.get("/garages/{slug}", response_model=GaragePublic)

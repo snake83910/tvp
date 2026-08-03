@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { api, type GaragePublic } from "@/lib/api";
+import { api, type GaragePublic, type GarageReview } from "@/lib/api";
 import { formatEuro } from "@/lib/money";
 import { paymentLabel, vehicleLabel } from "@/components/partner/constants";
+import { GarageReviewForm } from "@/components/GarageReviewForm";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,15 @@ export default async function GaragePage({
   const g = await load(params.slug);
   if (!g) notFound();
 
-  const jsonLd = {
+  const reviews: GarageReview[] = await api
+    .getGarageReviews(params.slug)
+    .catch(() => []);
+  const avg =
+    reviews.length > 0
+      ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
+      : 0;
+
+  const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "AutoRepair",
     name: g.name,
@@ -67,6 +76,13 @@ export default async function GaragePage({
       ? { geo: { "@type": "GeoCoordinates", latitude: g.lat, longitude: g.lng } }
       : {}),
   };
+  if (reviews.length > 0) {
+    jsonLd.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: avg.toFixed(1),
+      reviewCount: reviews.length,
+    };
+  }
 
   return (
     <>
@@ -199,6 +215,38 @@ export default async function GaragePage({
             </p>
           </section>
         )}
+
+        <section className="mt-8">
+          <div className="flex items-center gap-3">
+            <h2 className="font-display text-lg font-bold text-ink">Avis clients</h2>
+            {reviews.length > 0 && (
+              <span className="text-sm text-ink-muted">
+                <span className="font-bold text-ink">{avg.toFixed(1)}</span>/5 ·{" "}
+                {reviews.length} avis
+              </span>
+            )}
+          </div>
+
+          {reviews.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">
+              Aucun avis pour le moment.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {reviews.slice(0, 10).map((r, i) => (
+                <div key={i} className="rounded-xl border border-line bg-paper p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-ink">{r.author_name}</span>
+                    <span className="text-amber-500">{"★".repeat(r.rating)}</span>
+                  </div>
+                  {r.comment && <p className="mt-1 text-sm text-ink-soft">{r.comment}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <GarageReviewForm garageId={g.id} />
+        </section>
 
         <div className="mt-10 rounded-2xl border border-line bg-paper-dim p-6 text-center">
           <p className="font-display text-lg font-bold text-ink">

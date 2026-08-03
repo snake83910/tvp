@@ -106,8 +106,16 @@ async function upload(path: string, file: File): Promise<Garage> {
   return res.json() as Promise<Garage>;
 }
 
+export interface PartnerReview {
+  author_name: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
 export const partnerApi = {
   getGarage: () => call<Garage>("/partner/garage"),
+  listReviews: () => call<PartnerReview[]>("/partner/reviews"),
   updateGarage: (data: Partial<GaragePayload>) =>
     call<Garage>("/partner/garage", "PATCH", data),
   listOrders: () => call<PartnerOrder[]>("/partner/orders"),
