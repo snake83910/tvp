@@ -1,6 +1,16 @@
 import type { Metadata } from "next";
+import { Archivo } from "next/font/google";
 import "@/styles/globals.css";
 import { CartProvider } from "@/components/CartProvider";
+
+// Police auto-hébergée par Next (next/font) : plus de <link> vers Google
+// Fonts (tiers bloquant le rendu). Archivo est une police variable → un
+// seul woff2 couvre tous les poids. `swap` = texte visible immédiatement.
+const archivo = Archivo({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-archivo",
+});
 import { CompareProvider } from "@/components/CompareProvider";
 import { CompareBar } from "@/components/CompareBar";
 import { CookieBanner } from "@/components/CookieBanner";
@@ -19,19 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="fr" className={archivo.variable}>
       <body className="min-h-screen">
         {/* Skip-to-content : accessibilité clavier */}
         <a

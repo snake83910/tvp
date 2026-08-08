@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --font-display: "Archivo", system-ui, sans-serif;
-  --font-body: "Archivo", system-ui, sans-serif;
+  --font-display: var(--font-archivo), system-ui, sans-serif;
+  --font-body: var(--font-archivo), system-ui, sans-serif;
 
   /* Couleurs tokens : exposées pour theming futur (dark mode, marque blanche) */
   --color-ink: #17181a;

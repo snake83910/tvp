@@ -10,9 +10,9 @@ const isDev = process.env.NODE_ENV !== "production";
 const CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://api-sogecommerce.societegenerale.eu https://static.payzen.eu`,
-  "style-src 'self' 'unsafe-inline' https://api-sogecommerce.societegenerale.eu https://fonts.googleapis.com",
+  "style-src 'self' 'unsafe-inline' https://api-sogecommerce.societegenerale.eu",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  "font-src 'self' data:",
   "connect-src 'self' https://api-sogecommerce.societegenerale.eu https://static.payzen.eu",
   "frame-src https://api-sogecommerce.societegenerale.eu https://static.payzen.eu",
   "object-src 'none'",
