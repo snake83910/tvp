@@ -228,9 +228,10 @@ export const api = {
     return request<VehicleDimension[]>(`/search/by-plate?${q.toString()}`);
   },
 
-  nearestGarages: (postcode: string, q?: string) => {
+  nearestGarages: (postcode: string, q?: string, limit?: number) => {
     const p = new URLSearchParams({ postcode });
     if (q) p.set("q", q);
+    if (limit) p.set("limit", String(limit));
     return request<GarageNearby[]>(`/garages/nearest?${p.toString()}`);
   },
 

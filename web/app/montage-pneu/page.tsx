@@ -118,10 +118,10 @@ export default function MontagePneuPage() {
               Rechercher mes pneus
             </Link>
             <Link
-              href="/guide"
+              href="/garages"
               className="rounded-full border border-line bg-paper px-8 py-3 font-display text-sm font-bold uppercase tracking-wide text-ink-soft transition hover:border-signal hover:text-signal"
             >
-              Guide du pneu
+              Trouver un garage
             </Link>
           </div>
         </div>
@@ -191,6 +191,12 @@ export default function MontagePneuPage() {
                 manipulez rien : équilibrage, valves et contrôle de pression sont
                 inclus, la prestation est réglée sur place.
               </p>
+              <Link
+                href="/garages"
+                className="mt-4 inline-block text-sm font-semibold text-signal hover:underline"
+              >
+                Trouver un garage près de chez moi →
+              </Link>
             </div>
           </div>
         </div>
