@@ -12,7 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@lyracom/embedded-form-glue": "^0.2.1",
+    "@lyracom/embedded-form-glue": "^1.3.0",
     "es6-promise": "^4.2.8",
     "next": "~14.2.25",
     "react": "18.3.1",
