@@ -45,8 +45,8 @@ export function Brands() {
                 alt={b.name}
                 width={120}
                 height={60}
+                sizes="120px"
                 className="h-full w-auto object-contain opacity-80 transition group-hover:opacity-100"
-                unoptimized
               />
             </Link>
           ))}
