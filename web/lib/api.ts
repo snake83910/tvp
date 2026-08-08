@@ -126,6 +126,8 @@ export interface GarageNearby {
   mounting_price_cents: number;
   services: string[];
   photo_url: string | null;
+  lat: number | null;
+  lng: number | null;
   distance_km: number | null;
 }
 
@@ -228,9 +230,9 @@ export const api = {
     return request<VehicleDimension[]>(`/search/by-plate?${q.toString()}`);
   },
 
-  nearestGarages: (postcode: string, q?: string, limit?: number) => {
-    const p = new URLSearchParams({ postcode });
-    if (q) p.set("q", q);
+  // `location` : ville ou code postal (saisie unique).
+  nearestGarages: (location: string, limit?: number) => {
+    const p = new URLSearchParams({ q: location });
     if (limit) p.set("limit", String(limit));
     return request<GarageNearby[]>(`/garages/nearest?${p.toString()}`);
   },

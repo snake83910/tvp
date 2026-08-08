@@ -43,6 +43,7 @@ export function SiteHeader() {
           ) : (
             <>
               <Link href="/recherche" className="transition hover:text-signal">Rechercher</Link>
+              <Link href="/montage-pneu" className="transition hover:text-signal">Montage</Link>
               <Link href={accountHref} className="transition hover:text-signal">
                 {loading ? "Mon compte" : accountLabel}
               </Link>
@@ -116,6 +117,7 @@ export function SiteHeader() {
               ) : (
                 <>
                   <Link onClick={() => setMobileOpen(false)} href="/recherche" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Rechercher des pneus</Link>
+                  <Link onClick={() => setMobileOpen(false)} href="/montage-pneu" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Montage en garage</Link>
                   <Link onClick={() => setMobileOpen(false)} href={accountHref} className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">{accountLabel}</Link>
                   <Link onClick={() => setMobileOpen(false)} href="/panier" className="block rounded-lg px-3 py-2.5 text-ink-soft hover:bg-paper-dim">Panier ({count})</Link>
                 </>

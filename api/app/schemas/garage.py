@@ -160,4 +160,7 @@ class GarageNearby(BaseModel):
     mounting_price_cents: int = 0
     services: list[str] = []
     photo_url: str | None = None
+    # Coordonnées : nécessaires pour placer le garage sur la carte publique.
+    lat: float | None = None
+    lng: float | None = None
     distance_km: float | None = None

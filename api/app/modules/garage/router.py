@@ -38,6 +38,7 @@ from app.modules.mailer.service import (
 )
 from app.schemas.auth import TokenPair
 from app.schemas.garage import (
+    AppointmentIn,
     GarageCreate,
     GarageNearby,
     GarageOut,
@@ -46,7 +47,6 @@ from app.schemas.garage import (
     OwnerIn,
     PartnerOrder,
     PartnerOrderItem,
-    AppointmentIn,
     ReviewIn,
     ReviewOut,
 )
@@ -207,13 +207,26 @@ async def admin_delete_garage(
 
 @router.get("/garages/nearest", response_model=list[GarageNearby])
 async def nearest_garages(
-    postcode: str = Query(..., min_length=4, max_length=10),
-    q: str | None = Query(None, description="Adresse ou ville pour affiner"),
+    q: str | None = Query(
+        None, min_length=2, max_length=120, description="Ville ou code postal"
+    ),
+    postcode: str | None = Query(None, min_length=4, max_length=10),
     limit: int = Query(6, ge=1, le=20),
     db: AsyncSession = Depends(get_db),
 ):
-    """Garages publiés les plus proches, triés par distance."""
-    origin = await geocode(q or postcode, postcode=postcode)
+    """Garages publiés les plus proches d'une ville ou d'un code postal,
+    triés par distance. `q` (saisie unique) et/ou `postcode` accepté ;
+    au moins l'un des deux est requis."""
+    term = (q or postcode or "").strip()
+    if len(term) < 2:
+        raise HTTPException(
+            status_code=422, detail="Indiquez une ville ou un code postal"
+        )
+    # Indice code postal pour affiner le géocodage : fourni explicitement,
+    # ou détecté si la saisie contient un code postal à 5 chiffres.
+    digits = "".join(c for c in term if c.isdigit())
+    hint = postcode or (digits if len(digits) == 5 else None)
+    origin = await geocode(term, postcode=hint)
     rows = list(
         await db.scalars(
             select(Garage).where(

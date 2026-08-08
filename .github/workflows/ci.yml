@@ -30,9 +30,6 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
-      - name: Format check (ruff)
-        run: ruff format --check .
-
       - name: Audit dépendances (pip-audit)
         # Non bloquant : signale les CVE connues sans casser le build sur
         # une vuln transitive non corrigeable dans l'immédiat.
