@@ -12,6 +12,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE}/pneus-ete`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/pneus-hiver`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/pneus-4-saisons`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${SITE}/montage-pneu`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/guide`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE}/a-propos`, lastModified: now, changeFrequency: "yearly", priority: 0.4 },
     { url: `${SITE}/cgv`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
