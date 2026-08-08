@@ -36,8 +36,10 @@ export async function generateMetadata({
   const data = await load(params, searchParams.t);
   if (!data) return { title: "Pneu | Tous Vos Pneus" };
   const { tyre } = data;
-  const title = `${tyre.brand} ${tyre.model} ${tyre.dimension} — ${tyre.display_price.toFixed(2)}€`;
-  const desc = `Pneu ${tyre.brand} ${tyre.model} en ${tyre.dimension}. Livraison rapide en France.`;
+  // Pas de prix dans le title : il se périme dans les SERP (le prix reste
+  // dans le schema Product/offers). Titre riche en mots-clés à la place.
+  const title = `Pneu ${tyre.brand} ${tyre.model} ${tyre.dimension}`;
+  const desc = `Pneu ${tyre.brand} ${tyre.model} en ${tyre.dimension} au meilleur prix. Livraison en France ou montage en garage partenaire.`;
   const url = `${SITE}/pneus/${params.dim}/${params.slug}`;
   return {
     title,

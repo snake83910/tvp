@@ -12,6 +12,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// Recherche à facettes (marque/saison/prix/tri/page) : des milliers d'URL
+// quasi-dupliquées. On les garde crawlables (follow, pour diffuser le jus
+// vers les fiches et pages dimension) mais hors index pour éviter l'index
+// bloat. Les pages d'atterrissage /pneus/<dim> sont, elles, indexées.
+export const metadata = {
+  robots: { index: false, follow: true },
+};
+
 type SP = {
   width?: string;
   ratio?: string;

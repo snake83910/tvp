@@ -17,10 +17,40 @@ import { CookieBanner } from "@/components/CookieBanner";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ConditionalFooter } from "@/components/ConditionalFooter";
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
+
 export const metadata: Metadata = {
+  // Base des URL : rend absolus les canonical et OpenGraph relatifs.
+  metadataBase: new URL(SITE),
   title: "tousvospneus.com — Pneus au meilleur prix, livrés chez vous",
   description:
     "Achetez vos pneus en ligne. Recherche par dimensions, livraison à domicile ou montage chez un garage partenaire.",
+};
+
+// Entité de marque pour Google (Knowledge Graph). Établit le nom, le site
+// et le domaine d'activité — utile pour un site jeune sans notoriété.
+const orgLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE}/#organization`,
+      name: "tousvospneus.com",
+      url: SITE,
+      email: "contact@tousvospneus.com",
+      areaServed: "FR",
+      description:
+        "Vente de pneumatiques en ligne (auto, moto, camion, agricole) : livraison à domicile ou montage chez un garage partenaire.",
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE}/#website`,
+      url: SITE,
+      name: "tousvospneus.com",
+      inLanguage: "fr-FR",
+      publisher: { "@id": `${SITE}/#organization` },
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -31,6 +61,10 @@ export default function RootLayout({
   return (
     <html lang="fr" className={archivo.variable}>
       <body className="min-h-screen">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }}
+        />
         {/* Skip-to-content : accessibilité clavier */}
         <a
           href="#main-content"

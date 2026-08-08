@@ -1,7 +1,6 @@
 /**
- * Dimensions les plus vendues en France. Source unique partagée par le
- * sitemap, les pages d'atterrissage dimension et les pages saison, pour
- * le maillage interne SEO.
+ * Top 15 des dimensions — affichées dans le widget « dimensions
+ * populaires » de l'accueil et des pages d'atterrissage.
  */
 export const POPULAR_DIMENSIONS: [number, number, number][] = [
   [195, 65, 15],
@@ -20,3 +19,26 @@ export const POPULAR_DIMENSIONS: [number, number, number][] = [
   [245, 40, 18],
   [215, 55, 17],
 ];
+
+// Dimensions auto réellement vendues en France, groupées par diamètre de
+// jante. Sert de socle au programmatic SEO : une page /pneus/<dim>
+// indexable par dimension (requêtes « pneu 205/55 R16 » à forte intention).
+// Volontairement limité aux tailles courantes : indexer des tailles
+// inexistantes = pages vides (mauvais signal). À enrichir au fil du stock.
+const COMMON_BY_DIAMETER: Record<number, [number, number][]> = {
+  13: [[155, 70], [155, 80], [165, 65], [165, 70], [175, 65], [175, 70], [185, 70]],
+  14: [[165, 65], [165, 70], [175, 65], [175, 70], [185, 60], [185, 65], [185, 70], [195, 60], [195, 65], [195, 70], [205, 60], [205, 70]],
+  15: [[175, 65], [185, 60], [185, 65], [195, 50], [195, 55], [195, 60], [195, 65], [205, 55], [205, 60], [205, 65], [205, 70], [215, 65], [215, 70], [225, 70]],
+  16: [[185, 55], [195, 45], [195, 50], [195, 55], [195, 60], [205, 45], [205, 50], [205, 55], [205, 60], [205, 65], [215, 55], [215, 60], [215, 65], [225, 50], [225, 55], [225, 60], [225, 65], [235, 60], [235, 65], [255, 70]],
+  17: [[205, 40], [205, 45], [205, 50], [215, 45], [215, 50], [215, 55], [215, 60], [215, 65], [225, 45], [225, 50], [225, 55], [225, 60], [225, 65], [235, 45], [235, 55], [235, 60], [235, 65], [245, 45], [245, 65], [255, 65], [265, 65], [265, 70]],
+  18: [[225, 40], [225, 45], [225, 50], [225, 55], [235, 40], [235, 45], [235, 50], [235, 55], [235, 60], [245, 40], [245, 45], [245, 50], [245, 60], [255, 45], [255, 55], [255, 60], [265, 60], [275, 45]],
+  19: [[225, 40], [225, 45], [235, 35], [235, 40], [235, 55], [245, 40], [245, 45], [245, 55], [255, 40], [255, 45], [255, 50], [255, 55], [265, 50], [275, 40], [275, 45]],
+  20: [[245, 40], [245, 45], [255, 45], [255, 50], [265, 45], [265, 50], [275, 40], [275, 45], [285, 50], [295, 40]],
+  21: [[265, 45], [275, 40], [275, 45], [285, 40], [295, 35]],
+};
+
+export const COMMON_DIMENSIONS: [number, number, number][] = Object.entries(
+  COMMON_BY_DIAMETER,
+).flatMap(([d, arr]) =>
+  arr.map(([w, r]) => [w, r, Number(d)] as [number, number, number]),
+);
