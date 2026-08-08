@@ -3,9 +3,10 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.cache import get_redis
 from app.core.config import settings
@@ -96,6 +97,30 @@ app = FastAPI(
     description="Backend e-commerce pneus — dropshipping B2C + B2B",
     lifespan=_lifespan,
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """En-têtes de sécurité posés directement par l'API.
+
+    Le front Next.js pose déjà sa propre CSP/HSTS sur les pages qu'il rend,
+    mais ces en-têtes ne couvrent PAS les réponses de l'API si elle est
+    atteinte hors du proxy /api (appel direct, app mobile, sonde). Défense
+    en profondeur : on ne renvoie pas de HTML, donc pas de CSP ici, mais on
+    verrouille le sniffing MIME, le framing et la fuite de referer.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Cache-Control", "no-store"
+        )  # réponses API = données fraîches, jamais mises en cache par un proxy
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS : le navigateur charge le site depuis une origine (ex.
 # http://localhost:3000) et appelle l'API sur une autre

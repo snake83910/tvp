@@ -239,7 +239,7 @@ export default function SecurityPage() {
               <span className="text-xs text-ink-muted">{backupRemaining} restant(s)</span>
             </div>
             <p className="mb-4 text-sm text-ink-soft">
-              Si vous perdez votre téléphone, utilisez l'un de ces codes (single-use)
+              Si vous perdez votre téléphone, utilisez l&apos;un de ces codes (single-use)
               à la place du code TOTP. Conservez-les dans un gestionnaire de mots de passe.
             </p>
             {backupCodes ? (

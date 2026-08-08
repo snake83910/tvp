@@ -98,8 +98,8 @@ export default function AdminProfilPage() {
           </button>
         </form>
         <p className="mt-2 text-xs text-ink-muted">
-          Un lien de confirmation sera envoyé à la nouvelle adresse. L'email
-          n'est changé qu'après confirmation.
+          Un lien de confirmation sera envoyé à la nouvelle adresse. L&apos;email
+          n&apos;est changé qu&apos;après confirmation.
         </p>
       </div>
 

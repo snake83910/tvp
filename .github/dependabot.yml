@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # Backend Python (FastAPI)
+  - package-ecosystem: pip
+    directory: /api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-deps:
+        patterns: ["*"]
+
+  # Frontend Next.js
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Regroupe les mises à jour mineures/patch pour limiter le bruit
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Actions GitHub utilisées par la CI
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

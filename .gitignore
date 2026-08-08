@@ -21,6 +21,8 @@ venv/
 
 # === Docker / volumes ===
 pgdata/
+# Dump de persistance Redis — ne jamais versionner
+*.rdb
 
 # === OS / éditeurs ===
 .DS_Store

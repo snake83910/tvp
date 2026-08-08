@@ -1,0 +1,11 @@
+{
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    ".next-e2e/",
+    ".next-build-check/",
+    "test-results/",
+    "playwright-report/"
+  ]
+}

@@ -25,10 +25,19 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff pytest pytest-asyncio
+          pip install ruff pytest pytest-asyncio pip-audit
 
       - name: Lint (ruff)
         run: ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Audit dépendances (pip-audit)
+        # Non bloquant : signale les CVE connues sans casser le build sur
+        # une vuln transitive non corrigeable dans l'immédiat.
+        continue-on-error: true
+        run: pip-audit -r requirements.txt
 
       - name: Tests
         run: pytest -q
@@ -77,8 +86,19 @@ jobs:
       - name: Install
         run: npm ci || npm install
 
+      - name: Lint (eslint)
+        run: npm run lint
+
       - name: Type check
         run: npx tsc --noEmit
+
+      - name: Tests unitaires (vitest)
+        run: npm test
+
+      - name: Audit dépendances (npm)
+        # Non bloquant : visibilité sur les CVE sans casser le build.
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Build
         run: npm run build
