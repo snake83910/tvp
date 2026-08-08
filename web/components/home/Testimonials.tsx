@@ -24,7 +24,7 @@ const REVIEWS = [
 
 function Stars({ n }: { n: number }) {
   return (
-    <div className="flex gap-0.5" aria-label={`Note : ${n} sur 5`}>
+    <div className="flex gap-0.5" role="img" aria-label={`Note : ${n} sur 5`}>
       {Array.from({ length: 5 }, (_, i) => (
         <svg
           key={i}

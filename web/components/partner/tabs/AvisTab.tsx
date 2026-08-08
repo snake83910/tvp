@@ -6,7 +6,7 @@ import { TabHeader } from "@/components/partner/ui";
 
 function Stars({ rating }: { rating: number }) {
   return (
-    <span className="text-amber-500" aria-label={`${rating} sur 5`}>
+    <span className="text-amber-500" role="img" aria-label={`${rating} sur 5`}>
       {"★".repeat(Math.round(rating))}
       <span className="text-line-strong">{"★".repeat(5 - Math.round(rating))}</span>
     </span>

@@ -229,7 +229,7 @@ export function SearchHero({
             className={`flex min-w-fit flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-bold uppercase tracking-wide transition ${
               cat === c.value
                 ? "border-b-2 border-signal bg-paper text-ink"
-                : "text-ink-muted hover:text-ink"
+                : "text-ink-soft hover:text-ink"
             }`}
           >
             <span aria-hidden>{CATEGORY_ICONS[c.value]}</span>
@@ -246,7 +246,7 @@ export function SearchHero({
             className={`py-4 text-sm font-bold uppercase tracking-wide transition ${
               tab === "plaque"
                 ? "bg-paper text-ink"
-                : "bg-paper-dim text-ink-muted hover:text-ink"
+                : "bg-paper-dim text-ink-soft hover:text-ink"
             }`}
           >
             Par plaque
@@ -256,7 +256,7 @@ export function SearchHero({
             className={`py-4 text-sm font-bold uppercase tracking-wide transition ${
               tab === "dim"
                 ? "bg-paper text-ink"
-                : "bg-paper-dim text-ink-muted hover:text-ink"
+                : "bg-paper-dim text-ink-soft hover:text-ink"
             }`}
           >
             Par dimensions
@@ -401,6 +401,7 @@ function DimSelect({
       </label>
       <select
         required
+        aria-label={label}
         value={value}
         onChange={(e) => set(e.target.value)}
         className={`h-12 w-full rounded-lg border border-line bg-paper px-3 outline-none transition focus:border-signal ${
