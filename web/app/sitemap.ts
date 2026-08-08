@@ -1,10 +1,11 @@
 import type { MetadataRoute } from "next";
+import { api } from "@/lib/api";
 import { COMMON_DIMENSIONS, POPULAR_DIMENSIONS } from "@/lib/dimensions";
-import { dimensionUrl } from "@/lib/slug";
+import { dimensionUrl, slugify } from "@/lib/slug";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   // /recherche est en noindex (facettes) : volontairement absent du sitemap
@@ -40,5 +41,32 @@ export default function sitemap(): MetadataRoute.Sitemap {
     });
   }
 
-  return [...staticPages, ...dimensionPages];
+  // Garages publiés + pages localité montage (SEO local). Best-effort :
+  // si l'API est indisponible, le sitemap reste valide sans ces entrées.
+  const garagePages: MetadataRoute.Sitemap = [];
+  try {
+    const garages = await api.publishedGarages();
+    const cities = new Set<string>();
+    for (const g of garages) {
+      garagePages.push({
+        url: `${SITE}/garages/${g.slug}`,
+        lastModified: now,
+        changeFrequency: "weekly",
+        priority: 0.6,
+      });
+      cities.add(slugify(g.city));
+    }
+    for (const city of cities) {
+      garagePages.push({
+        url: `${SITE}/montage-pneu/${city}`,
+        lastModified: now,
+        changeFrequency: "weekly",
+        priority: 0.6,
+      });
+    }
+  } catch {
+    /* API indisponible au build : on publie le reste du sitemap */
+  }
+
+  return [...staticPages, ...dimensionPages, ...garagePages];
 }

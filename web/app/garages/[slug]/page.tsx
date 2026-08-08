@@ -35,6 +35,38 @@ export async function generateMetadata({
   };
 }
 
+// Horaires structurés -> OpeningHoursSpecification (schema.org) pour le
+// SEO local. Ignore les jours fermés / non renseignés / au format libre.
+const SCHEMA_DAY: Record<string, string> = {
+  lundi: "Monday",
+  mardi: "Tuesday",
+  mercredi: "Wednesday",
+  jeudi: "Thursday",
+  vendredi: "Friday",
+  samedi: "Saturday",
+  dimanche: "Sunday",
+};
+
+function openingHoursSpec(
+  hours: Record<string, unknown> | null | undefined,
+): Record<string, unknown>[] {
+  if (!hours) return [];
+  const out: Record<string, unknown>[] = [];
+  for (const [fr, en] of Object.entries(SCHEMA_DAY)) {
+    const d = hours[fr] as
+      | { open?: string; close?: string; closed?: boolean }
+      | undefined;
+    if (!d || d.closed || !d.open || !d.close) continue;
+    out.push({
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: `https://schema.org/${en}`,
+      opens: d.open,
+      closes: d.close,
+    });
+  }
+  return out;
+}
+
 function mapsUrl(g: GaragePublic): string {
   const q =
     g.lat != null && g.lng != null
@@ -72,6 +104,14 @@ export default async function GaragePage({
     },
     telephone: g.phone || undefined,
     url: `${SITE}/garages/${params.slug}`,
+    areaServed: g.city,
+    ...(g.mounting_price_cents > 0 ? { priceRange: "€€" } : {}),
+    ...(g.photos.length > 0
+      ? { image: g.photos.map((p) => `${MEDIA_BASE}/garages/media/${p}`) }
+      : {}),
+    ...(openingHoursSpec(g.hours).length > 0
+      ? { openingHoursSpecification: openingHoursSpec(g.hours) }
+      : {}),
     ...(g.lat != null && g.lng != null
       ? { geo: { "@type": "GeoCoordinates", latitude: g.lat, longitude: g.lng } }
       : {}),
@@ -91,7 +131,7 @@ export default async function GaragePage({
         <Breadcrumbs
           items={[
             { label: "Accueil", href: "/" },
-            { label: "Garages partenaires", href: "/recherche" },
+            { label: "Montage en garage", href: "/montage-pneu" },
             { label: g.name },
           ]}
         />

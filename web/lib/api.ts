@@ -237,6 +237,9 @@ export const api = {
     return request<GarageNearby[]>(`/garages/nearest?${p.toString()}`);
   },
 
+  // Tous les garages publiés (sitemap + pages localité montage).
+  publishedGarages: () => request<GarageNearby[]>("/garages/published"),
+
   getGarage: (slug: string) =>
     request<GaragePublic>(`/garages/${encodeURIComponent(slug)}`),
 

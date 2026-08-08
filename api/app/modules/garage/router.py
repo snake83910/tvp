@@ -251,6 +251,19 @@ async def nearest_garages(
     return items[:limit]
 
 
+@router.get("/garages/published", response_model=list[GarageNearby])
+async def list_published_garages(db: AsyncSession = Depends(get_db)):
+    """Tous les garages publiés (sans PII) : alimente le sitemap et les
+    pages localité de montage. Défini AVANT /garages/{slug} pour éviter que
+    « published » soit interprété comme un slug."""
+    rows = await db.scalars(
+        select(Garage)
+        .where(Garage.is_published.is_(True))
+        .order_by(Garage.city, Garage.name)
+    )
+    return list(rows)
+
+
 # --------------------------------------------------------------------------
 #  Admin : rattachement d'un compte gérant
 # --------------------------------------------------------------------------
