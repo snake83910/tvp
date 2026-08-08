@@ -39,7 +39,7 @@ export function HowItWorks() {
   return (
     <section className="mx-auto max-w-7xl px-6 py-16">
       <div className="mb-10 text-center">
-        <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+        <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
           Comment ça marche
         </p>
         <h2 className="font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">
@@ -53,7 +53,10 @@ export function HowItWorks() {
             key={s.n}
             className="relative rounded-2xl border border-line bg-paper p-7 shadow-card transition hover:border-signal hover:shadow-lift"
           >
-            <span className="absolute right-5 top-5 font-display text-3xl font-black text-paper-dim">
+            <span
+              className="absolute right-5 top-5 font-display text-3xl font-black text-paper-dim"
+              aria-hidden
+            >
               {s.n}
             </span>
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-signal-light text-signal">

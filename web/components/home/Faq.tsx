@@ -50,7 +50,7 @@ export function Faq() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
       />
       <div className="mb-8 text-center">
-        <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+        <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
           Questions fréquentes
         </p>
         <h2 className="font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">

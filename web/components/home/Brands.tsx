@@ -24,7 +24,7 @@ export function Brands() {
     <section className="border-y border-line bg-paper-dim">
       <div className="mx-auto max-w-7xl px-6 py-14">
         <div className="mb-8 text-center">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
             Toutes les grandes marques
           </p>
           <h2 className="font-display text-2xl font-black tracking-tightest text-ink md:text-3xl">

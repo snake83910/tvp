@@ -188,7 +188,7 @@ export default async function MontagePneuPage({
       {/* Hero + recherche */}
       <section className="border-b border-line bg-paper-dim">
         <div className="mx-auto max-w-5xl px-6 py-14 text-center md:py-16">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
             Montage en garage partenaire
           </p>
           <h1 className="mx-auto max-w-3xl font-display text-3xl font-black tracking-tightest text-ink md:text-5xl">
@@ -306,7 +306,7 @@ export default async function MontagePneuPage({
       {/* Comment ça marche */}
       <section className="mx-auto max-w-7xl px-6 py-16">
         <div className="mb-10 text-center">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
             Comment ça marche
           </p>
           <h2 className="font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">
@@ -320,7 +320,10 @@ export default async function MontagePneuPage({
               key={s.n}
               className="relative rounded-2xl border border-line bg-paper p-7 shadow-card transition hover:border-signal hover:shadow-lift"
             >
-              <span className="absolute right-5 top-5 font-display text-3xl font-black text-paper-dim">
+              <span
+                className="absolute right-5 top-5 font-display text-3xl font-black text-paper-dim"
+                aria-hidden
+              >
                 {s.n}
               </span>
               <h3 className="mt-2 max-w-[14ch] font-display text-lg font-bold text-ink">
@@ -336,7 +339,7 @@ export default async function MontagePneuPage({
       <section className="border-y border-line bg-paper-dim">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <div className="mb-10 text-center">
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
               Deux formules
             </p>
             <h2 className="font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">
@@ -375,7 +378,7 @@ export default async function MontagePneuPage({
       {/* Prestations incluses */}
       <section className="mx-auto max-w-7xl px-6 py-16">
         <div className="mb-10 text-center">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
             La prestation
           </p>
           <h2 className="font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">

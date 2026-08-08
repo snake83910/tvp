@@ -21,7 +21,7 @@ export function PopularDimensions() {
       <div className="mx-auto max-w-7xl px-6 py-14">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="mb-1 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+            <p className="mb-1 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
               Tailles populaires
             </p>
             <h2 className="font-display text-2xl font-black tracking-tightest text-ink md:text-3xl">
@@ -30,7 +30,7 @@ export function PopularDimensions() {
           </div>
           <Link
             href="/recherche"
-            className="text-sm font-semibold text-signal hover:underline"
+            className="text-sm font-semibold text-signal-dark hover:underline"
           >
             Toutes les dimensions →
           </Link>

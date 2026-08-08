@@ -43,7 +43,7 @@ export function Testimonials() {
   return (
     <section className="mx-auto max-w-7xl px-6 py-16">
       <div className="mb-10 text-center">
-        <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal">
+        <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-signal-dark">
           Ils nous font confiance
         </p>
         <h2 className="font-display text-3xl font-black tracking-tightest text-ink md:text-4xl">
