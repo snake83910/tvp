@@ -110,8 +110,11 @@ test("tunnel : produit → panier → connexion → checkout → paiement simul�
 
   // ── Checkout : adresse (existante ou nouvelle) + CGV ─────────────
   // La checkbox CGV n'apparaît que si le panier (fusionné) est chargé :
-  // c'est aussi l'assertion que la fusion a fonctionné.
-  const cgv = page.getByRole("checkbox");
+  // c'est aussi l'assertion que la fusion a fonctionné. On la cible par son
+  // libellé : la page a aussi une case « facturation identique ».
+  const cgv = page.getByRole("checkbox", {
+    name: /accepte les conditions/i,
+  });
   await expect(cgv).toBeVisible({ timeout: 20_000 });
 
   const hasExisting = await page
