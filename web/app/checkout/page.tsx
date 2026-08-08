@@ -6,7 +6,11 @@ import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { CheckoutSteps } from "@/components/CheckoutSteps";
 import { useCart } from "@/components/CartProvider";
-import { GaragePicker } from "@/components/GaragePicker";
+import { AddressPicker } from "@/components/checkout/AddressPicker";
+import { DeliveryModeSelector } from "@/components/checkout/DeliveryModeSelector";
+import { OrderSummary } from "@/components/checkout/OrderSummary";
+import { Section } from "@/components/checkout/fields";
+import type { PriceChange } from "@/components/checkout/types";
 import { cartApi } from "@/lib/cart";
 import type { GarageNearby } from "@/lib/api";
 import {
@@ -14,14 +18,6 @@ import {
   useCurrentUser,
   type Address,
 } from "@/lib/auth";
-import { formatEuro } from "@/lib/money";
-
-interface PriceChange {
-  supplier_ref: string;
-  label: string;
-  old_ttc: number;
-  new_ttc: number;
-}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -321,61 +317,15 @@ export default function CheckoutPage() {
 
             {/* Livraison */}
             <Section title="2 · Mode de livraison">
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => { setDeliveryMode("home"); setSelectedGarage(null); }}
-                  className={`flex w-full items-center justify-between rounded-lg border-2 p-4 text-left transition ${
-                    deliveryMode === "home"
-                      ? "border-signal bg-signal-light"
-                      : "border-line hover:border-signal/50"
-                  }`}
-                >
-                  <div>
-                    <p className="font-semibold text-ink">
-                      Livraison à domicile
-                    </p>
-                    <p className="text-sm text-ink-muted">
-                      {isFreeShipping
-                        ? "Gratuite (toutes les références à ≥ 2 pneus)"
-                        : `${formatEuro(cart.shipping_ht)} HT — gratuite si chaque référence est à 2 pneus minimum`}
-                    </p>
-                  </div>
-                  {deliveryMode === "home" && (
-                    <span className="text-sm font-bold text-signal">Sélectionné</span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDeliveryMode("partner_garage")}
-                  className={`flex w-full items-center justify-between rounded-lg border-2 p-4 text-left transition ${
-                    deliveryMode === "partner_garage"
-                      ? "border-signal bg-signal-light"
-                      : "border-line hover:border-signal/50"
-                  }`}
-                >
-                  <div>
-                    <p className="font-semibold text-ink">
-                      Montage chez un garage partenaire
-                    </p>
-                    <p className="text-sm text-ink-muted">
-                      Vos pneus sont livrés au garage, prêt à les monter.
-                      Montage réglé sur place.
-                    </p>
-                  </div>
-                  {deliveryMode === "partner_garage" && (
-                    <span className="text-sm font-bold text-signal">Sélectionné</span>
-                  )}
-                </button>
-
-                {deliveryMode === "partner_garage" && (
-                  <GaragePicker
-                    selectedId={selectedGarage?.id ?? null}
-                    onSelect={setSelectedGarage}
-                  />
-                )}
-              </div>
+              <DeliveryModeSelector
+                mode={deliveryMode}
+                onSelectHome={() => { setDeliveryMode("home"); setSelectedGarage(null); }}
+                onSelectPartner={() => setDeliveryMode("partner_garage")}
+                shippingHt={cart.shipping_ht}
+                isFreeShipping={isFreeShipping}
+                selectedGarage={selectedGarage}
+                onSelectGarage={setSelectedGarage}
+              />
             </Section>
 
             {/* CGV */}
@@ -404,311 +354,30 @@ export default function CheckoutPage() {
           </div>
 
           {/* Récap */}
-          <aside className="h-fit space-y-4 rounded-2xl border border-line bg-paper p-6 shadow-card">
-            <p className="text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
-              Récapitulatif
-            </p>
-            <div className="space-y-2 border-b border-line pb-4">
-              {cart.items.map((it) => (
-                <div key={it.id} className="flex justify-between text-sm">
-                  <span className="text-ink-soft">
-                    {it.label}{" "}
-                    <span className="text-ink-muted">
-                      × {it.quantity}
-                    </span>
-                  </span>
-                  <span className="font-semibold text-ink">
-                    {formatEuro(it.price_ttc * it.quantity)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {/* Code promo */}
-            {promo ? (
-              <div className="flex items-center justify-between rounded-lg border border-ok/40 bg-ok/5 px-3 py-2 text-sm">
-                <span className="font-semibold text-ok">
-                  🏷 {promo.code}
-                  {promo.description && (
-                    <span className="block text-xs font-normal">
-                      {promo.description}
-                    </span>
-                  )}
-                </span>
-                <button
-                  onClick={() => setPromo(null)}
-                  className="text-xs text-ink-muted hover:text-signal"
-                  title="Retirer le code"
-                >
-                  Retirer ✕
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={applyPromo} className="flex gap-2">
-                <input
-                  value={promoInput}
-                  onChange={(e) => {
-                    setPromoInput(e.target.value.toUpperCase());
-                    setPromoError(null);
-                  }}
-                  placeholder="Code promo"
-                  className="h-10 min-w-0 flex-1 rounded-lg border border-line bg-paper px-3 font-mono text-sm uppercase outline-none focus:border-signal"
-                />
-                <button
-                  type="submit"
-                  disabled={promoBusy || !promoInput.trim()}
-                  className="rounded-lg border border-line px-4 text-sm font-semibold text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
-                >
-                  {promoBusy ? "…" : "Appliquer"}
-                </button>
-              </form>
-            )}
-            {promoError && (
-              <p className="rounded-lg bg-signal-light px-3 py-2 text-xs text-signal-dark">
-                {promoError}
-              </p>
-            )}
-
-            <div className="flex justify-between text-sm">
-              <span className="text-ink-soft">Sous-total</span>
-              <span className="font-semibold text-ink">
-                {formatEuro(articlesTtc)}
-              </span>
-            </div>
-            {promo && (
-              <div className="flex justify-between text-sm">
-                <span className="text-ok">Remise ({promo.code})</span>
-                <span className="font-semibold text-ok">
-                  −{formatEuro(discountTtc)}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm">
-              <span className="text-ink-soft">Livraison</span>
-              <span className="font-semibold text-ink">
-                {shippingTtc === 0 ? "Offerte" : formatEuro(shippingTtc)}
-              </span>
-            </div>
-            <div className="flex justify-between border-t border-line pt-4 font-display text-xl font-black text-ink">
-              <span>Total TTC</span>
-              <span>{formatEuro(grandTotal)}</span>
-            </div>
-
-            {priceChanges.length > 0 && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-                <p className="mb-2 text-sm font-bold text-amber-800">
-                  Le prix fournisseur de certains articles a changé :
-                </p>
-                <table className="w-full text-xs">
-                  <tbody>
-                    {priceChanges.map((c) => (
-                      <tr key={c.supplier_ref}>
-                        <td className="truncate py-1 pr-2 text-amber-900" title={c.label}>
-                          {c.label}
-                        </td>
-                        <td className="whitespace-nowrap py-1 text-right">
-                          <span className="text-amber-700 line-through">
-                            {formatEuro(c.old_ttc)}
-                          </span>{" "}
-                          <span
-                            className={`font-bold ${
-                              c.new_ttc === 0
-                                ? "text-signal"
-                                : c.new_ttc > c.old_ttc
-                                  ? "text-signal"
-                                  : "text-ok"
-                            }`}
-                          >
-                            {c.new_ttc === 0
-                              ? "indisponible"
-                              : formatEuro(c.new_ttc)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="mt-2 text-xs text-amber-800">
-                  Votre panier a été mis à jour — vérifiez les montants
-                  puis validez à nouveau.
-                </p>
-              </div>
-            )}
-
-            {error && (
-              <p className="rounded-lg bg-signal-light px-3 py-2 text-sm font-medium text-signal-dark">
-                {error}
-              </p>
-            )}
-
-            <button
-              onClick={handleSubmit}
-              disabled={busy || !acceptTerms}
-              className="w-full rounded-full bg-signal py-3 font-display font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark disabled:opacity-50"
-            >
-              {busy ? "Validation…" : "Procéder au paiement"}
-            </button>
-            <div className="space-y-1 text-center text-[11px] text-ink-muted">
-              <p>🔒 Paiement sécurisé Société Générale (Sogecommerce)</p>
-              <p>↩ Rétractation 14 jours · Garantie constructeur</p>
-            </div>
-          </aside>
+          <OrderSummary
+            items={cart.items}
+            promo={promo}
+            promoInput={promoInput}
+            promoError={promoError}
+            promoBusy={promoBusy}
+            onPromoInputChange={(v) => {
+              setPromoInput(v);
+              setPromoError(null);
+            }}
+            onApplyPromo={applyPromo}
+            onRemovePromo={() => setPromo(null)}
+            articlesTtc={articlesTtc}
+            discountTtc={discountTtc}
+            shippingTtc={shippingTtc}
+            grandTotal={grandTotal}
+            priceChanges={priceChanges}
+            error={error}
+            busy={busy}
+            acceptTerms={acceptTerms}
+            onSubmit={handleSubmit}
+          />
         </div>
       </main>
     </>
-  );
-}
-
-interface AddressDraft {
-  label: string;
-  line1: string;
-  line2: string;
-  postal_code: string;
-  city: string;
-  country: string;
-}
-
-/** Choix d'une adresse du carnet, ou saisie d'une nouvelle. Partagé par
- *  la livraison et la facturation — d'où le radioName distinct. */
-function AddressPicker({
-  radioName,
-  addresses,
-  selectedId,
-  onSelect,
-  showNew,
-  onShowNew,
-  draft,
-  onDraft,
-}: {
-  radioName: string;
-  addresses: Address[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-  showNew: boolean;
-  onShowNew: (v: boolean) => void;
-  draft: AddressDraft;
-  onDraft: (d: AddressDraft) => void;
-}) {
-  return (
-    <>
-      {addresses.length > 0 && !showNew && (
-        <div className="space-y-2">
-          {addresses.map((a) => (
-            <label
-              key={a.id}
-              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition ${
-                selectedId === a.id
-                  ? "border-signal bg-signal-light"
-                  : "border-line hover:border-signal/50"
-              }`}
-            >
-              <input
-                type="radio"
-                name={radioName}
-                checked={selectedId === a.id}
-                onChange={() => onSelect(a.id)}
-                className="mt-1 accent-signal"
-              />
-              <div>
-                <p className="font-semibold text-ink">
-                  {a.label ?? "Adresse"}
-                </p>
-                <p className="text-sm text-ink-muted">
-                  {a.line1}
-                  {a.line2 ? `, ${a.line2}` : ""}, {a.postal_code}{" "}
-                  {a.city}
-                </p>
-              </div>
-            </label>
-          ))}
-          <button
-            onClick={() => onShowNew(true)}
-            className="text-sm font-semibold text-signal hover:underline"
-          >
-            + Ajouter une nouvelle adresse
-          </button>
-        </div>
-      )}
-      {showNew && (
-        <div className="space-y-3">
-          <Input
-            label="Adresse"
-            value={draft.line1}
-            onChange={(v) => onDraft({ ...draft, line1: v })}
-          />
-          <Input
-            label="Complément (facultatif)"
-            value={draft.line2}
-            onChange={(v) => onDraft({ ...draft, line2: v })}
-            required={false}
-          />
-          <div className="grid grid-cols-3 gap-3">
-            <Input
-              label="Code postal"
-              value={draft.postal_code}
-              onChange={(v) => onDraft({ ...draft, postal_code: v })}
-            />
-            <div className="col-span-2">
-              <Input
-                label="Ville"
-                value={draft.city}
-                onChange={(v) => onDraft({ ...draft, city: v })}
-              />
-            </div>
-          </div>
-          {addresses.length > 0 && (
-            <button
-              onClick={() => onShowNew(false)}
-              className="text-sm text-ink-muted hover:text-signal"
-            >
-              ← Utiliser une adresse existante
-            </button>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-line bg-paper p-6 shadow-card">
-      <h2 className="mb-4 font-display text-lg font-bold text-ink">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function Input({
-  label,
-  value,
-  onChange,
-  required = true,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-ink-muted">
-        {label}
-      </label>
-      <input
-        required={required}
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-lg border border-line bg-paper px-3 text-ink outline-none transition focus:border-signal"
-      />
-    </div>
   );
 }

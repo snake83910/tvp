@@ -118,6 +118,11 @@ dans `.env`. Aucun autre code à changer.
 docker compose exec api python -m pytest app/tests/ -q   # 13 verts
 ```
 
+## Documentation
+
+Les guides détaillés (architecture, déploiement, intégrations) sont
+regroupés dans [`docs/`](docs/README.md).
+
 ## Suite — Phase 4+
 
 Recherche par plaque → livraison (domicile / garage partenaire)
