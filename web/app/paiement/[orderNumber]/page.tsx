@@ -191,7 +191,7 @@ export default function PaymentPage({
       }
       setFormReady(false);
     };
-  }, [init, params.orderNumber]);
+  }, [init, params.orderNumber, router]);
 
   async function simulatePayment() {
     if (!init) return;

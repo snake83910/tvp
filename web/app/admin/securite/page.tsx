@@ -150,6 +150,9 @@ export default function SecurityPage() {
             <p className="mb-3 text-xs text-ink-muted">
               Avec votre app d&apos;authentification (Google Authenticator, etc.)
             </p>
+            {/* QR en data-URI base64 généré côté serveur : next/image
+                n'optimise pas les data: URIs et n'apporte donc rien ici. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`data:image/png;base64,${setupData.qr_png_base64}`}
               alt="QR code 2FA"

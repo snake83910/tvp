@@ -127,7 +127,7 @@ export function CartProvider({
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   // À la connexion : fusionne le panier anonyme dans le panier du compte.
   // Sans cet appel, l'article mis au panier avant de se connecter était

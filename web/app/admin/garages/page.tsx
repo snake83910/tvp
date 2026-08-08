@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   adminApi,
   downloadGarageKbis,
@@ -90,7 +90,7 @@ export default function AdminGaragesPage() {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       setGarages(await adminApi.listGarages());
@@ -99,11 +99,11 @@ export default function AdminGaragesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   function startCreate() {
     setEditing(null);
