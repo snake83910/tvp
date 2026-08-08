@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { api } from "@/lib/api";
 import { COMMON_DIMENSIONS, POPULAR_DIMENSIONS } from "@/lib/dimensions";
+import { GUIDE_ARTICLES } from "@/lib/guides";
 import { dimensionUrl, slugify } from "@/lib/slug";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
@@ -17,6 +18,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/pneus-4-saisons`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/montage-pneu`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
     { url: `${SITE}/guide`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
+    ...GUIDE_ARTICLES.map((a) => ({
+      url: `${SITE}/guide/${a.slug}`,
+      lastModified: now,
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
     { url: `${SITE}/comparer`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
     { url: `${SITE}/a-propos`, lastModified: now, changeFrequency: "yearly", priority: 0.4 },
     { url: `${SITE}/cgv`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },

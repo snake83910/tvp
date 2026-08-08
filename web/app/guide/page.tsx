@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
+import { GUIDE_ARTICLES } from "@/lib/guides";
 
 export const metadata = {
   title: "Guide du pneu : dimensions, indices de charge et de vitesse — tousvospneus.com",
@@ -160,6 +161,26 @@ export default function GuidePage() {
             est recommandé de vérifier ce marquage et de ne pas rouler avec des
             pneus de plus de 10 ans.
           </p>
+        </Section>
+
+        {/* Hub : articles pratiques */}
+        <Section title="Nos guides pratiques">
+          <p>
+            Pour aller plus loin, nos guides répondent aux questions les plus
+            fréquentes sur l&apos;entretien et la réglementation :
+          </p>
+          <ul className="mt-2 space-y-2">
+            {GUIDE_ARTICLES.map((a) => (
+              <li key={a.slug}>
+                <Link
+                  href={`/guide/${a.slug}`}
+                  className="font-semibold text-signal-dark hover:underline"
+                >
+                  {a.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </Section>
 
         {/* CTA */}
