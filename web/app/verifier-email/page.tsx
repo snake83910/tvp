@@ -27,15 +27,13 @@ export default function VerifyEmailPage() {
 function Verify() {
   const params = useSearchParams();
   const token = params.get("token") || "";
-  const [state, setState] = useState<"pending" | "ok" | "error">("pending");
-  const [msg, setMsg] = useState<string>("");
+  const [result, setResult] = useState<{ state: "ok" | "error"; msg: string } | null>(null);
 
   useEffect(() => {
-    if (!token) {
-      setState("error");
-      setMsg("Lien invalide.");
-      return;
-    }
+    // Token absent : aucun setState ici — la branche est DÉRIVÉE au rendu
+    // (cf. plus bas). Un setState synchrone dans l'effet déclencherait un
+    // rendu en cascade pour un état connu dès le premier rendu.
+    if (!token) return;
     fetch(`${BROWSER_API}/auth/verify-email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -43,18 +41,23 @@ function Verify() {
     })
       .then(async (r) => {
         if (r.ok) {
-          setState("ok");
+          setResult({ state: "ok", msg: "" });
         } else {
           const body = await r.json().catch(() => ({}));
-          setState("error");
-          setMsg(body.detail ?? "Lien expiré ou invalide.");
+          setResult({ state: "error", msg: body.detail ?? "Lien expiré ou invalide." });
         }
       })
       .catch(() => {
-        setState("error");
-        setMsg("Erreur réseau, réessayez.");
+        setResult({ state: "error", msg: "Erreur réseau, réessayez." });
       });
   }, [token]);
+
+  // Sans token, l'issue est connue sans appel réseau : on la dérive.
+  const view = !token
+    ? { state: "error" as const, msg: "Lien invalide." }
+    : result ?? { state: "pending" as const, msg: "" };
+  const state = view.state;
+  const msg = view.msg;
 
   return (
     <main className="mx-auto max-w-md px-6 py-16 text-center">

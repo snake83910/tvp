@@ -26,17 +26,20 @@ export default function AdminKanban() {
   const [byStatus, setByStatus] = useState<Record<string, AdminOrderSummary[]>>({});
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    setLoading(true);
+  // Chaîne de promesses, sans setLoading(true) synchrone : `loading`
+  // démarre à true pour le montage, et les rechargements après une action
+  // (moveNext) se font EN PLACE — le tableau reste affiché au lieu de
+  // flasher un squelette à chaque déplacement de commande.
+  function load() {
     const all: Record<string, AdminOrderSummary[]> = {};
-    await Promise.all(COLUMNS.map(async (c) => {
-      try {
-        const list = await adminApi.listOrders({ status: c.key, page: 1 });
-        all[c.key] = list;
-      } catch { all[c.key] = []; }
-    }));
-    setByStatus(all);
-    setLoading(false);
+    return Promise.all(COLUMNS.map((c) =>
+      adminApi.listOrders({ status: c.key, page: 1 })
+        .then((list) => { all[c.key] = list; })
+        .catch(() => { all[c.key] = []; }),
+    )).then(() => {
+      setByStatus(all);
+      setLoading(false);
+    });
   }
   useEffect(() => { load(); }, []);
 

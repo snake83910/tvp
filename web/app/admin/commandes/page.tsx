@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalValue, writeLocal } from "@/lib/localStore";
 import { adminApi, type AdminOrderSummary } from "@/lib/admin";
 import { authFetch } from "@/lib/auth";
 import { STATUS_LABEL } from "@/lib/orderStatus";
@@ -53,27 +54,29 @@ export default function AdminOrders() {
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
 
-  // Filtres sauvegardés (localStorage)
-  const [savedViews, setSavedViews] = useState<{ name: string; qs: string }[]>([]);
-  useEffect(() => {
+  // Filtres sauvegardés — localStorage est la source de vérité, lu via
+  // useSyncExternalStore (lib/localStore) : plus de useState hydraté par
+  // effet (rendu en cascade au montage), et les écritures re-rendent le
+  // composant via writeLocal.
+  const savedViewsRaw = useLocalValue("tvp_admin_views");
+  const savedViews = useMemo<{ name: string; qs: string }[]>(() => {
     try {
-      const raw = localStorage.getItem("tvp_admin_views");
-      if (raw) setSavedViews(JSON.parse(raw));
-    } catch {}
-  }, []);
+      return savedViewsRaw ? JSON.parse(savedViewsRaw) : [];
+    } catch {
+      return [];
+    }
+  }, [savedViewsRaw]);
   function saveCurrentView() {
     const name = prompt("Nom de la vue ?");
     if (!name) return;
     const qs = window.location.search.slice(1);
     const next = [...savedViews.filter((v) => v.name !== name), { name, qs }];
-    setSavedViews(next);
-    localStorage.setItem("tvp_admin_views", JSON.stringify(next));
+    writeLocal("tvp_admin_views", JSON.stringify(next));
     toast("Vue sauvegardée", "success");
   }
   function deleteView(name: string) {
     const next = savedViews.filter((v) => v.name !== name);
-    setSavedViews(next);
-    localStorage.setItem("tvp_admin_views", JSON.stringify(next));
+    writeLocal("tvp_admin_views", JSON.stringify(next));
   }
 
   async function sendBulkEmail() {
@@ -95,19 +98,23 @@ export default function AdminOrders() {
     }
   }
 
+  function listQuery(s: string, st: string, p: number, fd: string, td: string, minA: string, maxA: string) {
+    return {
+      q: s || undefined,
+      status: st || undefined,
+      page: p,
+      from_date: fd || undefined,
+      to_date: td || undefined,
+      min_amount: minA ? parseFloat(minA) : undefined,
+      max_amount: maxA ? parseFloat(maxA) : undefined,
+    } as Parameters<typeof adminApi.listOrders>[0];
+  }
+
   function fetch_(s: string, st: string, p: number, fd: string, td: string, minA: string, maxA: string) {
     setLoading(true);
     setError(null);
     adminApi
-      .listOrders({
-        q: s || undefined,
-        status: st || undefined,
-        page: p,
-        from_date: fd || undefined,
-        to_date: td || undefined,
-        min_amount: minA ? parseFloat(minA) : undefined,
-        max_amount: maxA ? parseFloat(maxA) : undefined,
-      } as Parameters<typeof adminApi.listOrders>[0])
+      .listOrders(listQuery(s, st, p, fd, td, minA, maxA))
       .then(setOrders)
       .catch((e) => setError(e instanceof Error ? e.message : "Erreur"))
       .finally(() => setLoading(false));
@@ -123,7 +130,20 @@ export default function AdminOrders() {
     router.replace(`/admin/commandes${params.size ? `?${params}` : ""}`, { scroll: false });
   }
 
-  useEffect(() => { fetch_(search, status, page, fromDate, toDate, minAmount, maxAmount); }, []); // eslint-disable-line
+  // Chargement initial. Chaîne inline et pas fetch_ : ses setLoading(true)
+  // / setError(null) synchrones sont des no-ops au montage (états initiaux
+  // identiques) mais déclencheraient react-hooks/set-state-in-effect, et
+  // son router.replace est inutile ici — l'état vient déjà de l'URL. Les
+  // changements de filtres passent tous par fetch_ dans des handlers.
+  useEffect(() => {
+    adminApi
+      .listOrders(listQuery(search, status, page, fromDate, toDate, minAmount, maxAmount))
+      .then(setOrders)
+      .catch((e) => setError(e instanceof Error ? e.message : "Erreur"))
+      .finally(() => setLoading(false));
+    // Volontairement sans dépendances : effet de montage uniquement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function onSearch(val: string) {
     setSearch(val);

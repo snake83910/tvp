@@ -38,14 +38,17 @@ export default function SecurityPage() {
   const [backupRemaining, setBackupRemaining] = useState(0);
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
 
-  async function loadStatus() {
-    try {
-      const s = await call("/auth/2fa/status");
-      setEnabled(s.enabled);
-      setBackupRemaining(s.backup_codes_remaining ?? 0);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
-    }
+  // Chaîne de promesses : les setters ne vivent que dans des callbacks,
+  // ce qui rend loadStatus appelable depuis l'effet de montage sans
+  // setState synchrone (react-hooks/set-state-in-effect).
+  function loadStatus() {
+    return call("/auth/2fa/status").then(
+      (s) => {
+        setEnabled(s.enabled);
+        setBackupRemaining(s.backup_codes_remaining ?? 0);
+      },
+      (e) => setError(e instanceof Error ? e.message : "Erreur"),
+    );
   }
 
   useEffect(() => { loadStatus(); }, []);

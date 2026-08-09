@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 
 type Tone = "success" | "error" | "info";
 interface ToastItem { id: number; tone: Tone; message: string; }
@@ -41,8 +41,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 function ToastView({ item }: { item: ToastItem }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => { setVisible(true); }, []);
+  // Apparition en CSS (.toast-in, globals.css) : l'ancien setVisible(true)
+  // dans un useEffect forçait un second rendu juste pour lancer la
+  // transition — l'animation CSS démarre au premier paint, sans état.
   const cls =
     item.tone === "success"
       ? "border-ok/40 bg-ok/10 text-ok"
@@ -51,9 +52,7 @@ function ToastView({ item }: { item: ToastItem }) {
       : "border-line bg-paper text-ink";
   return (
     <div
-      className={`pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm font-semibold shadow-card transition-all ${cls} ${
-        visible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
-      }`}
+      className={`toast-in pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm font-semibold shadow-card ${cls}`}
     >
       {item.message}
     </div>

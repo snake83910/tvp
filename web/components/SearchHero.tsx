@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useLocalValue, writeLocal } from "@/lib/localStore";
 import {
   api,
   VEHICLE_CATEGORIES,
@@ -89,11 +90,9 @@ const LAST_DIM_KEY = "tvp_last_dim";
 
 type LastDim = { w: string; h: string; d: string; cat?: VehicleCategory };
 
-function readLastDim(): LastDim | null {
-  if (typeof window === "undefined") return null;
+function parseLastDim(raw: string | null): LastDim | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(LAST_DIM_KEY);
-    if (!raw) return null;
     const v = JSON.parse(raw) as LastDim;
     return v.w && v.h && v.d ? v : null;
   } catch {
@@ -102,11 +101,9 @@ function readLastDim(): LastDim | null {
 }
 
 function saveLastDim(dim: LastDim) {
-  try {
-    localStorage.setItem(LAST_DIM_KEY, JSON.stringify(dim));
-  } catch {
-    /* stockage plein / bloqué : non bloquant */
-  }
+  // writeLocal plutôt que localStorage.setItem : notifie le hook
+  // useLocalValue, qui re-rend le composant avec la nouvelle valeur.
+  writeLocal(LAST_DIM_KEY, JSON.stringify(dim));
 }
 
 export function SearchHero({
@@ -128,35 +125,38 @@ export function SearchHero({
   const [tab, setTab] = useState<"plaque" | "dim">("dim");
   const [expanded, setExpanded] = useState(false);
 
-  const [w, setW] = useState("");
-  const [h, setH] = useState("");
-  const [d, setD] = useState("");
-  const [lastDim, setLastDim] = useState<LastDim | null>(null);
+  // Un client revient tous les 2-3 ans (ou compare sur plusieurs jours) :
+  // sa dernière dimension pré-remplit le formulaire.
+  //
+  // Modèle DÉRIVÉ, sans effet d'hydratation : lastDim vient de
+  // localStorage via useSyncExternalStore (lib/localStore), et les
+  // sélecteurs distinguent « jamais touché » (null → pré-remplissage
+  // appliqué) de « vidé par l'utilisateur » ("" → reste vide). L'ancien
+  // useEffect qui poussait ces valeurs dans l'état déclenchait un rendu
+  // en cascade au montage. Comportement conservé : changer de famille
+  // vide les champs, et revenir à la famille initiale ne re-remplit pas.
+  const lastDim = parseLastDim(useLocalValue(LAST_DIM_KEY));
+  const prefill =
+    lastDim && (lastDim.cat ?? "auto") === initialCategory ? lastDim : null;
+
+  const [wIn, setW] = useState<string | null>(null);
+  const [hIn, setH] = useState<string | null>(null);
+  const [dIn, setD] = useState<string | null>(null);
+  const w = wIn ?? prefill?.w ?? "";
+  const h = hIn ?? prefill?.h ?? "";
+  const d = dIn ?? prefill?.d ?? "";
 
   const [plate, setPlate] = useState("");
   const [plateLoading, setPlateLoading] = useState(false);
   const [plateError, setPlateError] = useState<string | null>(null);
   const [plateDims, setPlateDims] = useState<VehicleDimension[] | null>(null);
 
-  // Un client revient tous les 2-3 ans (ou compare sur plusieurs jours) :
-  // on pré-remplit sa dernière dimension pour lui éviter la re-saisie.
-  useEffect(() => {
-    const last = readLastDim();
-    if (last) {
-      setLastDim(last);
-      if ((last.cat ?? "auto") === initialCategory) {
-        setW((prev) => prev || last.w);
-        setH((prev) => prev || last.h);
-        setD((prev) => prev || last.d);
-      }
-    }
-  }, [initialCategory]);
-
   function switchCategory(next: VehicleCategory) {
     if (next === cat) return;
     setCat(next);
     // Les valeurs de l'ancienne famille n'existent pas forcément dans
     // la nouvelle (ex. 22.5 n'existe qu'en camion) : on repart à vide.
+    // "" (et non null) : fige aussi le pré-remplissage.
     setW("");
     setH("");
     setD("");

@@ -90,16 +90,20 @@ export default function AdminGaragesPage() {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setGarages(await adminApi.listGarages());
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erreur de chargement", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  // Chaîne de promesses, sans setLoading(true) synchrone : `loading`
+  // démarre à true pour le montage, et les rechargements après une
+  // création/édition se font en place, liste affichée.
+  const load = useCallback(
+    () =>
+      adminApi
+        .listGarages()
+        .then(setGarages)
+        .catch((e) => {
+          toast(e instanceof Error ? e.message : "Erreur de chargement", "error");
+        })
+        .finally(() => setLoading(false)),
+    [toast],
+  );
 
   useEffect(() => {
     load();

@@ -85,18 +85,20 @@ export default function PaymentPage(
       .catch((e) => setError(e.message));
   }, [user, params.orderNumber]);
 
+  // Clé publique absente : erreur de CONFIGURATION, connue dès que `init`
+  // arrive — dérivée au rendu plutôt que poussée par setState depuis
+  // l'effet (rendu en cascade pour un état déjà déterminé).
+  const configError =
+    init && init.provider === "sogecommerce" && !init.public_key
+      ? "Clé publique Sogecommerce manquante. " +
+        "Ajoutez SOGECOMMERCE_PUBLIC_KEY dans le .env " +
+        "(Back Office → Clés d'API REST → « Clé publique de test »)."
+      : null;
+
   // 2. Monte le smartForm Sogecommerce (thème néon complet)
   useEffect(() => {
     if (!init || init.provider !== "sogecommerce") return;
-
-    if (!init.public_key) {
-      setError(
-        "Clé publique Sogecommerce manquante. " +
-          "Ajoutez SOGECOMMERCE_PUBLIC_KEY dans le .env " +
-          "(Back Office → Clés d'API REST → « Clé publique de test »).",
-      );
-      return;
-    }
+    if (!init.public_key) return; // configError (dérivé) couvre ce cas
 
     let cancelled = false;
 
@@ -235,12 +237,12 @@ export default function PaymentPage(
         </h1>
         <CheckoutSteps current={3} />
 
-        {error && (
+        {(error ?? configError) && (
           <div className="mt-6 rounded-xl border border-signal/40 bg-signal-light p-5">
             <p className="font-semibold text-signal-dark">
               Le paiement n&apos;a pas pu être initialisé
             </p>
-            <p className="mt-1 text-sm text-ink-soft">{error}</p>
+            <p className="mt-1 text-sm text-ink-soft">{error ?? configError}</p>
             <Link
               href="/panier"
               className="mt-3 inline-block text-sm font-semibold text-signal hover:underline"
@@ -370,14 +372,14 @@ export default function PaymentPage(
               </div>
             </div>
 
-            {!init && !error && (
+            {!init && !error && !configError && (
               <PaymentSkeleton label="Initialisation du paiement…" />
             )}
 
             {init && init.provider === "sogecommerce" && (
               <>
                 {/* Squelette pendant le chargement du formulaire bancaire */}
-                {!formReady && !error && (
+                {!formReady && !error && !configError && (
                   <PaymentSkeleton label="Chargement du formulaire bancaire…" />
                 )}
 

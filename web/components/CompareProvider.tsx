@@ -4,11 +4,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
 } from "react";
 import type { TyreResult } from "@/lib/api";
+import { useLocalValue, writeLocal } from "@/lib/localStore";
 
 const MAX = 3;
 const STORAGE_KEY = "tvp:compare";
@@ -25,32 +24,40 @@ interface CompareCtx {
 
 const Ctx = createContext<CompareCtx | null>(null);
 
+function parse(raw: string | null): TyreResult[] {
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as TyreResult[];
+  } catch {
+    /* JSON corrompu : on repart à vide */
+    return [];
+  }
+}
+
 export function CompareProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<TyreResult[]>([]);
+  // localStorage EST la source de vérité, lue via useSyncExternalStore
+  // (lib/localStore). L'ancien montage — un useState hydraté par un
+  // useEffect — dupliquait l'état et déclenchait un rendu en cascade au
+  // montage ; ici le serveur rend une sélection vide, React bascule sur
+  // la valeur du client à l'hydratation, et chaque écriture re-rend les
+  // abonnés via writeLocal.
+  const raw = useLocalValue(STORAGE_KEY);
+  const items = useMemo(() => parse(raw), [raw]);
 
-  // Hydratation depuis localStorage (client uniquement)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw) as TyreResult[]);
-    } catch {
-      /* stockage indisponible / JSON corrompu : on repart à vide */
-    }
-  }, []);
-
-  // Mutation via updater fonctionnel : robuste aux clics rapprochés (pas de
-  // closure obsolète) ; la persistance se fait à partir de l'état frais.
+  // Les mutations relisent le stockage au moment du clic (et non `items`
+  // capturé par la closure) : deux clics rapprochés partent chacun de
+  // l'état réellement persisté — même garantie que l'ancien updater
+  // fonctionnel de setItems.
   const apply = useCallback(
     (fn: (prev: TyreResult[]) => TyreResult[]) => {
-      setItems((prev) => {
-        const next = fn(prev);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          /* quota / mode privé : la sélection reste au moins en mémoire */
-        }
-        return next;
-      });
+      let current: string | null = null;
+      try {
+        current = localStorage.getItem(STORAGE_KEY);
+      } catch {
+        /* stockage indisponible : on part de vide */
+      }
+      const next = fn(parse(current));
+      writeLocal(STORAGE_KEY, JSON.stringify(next));
     },
     [],
   );

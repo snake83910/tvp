@@ -21,23 +21,30 @@ export default function ConfirmerEmailPage() {
 function Confirm() {
   const params = useSearchParams();
   const token = params.get("token") || "";
-  const [state, setState] = useState<"pending" | "ok" | "error">("pending");
-  const [msg, setMsg] = useState("");
+  const [result, setResult] = useState<{ state: "ok" | "error"; msg: string } | null>(null);
 
   useEffect(() => {
-    if (!token) { setState("error"); setMsg("Lien invalide."); return; }
+    // Token absent : issue dérivée au rendu (cf. plus bas), pas de
+    // setState synchrone dans l'effet pour un état connu d'avance.
+    if (!token) return;
     fetch(`${BROWSER_API}/auth/confirm-email-change`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
     }).then(async (r) => {
-      if (r.ok) setState("ok");
+      if (r.ok) setResult({ state: "ok", msg: "" });
       else {
         const b = await r.json().catch(() => ({}));
-        setState("error"); setMsg(b.detail ?? "Lien expiré ou invalide.");
+        setResult({ state: "error", msg: b.detail ?? "Lien expiré ou invalide." });
       }
-    }).catch(() => { setState("error"); setMsg("Erreur réseau."); });
+    }).catch(() => setResult({ state: "error", msg: "Erreur réseau." }));
   }, [token]);
+
+  const view = !token
+    ? { state: "error" as const, msg: "Lien invalide." }
+    : result ?? { state: "pending" as const, msg: "" };
+  const state = view.state;
+  const msg = view.msg;
 
   return (
     <main className="mx-auto max-w-md px-6 py-16 text-center">

@@ -23,22 +23,11 @@ const config = [
     ],
   },
   ...nextCoreWebVitals,
-  {
-    rules: {
-      // eslint-plugin-react-hooks 7 (arrivé avec eslint-config-next 16)
-      // introduit cette règle, qui touche 17 composants existants : ils
-      // hydratent leur état depuis un effet (chargement de données,
-      // animation de montage). Le motif fonctionne, mais provoque un
-      // rendu en cascade que React déconseille désormais.
-      //
-      // Laissée en avertissement, pas désactivée : les reprendre est un
-      // travail de fond à mener composant par composant, avec un risque
-      // de changement de comportement — ça n'a pas sa place dans une
-      // migration de framework. En « warn », le CI passe et le décompte
-      // reste sous les yeux ; en « off », il disparaîtrait pour de bon.
-      "react-hooks/set-state-in-effect": "warn",
-    },
-  },
+  // react-hooks/set-state-in-effect reste au niveau « error » de la
+  // config Next : les 17 composants qui hydrataient leur état depuis un
+  // effet ont été repris (localStorage via useSyncExternalStore dans
+  // lib/localStore, chargements en chaînes de promesses, états dérivés,
+  // animation du toast en CSS). Toute nouvelle occurrence casse le lint.
 ];
 
 export default config;

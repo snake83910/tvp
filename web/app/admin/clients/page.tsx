@@ -35,25 +35,30 @@ export default function AdminCustomers() {
   const [page, setPage] = useState(1);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Chaîne de promesses : les setters ne vivent que dans des callbacks,
+  // ce qui rend load appelable depuis l'effet (déclenché au montage ET
+  // aux changements de filtres) sans setState synchrone. Effet de bord
+  // assumé : plus de squelette à chaque changement de filtre — la liste
+  // précédente reste affichée pendant le rechargement (~300 ms), ce qui
+  // évite le flash. Le squelette ne sert qu'au premier chargement
+  // (`loading` démarre à true).
   const load = useCallback(
-    async (q: string, type: string, s: string, p: number) => {
-      setLoading(true);
-      setError(null);
-      try {
-        setRows(
-          await adminApi.listCustomers({
-            q: q || undefined,
-            account_type: type || undefined,
-            sort: s,
-            page: p,
-          }),
-        );
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Erreur de chargement");
-      } finally {
-        setLoading(false);
-      }
-    },
+    (q: string, type: string, s: string, p: number) =>
+      adminApi
+        .listCustomers({
+          q: q || undefined,
+          account_type: type || undefined,
+          sort: s,
+          page: p,
+        })
+        .then((r) => {
+          setRows(r);
+          setError(null);
+        })
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : "Erreur de chargement");
+        })
+        .finally(() => setLoading(false)),
     [],
   );
 

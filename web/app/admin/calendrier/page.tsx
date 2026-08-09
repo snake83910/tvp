@@ -11,22 +11,34 @@ function iso(d: Date) { return d.toISOString().slice(0, 10); }
 
 export default function AdminCalendrier() {
   const [cursor, setCursor] = useState(() => new Date());
-  const [orders, setOrders] = useState<AdminOrderSummary[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const monthStart = useMemo(() => startOfMonth(cursor), [cursor]);
   const monthEnd = useMemo(() => endOfMonth(cursor), [cursor]);
 
+  // `loading` est DÉRIVÉ : le résultat porte la clé du mois qu'il couvre,
+  // et on charge tant qu'elle ne correspond pas au mois affiché. Plus de
+  // setLoading(true) synchrone dans l'effet (rendu en cascade), et le
+  // garde `live` élimine une course qui existait : en changeant de mois
+  // rapidement, une réponse lente du mois N pouvait écraser celle du
+  // mois N+1 arrivée avant elle.
+  const monthKey = iso(monthStart);
+  const [res, setRes] = useState<{ key: string; orders: AdminOrderSummary[] } | null>(null);
+
   useEffect(() => {
-    setLoading(true);
+    let live = true;
     adminApi.listOrders({
-      from_date: iso(monthStart),
+      from_date: monthKey,
       to_date: iso(monthEnd),
       page: 1,
     } as Parameters<typeof adminApi.listOrders>[0])
-      .then(setOrders)
-      .finally(() => setLoading(false));
-  }, [monthStart.getTime(), monthEnd.getTime()]); // eslint-disable-line
+      .then((o) => {
+        if (live) setRes({ key: monthKey, orders: o });
+      });
+    return () => { live = false; };
+  }, [monthKey, monthEnd]);
+
+  const loading = res?.key !== monthKey;
+  const orders = res?.key === monthKey ? res.orders : [];
 
   // Grouper par jour
   const byDay: Record<string, AdminOrderSummary[]> = {};

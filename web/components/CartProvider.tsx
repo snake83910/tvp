@@ -52,14 +52,19 @@ export function CartProvider({
     count: number;
   } | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const c = await cartApi.get();
-      setCart(c);
-    } catch {
-      setCart(null); // panier vide => 404, normal
-    }
-  }, []);
+  // Chaîne de promesses et non async/await : les setters ne s'exécutent
+  // que dans des callbacks, jamais dans le corps synchrone — refresh est
+  // donc appelable depuis un effet sans déclencher
+  // react-hooks/set-state-in-effect (l'analyse ne modélise pas les await
+  // et traiterait un setCart post-await comme synchrone).
+  const refresh = useCallback(
+    () =>
+      cartApi.get().then(
+        (c) => setCart(c),
+        () => setCart(null), // panier vide => 404, normal
+      ),
+    [],
+  );
 
   const add = useCallback(
     async (item: {

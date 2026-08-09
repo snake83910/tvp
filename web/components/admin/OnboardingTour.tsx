@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useLocalValue, writeLocal } from "@/lib/localStore";
 
 const KEY = "tvp_admin_onboarding_v1";
 
@@ -20,18 +21,21 @@ const STEPS = [
 ];
 
 export function OnboardingTour() {
-  const [step, setStep] = useState<number | null>(null);
+  // Visibilité DÉRIVÉE du localStorage (useSyncExternalStore) : l'ancien
+  // useEffect qui faisait setStep(0) au montage forçait un rendu en
+  // cascade. Valeur serveur "done" : le serveur et la passe d'hydratation
+  // rendent le tour masqué (comme avant), puis React re-rend avec la
+  // vraie valeur — le tour n'apparaît que si la clé est réellement
+  // absente, sans flash chez ceux qui l'ont déjà fermé.
+  const seen = useLocalValue(KEY, "done");
+  const [step, setStep] = useState(0);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!localStorage.getItem(KEY)) setStep(0);
-  }, []);
-
-  if (step === null) return null;
+  if (seen !== null) return null;
 
   function close() {
-    localStorage.setItem(KEY, "done");
-    setStep(null);
+    // writeLocal notifie le hook : le composant se re-rend, `seen`
+    // devient non-null, le tour disparaît — pas d'état local de fermeture.
+    writeLocal(KEY, "done");
   }
 
   const s = STEPS[step];

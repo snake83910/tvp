@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminApi, type AdminOrderSummary } from "@/lib/admin";
 import { formatEuro } from "@/lib/money";
 
@@ -33,26 +33,38 @@ export function CommandPalette() {
   const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // La remise à zéro (saisie + résultats) vit dans close(), appelée depuis
+  // les ÉVÉNEMENTS de fermeture (Échap, Ctrl+K, clic sur le voile, choix
+  // d'un résultat) — et non plus dans un effet réagissant à `open`, qui
+  // posait un setState synchrone au moment où la palette se fermait.
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+    setResults([]);
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       // Ctrl+K ou Cmd+K
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((o) => !o);
+        if (open) close();
+        else setOpen(true);
       }
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape" && open) close();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [open, close]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
-    else { setQuery(""); setResults([]); }
   }, [open]);
 
   useEffect(() => {
-    if (!query || query.length < 2) { setResults([]); return; }
+    // En deçà de 2 caractères on ne lance rien : l'affichage est DÉRIVÉ
+    // (shownResults) au lieu d'être vidé par un setState synchrone ici.
+    if (query.length < 2) return;
     const t = setTimeout(() => {
       setSearching(true);
       adminApi.listOrders({ q: query, page: 1 } as Parameters<typeof adminApi.listOrders>[0])
@@ -63,6 +75,10 @@ export function CommandPalette() {
     return () => clearTimeout(t);
   }, [query]);
 
+  // Les résultats d'une requête devenue trop courte ne s'affichent jamais,
+  // même si l'état `results` les porte encore.
+  const shownResults = query.length >= 2 ? results : [];
+
   if (!open) return null;
 
   const filteredPages = STATIC_PAGES.filter(p =>
@@ -70,14 +86,14 @@ export function CommandPalette() {
   );
 
   function go(href: string) {
-    setOpen(false);
+    close();
     router.push(href);
   }
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 px-4 pt-24"
-      onClick={() => setOpen(false)}
+      onClick={close}
       role="dialog"
       aria-modal="true"
     >
@@ -119,13 +135,13 @@ export function CommandPalette() {
             </div>
           )}
 
-          {(searching || results.length > 0) && (
+          {query.length >= 2 && (searching || shownResults.length > 0) && (
             <div>
               <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-muted">
                 Commandes
               </p>
               {searching && <p className="px-3 py-2 text-xs text-ink-muted">Recherche…</p>}
-              {results.map((o) => (
+              {shownResults.map((o) => (
                 <button
                   key={o.order_number}
                   onClick={() => go(`/admin/commandes/${o.order_number}`)}
@@ -143,7 +159,7 @@ export function CommandPalette() {
             </div>
           )}
 
-          {query.length >= 2 && !searching && results.length === 0 && filteredPages.length === 0 && (
+          {query.length >= 2 && !searching && shownResults.length === 0 && filteredPages.length === 0 && (
             <p className="px-3 py-6 text-center text-sm text-ink-muted">Aucun résultat</p>
           )}
 
