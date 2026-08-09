@@ -1,15 +1,25 @@
 # Ops
 
-## Backup automatique PostgreSQL
+## Sauvegardes
 
-`backup.sh` dump la base via `pg_dump`, compresse en gzip, rotation 30j.
+`backup.sh` produit deux archives horodatées par exécution :
+
+| Fichier | Contenu |
+|---|---|
+| `tvp_<TS>.sql.gz` | dump PostgreSQL (`--clean --if-exists`) |
+| `uploads_<TS>.tar.gz` | volume `/app/uploads` — Kbis des garages |
+
+Le script vérifie les deux archives (intégrité gzip **et** marqueur de fin
+du dump, qui seul détecte un `pg_dump` tronqué) *avant* de purger les
+anciennes, envoie hors-site si c'est configuré, puis fait la rotation.
+Toute erreur interrompt le script en sortie non nulle sans rien supprimer.
 
 **Installation sur le VPS** :
 ```bash
-chmod +x /var/www/tvp/tvp/ops/backup.sh
+chmod +x /var/www/tvp/tvp/ops/backup.sh /var/www/tvp/tvp/ops/restore.sh
 crontab -e
-# Ajouter :
-0 3 * * * /var/www/tvp/tvp/ops/backup.sh >> /var/log/tvp-backup.log 2>&1
+# Ajouter (RCLONE_REMOTE : voir « Copie hors-site » ci-dessous) :
+0 3 * * * RCLONE_REMOTE=tvp-backup:tvp /var/www/tvp/tvp/ops/backup.sh >> /var/log/tvp-backup.log 2>&1
 ```
 
 **Test manuel** :
@@ -18,10 +28,58 @@ sudo /var/www/tvp/tvp/ops/backup.sh
 ls -lh /var/backups/tvp/
 ```
 
-**Restore** :
+### Copie hors-site
+
+Sans elle, les sauvegardes vivent sur la machine qu'elles protègent : une
+panne disque ou un VPS perdu emporte les données **et** leurs copies. Le
+script la saute en le signalant tant que `RCLONE_REMOTE` est vide.
+
+```bash
+apt install rclone
+rclone config          # créer un remote S3 / Ionos Object Storage / Backblaze…
+```
+
+Ces archives contiennent des données personnelles clients (noms, adresses,
+emails, SIRET). Les déposer en clair chez un tiers n'est pas acceptable :
+configurer le remote en **`crypt`** par-dessus le remote de stockage, ce
+qui chiffre côté VPS avant l'envoi. C'est rclone qui s'en charge, le script
+n'a pas à connaître de clé — et la clé de chiffrement doit être conservée
+**ailleurs que sur le VPS**, sinon le chiffrement ne protège de rien.
+
+La rétention hors-site se règle côté fournisseur (règles de cycle de vie du
+bucket) ; `RETENTION_DAYS` ne concerne que les copies locales.
+
+### Restauration
+
 ```bash
 /var/www/tvp/tvp/ops/restore.sh /var/backups/tvp/tvp_20260614_030001.sql.gz
 ```
+
+L'archive `uploads_` de même horodatage est restaurée automatiquement si
+elle est à côté du dump (`RESTORE_UPLOADS=0` pour ne prendre que la base).
+La base est restaurée en une seule transaction avec `ON_ERROR_STOP=1` :
+en cas d'échec elle reste dans son état d'origine plutôt qu'à moitié
+écrasée. Les fichiers uploadés, eux, sont **fusionnés** par-dessus
+l'existant : un fichier absent de l'archive n'est pas supprimé.
+
+### Répétition à blanc
+
+Une sauvegarde jamais restaurée n'est pas une sauvegarde vérifiée. À faire
+périodiquement sur une base jetable, sans toucher à la production :
+
+```bash
+docker compose exec -T postgres createdb -U tvp tvp_restore_test
+DB_NAME=tvp_restore_test RESTORE_UPLOADS=0 ./ops/restore.sh <dump>
+docker compose exec -T postgres psql -U tvp -d tvp_restore_test -c "select count(*) from users"
+docker compose exec -T postgres dropdb -U tvp tvp_restore_test
+```
+
+### Hors périmètre
+
+Le `.env` de production n'est pas sauvegardé : il contient les secrets
+(JWT, Sogecommerce, SMTP) et n'a rien à faire dans le même dépôt que les
+dumps. Il doit être conservé séparément — sans lui, une restauration
+redonne les données mais pas une application qui démarre.
 
 ## Sentry (error tracking)
 
