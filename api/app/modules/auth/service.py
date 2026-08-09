@@ -1,3 +1,4 @@
+import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request, status
@@ -14,7 +15,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.security import LoginLog, RefreshToken
-from app.models.user import AccountType, ProProfile, User
+from app.models.user import AccountType, ProProfile, User, UserRole
 from app.schemas.auth import RegisterIn
 
 LOCKOUT_THRESHOLD = 10
@@ -146,6 +147,55 @@ async def authenticate(
     db.add(LoginLog(user_id=user.id, email=email_norm, success=True,
                      reason=None, ip=ip, user_agent=ua))
     await db.commit()
+    return user
+
+
+async def create_guest_user(
+    db: AsyncSession,
+    email: str,
+    first_name: str,
+    last_name: str,
+    phone: str | None = None,
+) -> User:
+    """Crée le compte support d'une commande passée sans inscription.
+
+    Garde-fou central : si l'adresse email est DÉJÀ enregistrée, on refuse
+    au lieu de rattacher la commande au compte existant. Sans ce refus,
+    saisir l'adresse d'un tiers au checkout invité suffirait à obtenir une
+    session sur son compte — le point de passage vers ses commandes, ses
+    adresses et ses factures. Le client concerné se connecte, son panier
+    le suit, et il commande normalement.
+
+    Le compte reçoit un mot de passe aléatoire jamais communiqué : il
+    n'est donc pas connectable par mot de passe. Le client le revendique
+    par « mot de passe oublié », ce qui prouve qu'il détient l'adresse.
+    """
+    existing = await db.scalar(select(User).where(User.email == email))
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Un compte existe déjà avec cet email. "
+                "Connectez-vous pour finaliser votre commande — "
+                "votre panier est conservé."
+            ),
+        )
+
+    user = User(
+        email=email,
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        account_type=AccountType.particulier,
+        role=UserRole.client,
+        first_name=first_name.strip(),
+        last_name=last_name.strip(),
+        phone=(phone or None),
+        is_active=True,
+        # L'email n'est pas prouvé à cet instant : il le sera par le lien
+        # de confirmation de commande ou par un reset de mot de passe.
+        email_verified=False,
+    )
+    db.add(user)
+    await db.flush()
     return user
 
 

@@ -4,15 +4,17 @@ Routes panier & checkout.
 Panier anonyme : le client reçoit un X-Cart-Session à renvoyer ensuite.
 À la connexion, le front appelle /cart/merge pour fusionner.
 """
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_user, get_current_user_optional
+from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.models.order import Cart
-from app.models.user import User, UserRole
+from app.models.user import Address, User, UserRole
+from app.modules.auth import service as auth_service
 from app.modules.cart import service
 from app.schemas.order import (
     AddItemIn,
@@ -20,6 +22,8 @@ from app.schemas.order import (
     CartOut,
     CheckoutIn,
     CheckoutResult,
+    GuestCheckoutIn,
+    GuestCheckoutResult,
     PromoValidateIn,
     PromoValidateOut,
     UpdateQtyIn,
@@ -31,7 +35,14 @@ router = APIRouter(prefix="/cart", tags=["cart"])
 def _serialize(cart: Cart) -> CartOut:
     def _dimension(pd: dict) -> str | None:
         w, r, d = pd.get("width"), pd.get("ratio"), pd.get("diameter")
-        return f"{w}/{r} R{d}" if w and r and d else None
+        if not (w and r and d):
+            return None
+        # Le diamètre arrive en flottant du fournisseur (16.0) : interpolé
+        # tel quel, la ligne de panier affichait « 205/55 R16.0 ». Les
+        # demi-pouces existent bien (15.5), donc on ne tronque pas — on
+        # retire seulement le « .0 » des valeurs entières.
+        d_txt = f"{d:g}" if isinstance(d, float) else str(d)
+        return f"{w}/{r} R{d_txt}"
 
     items = [
         CartItemOut(
@@ -89,6 +100,14 @@ async def add_item(
             data.supplier_ref, data.width, data.ratio,
             data.diameter, data.quantity, data.category,
         )
+    except service.StockError as e:
+        # 409 et non 404 : la référence existe, c'est la quantité qui est
+        # en conflit avec le stock. `available` permet au frontend de
+        # proposer d'ajuster la quantité au lieu d'un cul-de-sac.
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(e), "available": e.available, "already": e.already},
+        ) from e
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     return _serialize(cart)
@@ -129,6 +148,11 @@ async def update_item(
         cart = await service.update_item_quantity(
             db, user, x_cart_session, item_id, data.quantity
         )
+    except service.StockError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(e), "available": e.available, "already": e.already},
+        ) from e
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     return _serialize(cart)
@@ -259,4 +283,93 @@ async def checkout(
         order_number=order.order_number,
         status=order.status.value,
         total_ttc=order.total_ttc_cents / 100,
+    )
+
+
+def _price_changes_payload(changes) -> list[dict]:
+    return [
+        {
+            "supplier_ref": c.supplier_ref,
+            "label": c.label,
+            "old_ttc": c.old_ttc,
+            "new_ttc": c.new_ttc,
+        }
+        for c in changes
+    ]
+
+
+@router.post("/checkout/guest", response_model=GuestCheckoutResult)
+async def checkout_guest(
+    request: Request,
+    data: GuestCheckoutIn,
+    db: AsyncSession = Depends(get_db),
+    x_cart_session: str | None = Header(default=None),
+):
+    """Commande sans inscription préalable.
+
+    Le compte est créé en arrière-plan puis la commande passe par
+    EXACTEMENT le même `service.checkout` que le parcours connecté :
+    revalidation des prix contre le fournisseur, verrou sur le panier,
+    machine à états. Aucune règle métier n'est dupliquée ici, et le
+    chemin de l'argent reste unique.
+    """
+    # Cet endpoint crée un compte : sans limite, il sert de fabrique à
+    # comptes et d'oracle pour savoir quelles adresses email sont déjà
+    # enregistrées (le 409 les distingue).
+    await rate_limit(request, "guest_checkout", max_attempts=5, window_seconds=600)
+
+    if not data.accept_terms:
+        raise HTTPException(
+            status_code=400,
+            detail="Vous devez accepter les conditions générales de vente",
+        )
+    if not x_cart_session:
+        raise HTTPException(status_code=400, detail="Panier introuvable")
+
+    user = await auth_service.create_guest_user(
+        db, data.email, data.first_name, data.last_name, data.phone
+    )
+
+    shipping = Address(user_id=user.id, **data.shipping.model_dump())
+    db.add(shipping)
+    billing = None
+    if data.billing is not None:
+        billing = Address(user_id=user.id, **data.billing.model_dump())
+        db.add(billing)
+    await db.flush()
+
+    # Le panier de l'invité est porté par sa session : sans ce rattachement,
+    # `service.checkout` chercherait un panier lié au compte tout juste créé
+    # et n'en trouverait aucun.
+    await service.merge_anonymous_cart(db, user, x_cart_session)
+
+    try:
+        order, changes = await service.checkout(
+            db, user, shipping.id, data.delivery_mode,
+            promo_code=data.promo_code,
+            billing_address_id=billing.id if billing is not None else None,
+            garage_id=data.garage_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if order is None:
+        # Prix modifiés : commande non créée. On rend quand même les jetons,
+        # sinon le client — dont le compte et le panier existent désormais —
+        # se retrouverait déconnecté devant l'écran de confirmation des
+        # écarts, sans moyen de valider.
+        tokens = await auth_service.issue_token_pair(db, user, request)
+        return GuestCheckoutResult(
+            price_changes=_price_changes_payload(changes),
+            access_token=tokens["access_token"],
+            refresh_token=tokens["refresh_token"],
+        )
+
+    tokens = await auth_service.issue_token_pair(db, user, request)
+    return GuestCheckoutResult(
+        order_number=order.order_number,
+        status=order.status.value,
+        total_ttc=order.total_ttc_cents / 100,
+        access_token=tokens["access_token"],
+        refresh_token=tokens["refresh_token"],
     )

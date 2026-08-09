@@ -111,12 +111,22 @@ function saveLastDim(dim: LastDim) {
 
 export function SearchHero({
   initialCategory = "auto",
+  collapsedSummary,
 }: {
   initialCategory?: VehicleCategory;
+  /** Résumé de la recherche en cours (ex. « 205/55 R16 · Auto »). Quand il
+   *  est fourni, le module démarre replié en une barre compacte.
+   *
+   *  Déplié en permanence, ce bloc occupe 568 px sur mobile et 594 px sur
+   *  desktop AVANT le premier résultat : sur un portable, aucun pneu n'était
+   *  visible sans défiler, alors que l'utilisateur avait déjà fait ses choix
+   *  de véhicule et de dimensions. */
+  collapsedSummary?: string;
 }) {
   const router = useRouter();
   const [cat, setCat] = useState<VehicleCategory>(initialCategory);
   const [tab, setTab] = useState<"plaque" | "dim">("dim");
+  const [expanded, setExpanded] = useState(false);
 
   const [w, setW] = useState("");
   const [h, setH] = useState("");
@@ -211,6 +221,30 @@ export function SearchHero({
   }
 
   const dims = DIMS[cat];
+
+  // Barre compacte : rappelle la recherche en cours et rend les résultats
+  // immédiatement visibles. Le formulaire complet reste à un clic.
+  if (collapsedSummary && !expanded) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper px-5 py-3.5 shadow-card">
+        <p className="flex items-center gap-2 text-sm text-ink-soft">
+          <span aria-hidden>{CATEGORY_ICONS[cat]}</span>
+          <span>Recherche&nbsp;:</span>
+          <span className="font-mono text-base font-bold text-ink">
+            {collapsedSummary}
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-expanded={false}
+          className="rounded-full border border-line px-4 py-1.5 text-sm font-bold text-ink transition hover:border-signal hover:text-signal"
+        >
+          Modifier ma recherche
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl bg-paper shadow-card">

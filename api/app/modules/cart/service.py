@@ -34,6 +34,31 @@ from app.modules.pricing.engine import compute_price
 from app.modules.shipping.rules import compute_home_shipping
 
 
+class StockError(ValueError):
+    """Stock fournisseur insuffisant, avec la quantité réellement
+    disponible.
+
+    Sous-classe de ValueError pour rester compatible avec les appelants
+    qui attrapent déjà ValueError. Elle porte `available` afin que la
+    route puisse renvoyer ce nombre au frontend : sans lui, la seule
+    façon de le récupérer serait d'analyser la phrase française du
+    message, qui casserait à la première reformulation.
+    """
+
+    def __init__(self, message: str, available: int, already: int = 0) -> None:
+        super().__init__(message)
+        self.available = available
+        self.already = already
+
+
+def _stock_message(stock: int, already: int = 0) -> str:
+    return (
+        f"Stock insuffisant : il ne reste que {stock} pneu"
+        f"{'s' if stock > 1 else ''} pour cette référence"
+        + (f" (vous en avez déjà {already} dans le panier)" if already else "")
+    )
+
+
 def new_session_token() -> str:
     return secrets.token_urlsafe(32)
 
@@ -210,11 +235,7 @@ async def add_item(
     stock = await _resolve_stock(match)
     already = existing.quantity if existing is not None else 0
     if stock is not None and already + quantity > stock:
-        raise ValueError(
-            f"Stock insuffisant : il ne reste que {stock} pneu"
-            f"{'s' if stock > 1 else ''} pour cette référence"
-            + (f" (vous en avez déjà {already} dans le panier)" if already else "")
-        )
+        raise StockError(_stock_message(stock, already), available=stock, already=already)
 
     if existing is not None:
         existing.quantity += quantity
@@ -306,10 +327,7 @@ async def update_item_quantity(
         )
         stock = await _resolve_stock(m) if m else None
         if stock is not None and new_quantity > stock:
-            raise ValueError(
-                f"Stock insuffisant : il ne reste que {stock} pneu"
-                f"{'s' if stock > 1 else ''} pour cette référence"
-            )
+            raise StockError(_stock_message(stock), available=stock)
 
     item.quantity = new_quantity
     await db.commit()

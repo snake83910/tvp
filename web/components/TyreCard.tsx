@@ -14,6 +14,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { TierBadge } from "@/components/TierBadge";
 import { productUrl } from "@/lib/slug";
 import { formatEuro } from "@/lib/money";
+import { CartError } from "@/lib/cart";
 
 const SEASON: Record<string, string> = {
   ete: "Été",
@@ -114,6 +115,14 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
       // Message backend (ex. « Stock insuffisant : il ne reste que 1
       // pneu... ») bien plus utile qu'un « Erreur » générique
       setErrorMsg(e instanceof Error ? e.message : null);
+      // Le stock affiché vient du catalogue mis en cache : il peut avoir
+      // baissé depuis. Plutôt que de laisser l'utilisateur sur un refus,
+      // on ramène la quantité au disponible réel renvoyé par l'API — un
+      // second clic suffit alors, sans qu'il ait à deviner le bon chiffre.
+      if (e instanceof CartError && typeof e.available === "number") {
+        const ajustee = Math.max(MIN_QTY, Math.min(e.available, MAX_QTY));
+        if (e.available >= MIN_QTY) setQty(ajustee);
+      }
       setState("error");
     }
   }

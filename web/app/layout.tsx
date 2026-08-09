@@ -13,7 +13,6 @@ const archivo = Archivo({
 });
 import { CompareProvider } from "@/components/CompareProvider";
 import { CompareBar } from "@/components/CompareBar";
-import { CookieBanner } from "@/components/CookieBanner";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ConditionalFooter } from "@/components/ConditionalFooter";
 
@@ -79,7 +78,6 @@ export default function RootLayout({
             <CompareBar />
           </CompareProvider>
         </CartProvider>
-        <CookieBanner />
         <ScrollToTop />
       </body>
     </html>

@@ -61,6 +61,19 @@ export function FilterBar({
     setParam("brand", next.length ? next.join(",") : null);
   }
 
+  // Recherche dans la liste des marques. Les marques déjà cochées restent
+  // toujours affichées : sinon, taper un terme ferait disparaître de l'écran
+  // un filtre pourtant actif, et l'utilisateur n'aurait plus aucun moyen de
+  // le décocher depuis ce panneau.
+  const [brandQuery, setBrandQuery] = useState("");
+  const visibleBrands = brandQuery.trim()
+    ? facets.brands.filter(
+        (b) =>
+          currentBrands.includes(b) ||
+          b.toLowerCase().includes(brandQuery.trim().toLowerCase()),
+      )
+    : facets.brands;
+
   function toggleTier(tier: string) {
     const next = currentTiers.includes(tier)
       ? currentTiers.filter((t) => t !== tier)
@@ -192,8 +205,28 @@ export function FilterBar({
       )}
 
       <FilterGroup label="Marque">
+        {/* Champ de recherche : le catalogue expose une centaine de marques
+            dans une liste à défilement de 224 px de haut. Sans filtre, aller
+            de « Accelera » à « Vredestein » demande une dizaine de gestes de
+            défilement à l'aveugle. Le champ n'apparaît qu'au-delà de 12
+            marques, pour ne pas alourdir les recherches à faible diversité. */}
+        {facets.brands.length > 12 && (
+          <input
+            type="search"
+            value={brandQuery}
+            onChange={(e) => setBrandQuery(e.target.value)}
+            placeholder="Filtrer les marques…"
+            aria-label="Filtrer la liste des marques"
+            className="mb-2 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-sm text-ink placeholder:text-ink-muted focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/30"
+          />
+        )}
         <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
-          {facets.brands.map((b) => (
+          {visibleBrands.length === 0 && (
+            <p className="px-2 py-1.5 text-sm text-ink-muted">
+              Aucune marque ne correspond.
+            </p>
+          )}
+          {visibleBrands.map((b) => (
             <label
               key={b}
               className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink-soft transition hover:bg-paper-dim"

@@ -49,7 +49,11 @@ export function SiteFooter() {
           </p>
           <ul className="space-y-2 text-sm">
             <li><Link href="/mentions-legales" className="text-ink-soft hover:text-signal">Mentions légales</Link></li>
-            <li><Link href="/confidentialite" className="text-ink-soft hover:text-signal">Confidentialité</Link></li>
+            {/* Ancre « cookies » : le site n'utilisant que des traceurs
+                strictement nécessaires, l'obligation est d'informer, pas de
+                bloquer l'accès par une bannière. Ce lien porte cette
+                information de façon permanente. */}
+            <li><Link href="/confidentialite" className="text-ink-soft hover:text-signal">Confidentialité et cookies</Link></li>
             <li><Link href="/cgv" className="text-ink-soft hover:text-signal">CGV</Link></li>
           </ul>
         </div>

@@ -1,4 +1,5 @@
 import { SiteHeader } from "@/components/SiteHeader";
+import { formatDimension } from "@/lib/slug";
 import { SearchHero } from "@/components/SearchHero";
 import { TyreCard } from "@/components/TyreCard";
 import { FilterBar } from "@/components/FilterBar";
@@ -86,14 +87,36 @@ export default async function SearchPage(
     <>
       <SiteHeader />
       <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
-        <h1 className="mb-8 font-display text-4xl font-black tracking-tightest md:text-5xl">
-          Trouvez vos{" "}
-          <span className="text-signal">
-            pneus{category !== "auto" ? ` ${categoryLabel.toLowerCase()}` : ""}
-          </span>
-        </h1>
+        {/* Titre et formulaire prennent leur pleine ampleur tant qu'aucune
+            recherche n'est lancée. Dès qu'il y a des résultats, ils cèdent
+            la place : le titre passe en une ligne et le formulaire se replie
+            en barre compacte, ce qui remonte les pneus au-dessus de la ligne
+            de flottaison au lieu de les enterrer sous ~600 px de contrôles. */}
+        {hasQuery ? (
+          <h1 className="mb-5 font-display text-2xl font-black tracking-tightest md:text-3xl">
+            Pneus{" "}
+            <span className="text-signal">
+              {formatDimension(Number(width), Number(ratio), Number(diameter))}
+            </span>
+            {category !== "auto" ? ` — ${categoryLabel}` : ""}
+          </h1>
+        ) : (
+          <h1 className="mb-8 font-display text-4xl font-black tracking-tightest md:text-5xl">
+            Trouvez vos{" "}
+            <span className="text-signal">
+              pneus{category !== "auto" ? ` ${categoryLabel.toLowerCase()}` : ""}
+            </span>
+          </h1>
+        )}
 
-        <SearchHero initialCategory={category} />
+        <SearchHero
+          initialCategory={category}
+          collapsedSummary={
+            hasQuery
+              ? formatDimension(Number(width), Number(ratio), Number(diameter))
+              : undefined
+          }
+        />
 
         {!hasQuery && (
           <p className="mt-12 text-ink-muted">
@@ -124,7 +147,7 @@ export default async function SearchPage(
         )}
 
         {hasQuery && data && data.total > 0 && (
-          <div className="mt-12 grid grid-cols-1 gap-10 lg:grid-cols-[260px_1fr]">
+          <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[260px_1fr]">
             <FilterBar facets={data.facets} total={data.total} />
 
             <div>

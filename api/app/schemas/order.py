@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.auth import AddressIn, NormalizedEmail
+
 
 class AddItemIn(BaseModel):
     supplier_ref: str
@@ -163,6 +165,51 @@ class CheckoutResult(BaseModel):
     status: str | None = None
     total_ttc: float | None = None
     price_changes: list[PriceChangeOut] = []
+
+
+class GuestCheckoutIn(BaseModel):
+    """Commande sans compte préalable.
+
+    L'inscription forcée est l'un des premiers postes d'abandon en
+    e-commerce. On collecte donc les seules informations sans lesquelles
+    la commande ne peut pas exister (email pour la confirmation et le
+    suivi, identité et adresse pour la livraison et la facture), et on
+    crée le compte en arrière-plan : tout l'aval (commande, facture,
+    emails, espace client) continue de reposer sur un utilisateur réel,
+    sans branche « commande orpheline » à maintenir.
+
+    Le compte créé n'a pas de mot de passe utilisable. Le client le
+    revendique quand il veut via « mot de passe oublié », ce qui prouve
+    au passage qu'il possède bien l'adresse email.
+    """
+
+    email: NormalizedEmail
+    first_name: str = Field(min_length=1, max_length=120)
+    last_name: str = Field(min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+
+    shipping: AddressIn
+    # None = facturation identique à la livraison
+    billing: AddressIn | None = None
+
+    delivery_mode: str = "home"
+    garage_id: uuid.UUID | None = None
+    accept_terms: bool
+    promo_code: str | None = None
+
+
+class GuestCheckoutResult(CheckoutResult):
+    """Résultat du checkout invité.
+
+    Porte en plus une paire de jetons : le tunnel de paiement
+    (`/payment/init/{order}`) exige un utilisateur authentifié, et le
+    client vient précisément de créer sa commande dans cette session. Les
+    jetons ne sont émis que pour un compte créé à l'instant — jamais pour
+    une adresse email déjà enregistrée, qui est refusée en amont.
+    """
+
+    access_token: str | None = None
+    refresh_token: str | None = None
 
 
 class PaymentInitOut(BaseModel):

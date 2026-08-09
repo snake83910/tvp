@@ -4,6 +4,18 @@ import { authFetch, getToken } from "@/lib/auth";
 
 const CART_SESSION_KEY = "tvp_cart_session";
 
+/** Erreur d'appel panier. `available` n'est renseigné que sur les conflits
+ *  de stock (409) : il porte la quantité encore commandable, ce qui permet
+ *  à l'appelant de proposer un ajustement plutôt qu'un simple refus. */
+export class CartError extends Error {
+  available?: number;
+  constructor(message: string, available?: number) {
+    super(message);
+    this.name = "CartError";
+    this.available = available;
+  }
+}
+
 export function getCartSession(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(CART_SESSION_KEY);
@@ -67,13 +79,23 @@ async function call<T>(
   });
   if (!res.ok) {
     let detail = `Erreur ${res.status}`;
+    let available: number | undefined;
     try {
       const b = await res.json();
-      detail = b.detail || detail;
+      // `detail` est une chaîne pour la plupart des erreurs, mais un objet
+      // pour les conflits de stock (409), où le backend joint la quantité
+      // encore disponible. Interpoler l'objet donnerait « [object Object] »
+      // à l'utilisateur, d'où le tri explicite.
+      if (b.detail && typeof b.detail === "object") {
+        detail = b.detail.message || detail;
+        if (typeof b.detail.available === "number") available = b.detail.available;
+      } else {
+        detail = b.detail || detail;
+      }
     } catch {
       /* ignore */
     }
-    throw new Error(detail);
+    throw new CartError(detail, available);
   }
   const data = (await res.json()) as T & {
     session_token?: string | null;
@@ -149,4 +171,50 @@ export const cartApi = {
       accept_terms: acceptTerms,
       promo_code: promoCode || null,
     }),
+
+  /** Commande sans compte préalable. Le backend crée le compte support et
+   *  rend une paire de jetons : le tunnel de paiement exige un utilisateur
+   *  authentifié, et l'appelant doit donc les enregistrer avant de
+   *  poursuivre vers /paiement. */
+  checkoutGuest: (payload: {
+    email: string;
+    first_name: string;
+    last_name: string;
+    phone?: string | null;
+    shipping: AddressPayload;
+    billing?: AddressPayload | null;
+    delivery_mode?: string;
+    garage_id?: string | null;
+    accept_terms: boolean;
+    promo_code?: string | null;
+  }) =>
+    call<{
+      order_number: string | null;
+      status: string | null;
+      total_ttc: number | null;
+      price_changes: Array<{
+        supplier_ref: string;
+        label: string;
+        old_ttc: number;
+        new_ttc: number;
+      }>;
+      access_token: string | null;
+      refresh_token: string | null;
+    }>("/cart/checkout/guest", "POST", {
+      ...payload,
+      phone: payload.phone || null,
+      billing: payload.billing ?? null,
+      delivery_mode: payload.delivery_mode ?? "home",
+      garage_id: payload.garage_id || null,
+      promo_code: payload.promo_code || null,
+    }),
 };
+
+export interface AddressPayload {
+  line1: string;
+  line2?: string | null;
+  postal_code: string;
+  city: string;
+  country: string;
+  label?: string | null;
+}

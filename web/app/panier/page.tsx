@@ -199,19 +199,28 @@ export default function CartPage() {
                 <span>{formatEuro(cart.grand_total_ttc)}</span>
               </div>
 
+              {/* Anonyme : la commande sans compte est le chemin PRINCIPAL.
+                  Exiger une inscription ici est l'un des premiers postes
+                  d'abandon en e-commerce ; la connexion reste offerte en
+                  second pour ceux qui ont déjà leurs adresses enregistrées. */}
               <Link
-                href={
-                  getToken() ? "/checkout" : "/connexion?next=/checkout"
-                }
+                href={getToken() ? "/checkout" : "/checkout/invite"}
                 className="mt-6 block rounded-full bg-signal py-3 text-center font-display font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
               >
                 Passer commande
               </Link>
               {!getToken() && (
-                <p className="mt-3 text-center text-xs text-ink-muted">
-                  Connexion requise pour finaliser la commande. Votre
-                  panier sera conservé.
-                </p>
+                <>
+                  <Link
+                    href="/connexion?next=/checkout"
+                    className="mt-3 block rounded-full border border-line py-2.5 text-center text-sm font-bold text-ink transition hover:border-signal hover:text-signal"
+                  >
+                    J&apos;ai déjà un compte
+                  </Link>
+                  <p className="mt-3 text-center text-xs text-ink-muted">
+                    Aucune inscription nécessaire. Votre panier est conservé.
+                  </p>
+                </>
               )}
               <p className="mt-4 text-center text-[11px] text-ink-muted">
                 🔒 Paiement sécurisé Société Générale · Rétractation 14 jours
