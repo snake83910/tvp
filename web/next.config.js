@@ -46,6 +46,14 @@ const nextConfig = {
   // mélange les environnements).
   distDir: process.env.NEXT_DIST_DIR || '.next',
   poweredByHeader: false, // masque X-Powered-By: Next.js
+  turbopack: {
+    // Next 16 compile avec Turbopack, qui déduit la racine du projet en
+    // remontant jusqu'au premier lockfile trouvé. Sur une machine qui en
+    // a un traînant dans le répertoire utilisateur, la racine déduite
+    // sort du dépôt et la résolution des modules casse. On la fixe sur
+    // le dossier web/, qui est bien la racine de cette application.
+    root: __dirname,
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'cdn.maxityre.com' },

@@ -35,11 +35,12 @@ type SP = {
   page?: string;
 };
 
-export default async function SearchPage({
-  searchParams,
-}: {
-  searchParams: SP;
-}) {
+export default async function SearchPage(
+  props: {
+    searchParams: Promise<SP>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const { width, ratio, diameter } = searchParams;
   const hasQuery = width && ratio && diameter;
   // Catégorie validée côté front aussi : une valeur inconnue retombe

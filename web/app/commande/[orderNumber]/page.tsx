@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, use } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useCart } from "@/components/CartProvider";
 import { useCurrentUser } from "@/lib/auth";
 
-export default function OrderConfirmationPage({
-  params,
-}: {
-  params: { orderNumber: string };
-}) {
+export default function OrderConfirmationPage(
+  props: {
+    params: Promise<{ orderNumber: string }>;
+  }
+) {
+  const params = use(props.params);
   const router = useRouter();
   const { user, loading } = useCurrentUser();
   const { refresh } = useCart();

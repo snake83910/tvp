@@ -41,6 +41,17 @@ export function CartProvider({
 }) {
   const [cart, setCart] = useState<Cart | null>(null);
 
+  // Déclaré avant `add`, qui appelle setJustAdded : à l'inverse, le
+  // callback référençait une liaison encore non initialisée au moment où
+  // il est créé. Cela fonctionnait — il n'est appelé qu'après le rendu —
+  // mais react-hooks/immutability le signale à juste titre comme fragile.
+  const [justAdded, setJustAdded] = useState<{
+    label: string;
+    qty: number;
+    totalTtc: number;
+    count: number;
+  } | null>(null);
+
   const refresh = useCallback(async () => {
     try {
       const c = await cartApi.get();
@@ -79,13 +90,6 @@ export function CartProvider({
     },
     [],
   );
-
-  const [justAdded, setJustAdded] = useState<{
-    label: string;
-    qty: number;
-    totalTtc: number;
-    count: number;
-  } | null>(null);
 
   // Auto-fermeture du mini-panier après 6 s
   useEffect(() => {

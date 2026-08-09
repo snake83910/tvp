@@ -137,11 +137,12 @@ function GarageCard({ g }: { g: GarageNearby }) {
   );
 }
 
-export default async function MontagePneuPage({
-  searchParams,
-}: {
-  searchParams: SP;
-}) {
+export default async function MontagePneuPage(
+  props: {
+    searchParams: Promise<SP>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const q = (searchParams.q || "").trim();
   const radius = RADII.includes(
     Number(searchParams.radius) as (typeof RADII)[number],

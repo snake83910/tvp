@@ -16,13 +16,14 @@ const SEASON: Record<string, string> = {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
 
-export async function generateMetadata({
-  params,
-  searchParams,
-}: {
-  params: { ref: string };
-  searchParams: { w?: string; h?: string; d?: string; t?: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ ref: string }>;
+    searchParams: Promise<{ w?: string; h?: string; d?: string; t?: string }>;
+  }
+): Promise<Metadata> {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const { w, h, d, t } = searchParams;
   const ref = decodeURIComponent(params.ref);
   if (!w || !h || !d) return { title: "Pneu | Tous Vos Pneus" };
@@ -54,13 +55,14 @@ export async function generateMetadata({
   }
 }
 
-export default async function ProductPage({
-  params,
-  searchParams,
-}: {
-  params: { ref: string };
-  searchParams: { w?: string; h?: string; d?: string; t?: string };
-}) {
+export default async function ProductPage(
+  props: {
+    params: Promise<{ ref: string }>;
+    searchParams: Promise<{ w?: string; h?: string; d?: string; t?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const ref = decodeURIComponent(params.ref);
   const { w, h, d, t } = searchParams;
 

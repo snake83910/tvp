@@ -12,11 +12,12 @@ export const dynamic = "force-dynamic";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { dim: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ dim: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const parsed = parseDimSlug(params.dim);
   if (!parsed) return { title: "Pneus | Tous Vos Pneus" };
   const label = formatDimension(parsed.width, parsed.ratio, parsed.diameter);
@@ -27,11 +28,12 @@ export async function generateMetadata({
   };
 }
 
-export default async function DimensionLandingPage({
-  params,
-}: {
-  params: { dim: string };
-}) {
+export default async function DimensionLandingPage(
+  props: {
+    params: Promise<{ dim: string }>;
+  }
+) {
+  const params = await props.params;
   const parsed = parseDimSlug(params.dim);
   if (!parsed) notFound();
 

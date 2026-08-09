@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, use } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { CheckoutSteps } from "@/components/CheckoutSteps";
 import {
@@ -33,11 +33,12 @@ interface PaymentInit {
   public_key: string;
 }
 
-export default function PaymentPage({
-  params,
-}: {
-  params: { orderNumber: string };
-}) {
+export default function PaymentPage(
+  props: {
+    params: Promise<{ orderNumber: string }>;
+  }
+) {
+  const params = use(props.params);
   const router = useRouter();
   const { user, loading } = useCurrentUser();
   const [init, setInit] = useState<PaymentInit | null>(null);

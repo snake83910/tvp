@@ -65,6 +65,7 @@ function AdminShell({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const router = useRouter();
 
   // Raccourcis clavier globaux
   useEffect(() => {
@@ -83,14 +84,17 @@ function AdminShell({
         return;
       }
       if (gMode) {
-        if (e.key === "d") window.location.href = "/admin";
-        if (e.key === "c") window.location.href = "/admin/commandes";
+        // router.push plutôt que window.location.href : ce dernier
+        // recharge toute l'application à chaque raccourci, là où la
+        // navigation client conserve l'état déjà chargé.
+        if (e.key === "d") router.push("/admin");
+        if (e.key === "c") router.push("/admin/commandes");
         gMode = false;
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [router]);
 
   const widthCls = collapsed ? "w-16" : "w-56";
 

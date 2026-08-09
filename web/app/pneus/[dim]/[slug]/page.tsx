@@ -26,13 +26,14 @@ async function load(
   }
 }
 
-export async function generateMetadata({
-  params,
-  searchParams,
-}: {
-  params: { dim: string; slug: string };
-  searchParams: { t?: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ dim: string; slug: string }>;
+    searchParams: Promise<{ t?: string }>;
+  }
+): Promise<Metadata> {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const data = await load(params, searchParams.t);
   if (!data) return { title: "Pneu | Tous Vos Pneus" };
   const { tyre } = data;
@@ -55,13 +56,14 @@ export async function generateMetadata({
   };
 }
 
-export default async function ProductSeoPage({
-  params,
-  searchParams,
-}: {
-  params: { dim: string; slug: string };
-  searchParams: { t?: string };
-}) {
+export default async function ProductSeoPage(
+  props: {
+    params: Promise<{ dim: string; slug: string }>;
+    searchParams: Promise<{ t?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const data = await load(params, searchParams.t);
   if (!data) notFound();
   return (

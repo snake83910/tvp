@@ -21,11 +21,12 @@ async function load(slug: string): Promise<GaragePublic | null> {
   }
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { slug: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ slug: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const g = await load(params.slug);
   if (!g) return { title: "Garage partenaire | Tous Vos Pneus" };
   return {
@@ -75,11 +76,12 @@ function mapsUrl(g: GaragePublic): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
-export default async function GaragePage({
-  params,
-}: {
-  params: { slug: string };
-}) {
+export default async function GaragePage(
+  props: {
+    params: Promise<{ slug: string }>;
+  }
+) {
+  const params = await props.params;
   const g = await load(params.slug);
   if (!g) notFound();
 
@@ -147,12 +149,12 @@ export default async function GaragePage({
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {g.photos.map((p) => (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
+              (<img
                 key={p}
                 src={`${MEDIA_BASE}/garages/media/${p}`}
                 alt={`${g.name}`}
                 className="h-40 w-full rounded-xl border border-line object-cover"
-              />
+              />)
             ))}
           </div>
         )}

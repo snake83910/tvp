@@ -21,11 +21,12 @@ async function garagesInCity(ville: string): Promise<GarageNearby[]> {
   }
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { ville: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ ville: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const list = await garagesInCity(params.ville);
   if (list.length === 0) return { title: "Montage de pneus | tousvospneus.com" };
   const city = list[0].city;
@@ -36,11 +37,12 @@ export async function generateMetadata({
   };
 }
 
-export default async function MontageVillePage({
-  params,
-}: {
-  params: { ville: string };
-}) {
+export default async function MontageVillePage(
+  props: {
+    params: Promise<{ ville: string }>;
+  }
+) {
+  const params = await props.params;
   const list = await garagesInCity(params.ville);
   if (list.length === 0) notFound();
   const city = list[0].city;

@@ -12,11 +12,12 @@ export function generateStaticParams() {
   return GUIDE_ARTICLES.map((a) => ({ slug: a.slug }));
 }
 
-export function generateMetadata({
-  params,
-}: {
-  params: { slug: string };
-}): Metadata {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ slug: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const article = getGuideArticle(params.slug);
   if (!article) return { title: "Guide du pneu | tousvospneus.com" };
   return {
@@ -33,11 +34,12 @@ export function generateMetadata({
   };
 }
 
-export default function GuideArticlePage({
-  params,
-}: {
-  params: { slug: string };
-}) {
+export default async function GuideArticlePage(
+  props: {
+    params: Promise<{ slug: string }>;
+  }
+) {
+  const params = await props.params;
   const article = getGuideArticle(params.slug);
   if (!article) notFound();
 
