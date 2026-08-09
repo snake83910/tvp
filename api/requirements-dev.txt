@@ -1,0 +1,11 @@
+# Outillage de test et de qualité. N'entre PAS dans l'image de production
+# (étape « dev » du Dockerfile uniquement) : chaque paquet supplémentaire
+# en production est une dépendance à auditer et à patcher pour rien.
+#
+# pytest est épinglé pour que le même code se teste à l'identique en local
+# et en CI. ruff et pip-audit sont laissés flottants : on veut leur
+# dernière version, notamment la base de vulnérabilités de pip-audit.
+pytest==9.1.1
+pytest-asyncio==1.4.0
+ruff>=0.6
+pip-audit>=2.7

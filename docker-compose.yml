@@ -26,7 +26,12 @@ services:
       retries: 5
 
   api:
-    build: ./api
+    # Cible « dev » : ajoute pytest/ruff au-dessus de l'image d'exécution.
+    # L'overlay de production repasse sur « runtime », qui n'embarque pas
+    # cet outillage.
+    build:
+      context: ./api
+      target: dev
     env_file: .env
     depends_on:
       postgres:
@@ -37,6 +42,13 @@ services:
       - "8000:8000"
     volumes:
       - ./api:/app
+      # Volume nommé par-dessus le bind mount : sans lui, /app/uploads est
+      # un sous-dossier de l'arborescence source montée depuis l'hôte, dont
+      # l'appartenance vient de l'hôte et non de l'image — l'application,
+      # non privilégiée, ne peut alors pas y déposer un Kbis. Monter le
+      # même type de volume qu'en production évite d'avoir un dev qui
+      # diverge, et garde les documents de test hors des sources.
+      - uploads_dev:/app/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   web:
@@ -52,3 +64,4 @@ services:
 
 volumes:
   pgdata:
+  uploads_dev:

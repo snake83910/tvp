@@ -118,6 +118,26 @@ Appliquer les migrations :
 docker compose exec api alembic upgrade head
 ```
 
+### Reprise du volume `uploads` — uniquement si l'API a déjà tourné en root
+
+L'image API tourne désormais sous un compte non privilégié (UID 10001).
+Un volume `uploads` **créé avant ce changement** appartient à root : les
+Kbis déjà déposés restent lisibles, mais l'application ne peut plus en
+écrire de nouveaux, et l'échec n'apparaît qu'au moment où un garage tente
+un dépôt. À faire une fois, conteneurs arrêtés :
+
+```bash
+docker run --rm -u 0 -v tvp_uploads:/data alpine sh -c 'chown -R 10001:10001 /data'
+```
+
+Vérifier ensuite que le compte applicatif écrit bien :
+```bash
+docker compose exec -T api sh -c 'touch /app/uploads/.probe && rm /app/uploads/.probe && echo OK'
+```
+
+Sur une première installation, il n'y a rien à faire : Docker recopie
+l'appartenance depuis l'image quand il initialise un volume vide.
+
 ---
 
 ## 5. Configurer Plesk

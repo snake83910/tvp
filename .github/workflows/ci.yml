@@ -22,10 +22,13 @@ jobs:
           cache: pip
 
       - name: Install dependencies
+        # requirements-dev.txt : mêmes versions d'outillage qu'en local
+        # (étape « dev » du Dockerfile). Les lister à la main ici les
+        # laissait flotter, avec un pytest de CI capable de diverger de
+        # celui du conteneur.
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff pytest pytest-asyncio pip-audit
+          pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Lint (ruff)
         run: ruff check .

@@ -18,6 +18,12 @@ services:
     restart: unless-stopped
 
   api:
+    # Image d'exécution seule : pas de pytest, ruff ni pip-audit en
+    # production. Chaque paquet en moins est une dépendance de moins à
+    # auditer et à patcher.
+    build:
+      context: ./api
+      target: runtime
     # Sans ce !override, le "8000:8000" du compose de dev est hérité et
     # Docker publie l'API sur 0.0.0.0 — donc joignable en HTTP nu depuis
     # Internet, en contournant le nginx Plesk (plus de TLS, plus de HSTS,
