@@ -316,7 +316,18 @@ async def checkout_guest(
     # Cet endpoint crée un compte : sans limite, il sert de fabrique à
     # comptes et d'oracle pour savoir quelles adresses email sont déjà
     # enregistrées (le 409 les distingue).
-    await rate_limit(request, "guest_checkout", max_attempts=5, window_seconds=600)
+    #
+    # Calibrage 15/10 min — deux contraintes opposées :
+    #   - le compteur incrémente à CHAQUE appel, échecs compris (code
+    #     postal refusé, 409 « compte existant »...), et derrière un CGNAT
+    #     mobile des dizaines de clients partagent une IP : à 5, on
+    #     bloquait un acheteur légitime au moment où il sort sa carte ;
+    #   - à 15, un abus reste plafonné à ~90 comptes/h/IP, assez de
+    #     friction pour rendre la création industrielle inintéressante
+    #     (l'oracle d'emails existe de toute façon via /auth/register).
+    # Les 429 sont visibles dans les logs JSON : ajuster sur données
+    # réelles si de vrais clients tapent la limite.
+    await rate_limit(request, "guest_checkout", max_attempts=15, window_seconds=600)
 
     if not data.accept_terms:
         raise HTTPException(
