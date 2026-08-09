@@ -112,17 +112,33 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
       setState("done");
       setTimeout(() => setState("idle"), 2000);
     } catch (e) {
-      // Message backend (ex. « Stock insuffisant : il ne reste que 1
-      // pneu... ») bien plus utile qu'un « Erreur » générique
-      setErrorMsg(e instanceof Error ? e.message : null);
       // Le stock affiché vient du catalogue mis en cache : il peut avoir
       // baissé depuis. Plutôt que de laisser l'utilisateur sur un refus,
-      // on ramène la quantité au disponible réel renvoyé par l'API — un
-      // second clic suffit alors, sans qu'il ait à deviner le bon chiffre.
-      if (e instanceof CartError && typeof e.available === "number") {
-        const ajustee = Math.max(MIN_QTY, Math.min(e.available, MAX_QTY));
-        if (e.available >= MIN_QTY) setQty(ajustee);
+      // on ramène la quantité au disponible réel renvoyé par l'API.
+      const recuperable =
+        e instanceof CartError &&
+        typeof e.available === "number" &&
+        e.available >= MIN_QTY;
+
+      if (recuperable) {
+        const dispo = (e as CartError).available as number;
+        const ajustee = Math.max(MIN_QTY, Math.min(dispo, MAX_QTY));
+        setQty(ajustee);
+        // On repasse en "idle", PAS en "error" : le bouton doit inviter à
+        // l'action corrigée (« Ajouter 1 pneu ») et non afficher « Erreur,
+        // réessayer », qui donnerait l'impression d'une panne alors que la
+        // quantité vient d'être ajustée et que le clic suivant aboutira.
+        // L'explication reste sous le bouton.
+        setErrorMsg(
+          `Plus que ${dispo} pneu${dispo > 1 ? "s" : ""} en stock : ` +
+            `quantité ajustée.`,
+        );
+        setState("idle");
+        return;
       }
+
+      // Message backend bien plus utile qu'un « Erreur » générique
+      setErrorMsg(e instanceof Error ? e.message : null);
       setState("error");
     }
   }
@@ -309,7 +325,17 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
         </button>
 
         {errorMsg && (
-          <p className="mt-2 rounded-lg bg-signal-light px-3 py-2 text-xs text-signal-dark">
+          // Deux tons pour deux situations : rouge quand l'ajout a échoué
+          // et reste à refaire, neutre quand la quantité a simplement été
+          // ajustée et que le bouton est prêt à aboutir.
+          <p
+            role="status"
+            className={`mt-2 rounded-lg px-3 py-2 text-xs ${
+              state === "error"
+                ? "bg-signal-light text-signal-dark"
+                : "bg-paper-dim text-ink-soft"
+            }`}
+          >
             {errorMsg}
           </p>
         )}

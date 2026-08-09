@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCart } from "@/components/CartProvider";
 import { useCurrentUser } from "@/lib/auth";
 
@@ -18,7 +18,26 @@ export function SiteHeader() {
     ? user.first_name ? `Bonjour ${user.first_name}` : "Mon compte"
     : "Connexion";
 
+  // Fermeture au clavier : un panneau modal doit se fermer par Échap,
+  // sinon la seule sortie est un clic précis sur la croix ou le voile.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    // Verrouille le défilement de la page : sans ça, faire défiler par
+    // dessus le tiroir déplace le contenu du site derrière lui.
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
   return (
+    <>
     <header className="sticky top-0 z-50 border-b border-line bg-paper/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
         <Link href="/" className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 rounded">
@@ -78,9 +97,11 @@ export function SiteHeader() {
               )}
             </Link>
           )}
+          {/* 44x44 minimum : cible tactile recommandée (WCAG 2.5.5).
+              Le bouton mesurait 32x42, ce qui se rate au pouce. */}
           <button
             onClick={() => setMobileOpen(true)}
-            className="rounded-lg border border-line p-2 text-ink-soft"
+            className="flex h-11 w-11 items-center justify-center rounded-lg border border-line text-lg text-ink-soft"
             aria-label="Ouvrir le menu"
             aria-expanded={mobileOpen}
           >
@@ -88,8 +109,15 @@ export function SiteHeader() {
           </button>
         </div>
       </div>
+      </header>
 
-      {/* Drawer mobile */}
+      {/* Tiroir mobile — VOLONTAIREMENT hors du <header>.
+          L'en-tête porte `backdrop-blur`, et backdrop-filter crée un bloc
+          conteneur pour les descendants en position:fixed. À l'intérieur,
+          le `fixed inset-0` du tiroir se calait donc sur la boîte de
+          l'en-tête (375x74 px) au lieu de la fenêtre : le panneau était
+          rogné à la hauteur du bandeau et le contenu de la page
+          transparaissait derrière les entrées du menu, illisibles. */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-50 flex md:hidden"
@@ -131,6 +159,6 @@ export function SiteHeader() {
           </div>
         </div>
       )}
-    </header>
+    </>
   );
 }
