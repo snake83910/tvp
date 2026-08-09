@@ -1,0 +1,23 @@
+# Sans ce fichier, le `COPY . .` du Dockerfile embarque uploads/ dans
+# l'image — donc des documents clients (Kbis des garages) figés dans une
+# couche Docker, qui suit l'image partout où elle est poussée. En prod ce
+# dossier est un volume monté, il n'a rien à faire dans l'image.
+uploads/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Secrets : jamais dans une image
+.env
+*.env
+!.env.example
+
+.git
+.gitignore
+Dockerfile
+.dockerignore

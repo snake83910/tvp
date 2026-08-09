@@ -3,6 +3,7 @@
 #
 # Différences vs dev :
 #   - postgres/redis non exposés sur l'hôte (sécurité)
+#   - api/web : écoute sur la loopback uniquement, jamais sur l'IP publique
 #   - api : pas de hot-reload, pas de volume source
 #   - api : 4 workers uvicorn
 #   - web : image buildée (pas de volume source)
@@ -17,6 +18,13 @@ services:
     restart: unless-stopped
 
   api:
+    # Sans ce !override, le "8000:8000" du compose de dev est hérité et
+    # Docker publie l'API sur 0.0.0.0 — donc joignable en HTTP nu depuis
+    # Internet, en contournant le nginx Plesk (plus de TLS, plus de HSTS,
+    # plus de logs d'accès). On se limite à la loopback : seul le reverse
+    # proxy de l'hôte peut atteindre le conteneur.
+    ports: !override
+      - "127.0.0.1:8000:8000"
     # Pas de montage source en prod, mais un volume persistant pour les
     # fichiers uploadés (Kbis des garages).
     volumes: !override
@@ -31,6 +39,9 @@ services:
     restart: unless-stopped
 
   web:
+    # Idem api : le front n'est atteint que via le reverse proxy de l'hôte.
+    ports: !override
+      - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
 volumes:

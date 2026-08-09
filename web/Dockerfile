@@ -1,7 +1,11 @@
 FROM node:20-slim AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+# package-lock.json + `npm ci` : le build installe exactement les versions
+# testées en CI. Avec `npm install` sans lockfile, deux builds à deux dates
+# n'embarquent pas les mêmes dépendances — une régression peut apparaître
+# en production sans qu'aucun commit n'ait changé.
+COPY package.json package-lock.json ./
+RUN npm ci
 
 FROM node:20-slim AS builder
 WORKDIR /app

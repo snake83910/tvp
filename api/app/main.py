@@ -91,11 +91,21 @@ async def _lifespan(app: FastAPI):
     await aclose_shared_client()
 
 
+# Doc interactive : ouverte en dev (c'est l'outil de travail et la doc de
+# référence pour l'app mobile), fermée en production. Laissée ouverte, elle
+# publie toute la surface d'API — y compris /admin/* et /cron/* — et offre
+# à un attaquant la liste exacte des routes, paramètres et schémas à
+# essayer. Le contrat OpenAPI reste récupérable hors production.
+_docs_open = settings.environment != "production"
+
 app = FastAPI(
     title="tousvospneus.com API",
     version="0.1.0",
     description="Backend e-commerce pneus — dropshipping B2C + B2B",
     lifespan=_lifespan,
+    docs_url="/docs" if _docs_open else None,
+    redoc_url="/redoc" if _docs_open else None,
+    openapi_url="/openapi.json" if _docs_open else None,
 )
 
 

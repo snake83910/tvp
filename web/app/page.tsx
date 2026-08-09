@@ -5,7 +5,7 @@ import { TrustBar } from "@/components/TrustBar";
 import { HowItWorks } from "@/components/home/HowItWorks";
 import { Brands } from "@/components/home/Brands";
 import { PopularDimensions } from "@/components/home/PopularDimensions";
-import { Testimonials } from "@/components/home/Testimonials";
+import { Commitments } from "@/components/home/Commitments";
 import { Faq } from "@/components/home/Faq";
 
 const CONSEILS = [
@@ -115,8 +115,8 @@ export default function HomePage() {
         {/* ── Marques ─────────────────────────────────────────────── */}
         <Brands />
 
-        {/* ── Avis clients ────────────────────────────────────────── */}
-        <Testimonials />
+        {/* ── Engagements ─────────────────────────────────────────── */}
+        <Commitments />
 
         {/* ── CTA banner promo ────────────────────────────────────── */}
         <section className="bg-ink">

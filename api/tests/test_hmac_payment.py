@@ -10,7 +10,11 @@ def _sign(secret: str, body: str) -> str:
 
 def test_hmac_compare_digest_matches():
     """Sanity check : la signature qu'on calcule = celle qu'on attendrait."""
-    secret = "TRdDRPHZ2ekWXDiSQhjFHvHzNa4qJQzvN5i0BZkayLI23"
+    # Valeur factice. Ne JAMAIS remettre ici une clé issue du .env : un
+    # test committé est public à vie dans l'historique git, même après
+    # correction. Le test ne vérifie qu'une propriété de HMAC-SHA256,
+    # n'importe quelle chaîne fait l'affaire.
+    secret = "cle_hmac_factice_pour_test"
     body = json.dumps({"orderStatus": "PAID"})
     sig = _sign(secret, body)
     assert hmac.compare_digest(sig, _sign(secret, body))

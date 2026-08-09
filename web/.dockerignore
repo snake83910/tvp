@@ -1,0 +1,26 @@
+# Sans ce fichier, le `COPY . .` du Dockerfile embarque le node_modules et
+# le .next de la machine de build dans l'image : couches énormes, binaires
+# compilés pour le mauvais OS, et cache de build périmé qui prend le pas
+# sur celui du conteneur.
+
+node_modules
+.next
+.next-e2e
+.next-build-check
+*.tsbuildinfo
+
+# Env local : URLs de dev, ne doit pas partir dans une image de prod.
+# .env.production est volontairement gardé — il ne contient que l'URL
+# publique de l'API, et `next build` en a besoin.
+.env.local
+.env*.local
+
+# Sorties de test
+test-results
+playwright-report
+blob-report
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
