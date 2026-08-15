@@ -114,6 +114,12 @@ export interface Garage {
   closures: GarageClosure[];
   pricing: GaragePricingRow[];
   photos: string[];
+  // Prise de RDV en ligne : réglages d'exploitation, pilotés par le
+  // partenaire lui-même (contrairement aux coordonnées).
+  appointments_enabled: boolean;
+  slot_minutes: number;
+  slot_capacity: number;
+  appointment_lead_days: number;
   is_published: boolean;
   owner_user_id: string | null;
 }
@@ -148,8 +154,19 @@ export interface GaragePayload {
   mounting_price_cents?: number;
   services?: string[];
   photo_url?: string | null;
+  appointments_enabled?: boolean;
+  slot_minutes?: number;
+  slot_capacity?: number;
+  appointment_lead_days?: number;
   is_published?: boolean;
 }
+
+/** Champs de la fiche garage qu'un compte partenaire ne peut PAS envoyer :
+ *  le backend répond 403. Ils ne se corrigent que côté admin. */
+export type PartnerEditablePayload = Omit<
+  Partial<GaragePayload>,
+  "name" | "address" | "postal_code" | "city" | "phone" | "email" | "siret" | "is_published"
+>;
 
 export async function downloadAdminInvoice(orderNumber: string): Promise<void> {
   const res = await authFetch(`/admin/orders/${orderNumber}/invoice`);

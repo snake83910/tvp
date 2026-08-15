@@ -1,4 +1,5 @@
 import { GaragePicker } from "@/components/GaragePicker";
+import { MountingSlotPicker } from "@/components/checkout/MountingSlotPicker";
 import type { GarageNearby } from "@/lib/api";
 import { formatEuro } from "@/lib/money";
 
@@ -14,6 +15,8 @@ export function DeliveryModeSelector({
   isFreeShipping,
   selectedGarage,
   onSelectGarage,
+  mountingAt,
+  onSelectSlot,
 }: {
   mode: DeliveryMode;
   onSelectHome: () => void;
@@ -22,6 +25,9 @@ export function DeliveryModeSelector({
   isFreeShipping: boolean;
   selectedGarage: GarageNearby | null;
   onSelectGarage: (g: GarageNearby | null) => void;
+  // Créneau de montage : uniquement pour les garages qui prennent des RDV
+  mountingAt: string | null;
+  onSelectSlot: (iso: string | null) => void;
 }) {
   return (
     <div className="space-y-2">
@@ -76,6 +82,15 @@ export function DeliveryModeSelector({
         <GaragePicker
           selectedId={selectedGarage?.id ?? null}
           onSelect={onSelectGarage}
+        />
+      )}
+
+      {mode === "partner_garage" && selectedGarage?.appointments_enabled && (
+        <MountingSlotPicker
+          key={selectedGarage.id}
+          garageId={selectedGarage.id}
+          value={mountingAt}
+          onChange={onSelectSlot}
         />
       )}
     </div>

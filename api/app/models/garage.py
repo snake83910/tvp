@@ -76,6 +76,21 @@ class Garage(Base):
     # Photos du centre : liste de chemins relatifs (upload)
     photos: Mapped[list] = mapped_column(JSONB, default=list)
 
+    # ---- Prise de rendez-vous en ligne -----------------------------------
+    # Activée par le partenaire lui-même. Tant qu'elle est inactive, le
+    # client choisit le garage sans créneau et le montage se cale par
+    # téléphone (comportement historique).
+    appointments_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Durée d'un créneau, en minutes. Les créneaux sont générés depuis les
+    # horaires d'ouverture (`hours`), pas ressaisis.
+    slot_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    # Véhicules pris en charge en parallèle sur un même créneau (nombre de
+    # ponts / de monteurs).
+    slot_capacity: Mapped[int] = mapped_column(Integer, default=1)
+    # Délai minimum entre la livraison estimée des pneus et le rendez-vous,
+    # en jours ouvrés du garage. 1 = J+1, le minimum métier.
+    appointment_lead_days: Mapped[int] = mapped_column(Integer, default=1)
+
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(

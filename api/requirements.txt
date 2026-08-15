@@ -25,3 +25,6 @@ fpdf2>=2.7
 sentry-sdk[fastapi]>=2.0
 pyotp==2.9.0
 qrcode[pil]==7.4.2
+# Base de fuseaux horaires pour zoneinfo (créneaux de RDV en Europe/Paris) :
+# python:3.12-slim n'embarque pas /usr/share/zoneinfo.
+tzdata>=2024.1

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Garage, GaragePayload } from "@/lib/partner";
+import type { Garage, PartnerEditablePayload } from "@/lib/partner";
 import { TabHeader } from "@/components/partner/ui";
 import { PAYMENT_METHODS } from "@/components/partner/constants";
 
@@ -11,7 +11,7 @@ export function PaiementTab({
   saving,
 }: {
   garage: Garage;
-  save: (p: Partial<GaragePayload>) => Promise<void>;
+  save: (p: PartnerEditablePayload) => Promise<void>;
   saving: boolean;
 }) {
   const [selected, setSelected] = useState<string[]>(garage.payment_methods ?? []);

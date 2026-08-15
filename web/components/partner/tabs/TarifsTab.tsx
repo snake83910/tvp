@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Garage, GaragePayload, GaragePricingRow } from "@/lib/partner";
+import type { Garage, PartnerEditablePayload, GaragePricingRow } from "@/lib/partner";
 import { TabHeader } from "@/components/partner/ui";
 import { VEHICLE_TYPES, vehicleLabel } from "@/components/partner/constants";
 
@@ -19,7 +19,7 @@ export function TarifsTab({
   saving,
 }: {
   garage: Garage;
-  save: (p: Partial<GaragePayload>) => Promise<void>;
+  save: (p: PartnerEditablePayload) => Promise<void>;
   saving: boolean;
 }) {
   const [rows, setRows] = useState<GaragePricingRow[]>(garage.pricing ?? []);

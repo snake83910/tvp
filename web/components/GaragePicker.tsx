@@ -18,8 +18,7 @@ export function GaragePicker({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function search(e: React.FormEvent) {
-    e.preventDefault();
+  async function search() {
     const cp = postcode.trim();
     if (cp.length < 4) {
       setError("Saisissez un code postal valide.");
@@ -43,22 +42,34 @@ export function GaragePicker({
 
   return (
     <div className="mt-3 rounded-lg border border-line bg-paper p-4">
-      <form onSubmit={search} className="flex gap-2">
+      {/* Volontairement un <div>, pas un <form> : ce composant est rendu
+          à l'intérieur du formulaire de commande (tunnel invité), et un
+          formulaire imbriqué est du HTML invalide — le navigateur casse
+          alors l'arbre et fait disparaître les champs suivants. */}
+      <div className="flex gap-2">
         <input
           value={postcode}
           onChange={(e) => setPostcode(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              // Sans ça, Entrée validerait la commande entière.
+              e.preventDefault();
+              search();
+            }
+          }}
           inputMode="numeric"
           placeholder="Votre code postal"
           className="h-11 flex-1 rounded-lg border border-line bg-paper px-3 text-sm outline-none focus:border-signal"
         />
         <button
-          type="submit"
+          type="button"
+          onClick={search}
           disabled={busy}
           className="rounded-lg bg-ink px-5 text-sm font-bold text-paper transition hover:bg-signal disabled:opacity-60"
         >
           {busy ? "…" : "Chercher"}
         </button>
-      </form>
+      </div>
 
       {error && <p className="mt-3 text-sm text-signal">{error}</p>}
 

@@ -1,3 +1,11 @@
+/** Contact de l'équipe partenaires. Les coordonnées d'un centre n'étant
+ *  modifiables que par l'admin, le partenaire a besoin d'un point de
+ *  contact visible depuis son espace. */
+export const SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_PARTNER_EMAIL || "contact@tousvospneus.com";
+/** Optionnel : non affiché tant qu'aucun numéro n'est configuré. */
+export const SUPPORT_PHONE = process.env.NEXT_PUBLIC_PARTNER_PHONE || "";
+
 export const DAYS: { key: string; label: string }[] = [
   { key: "lundi", label: "Lundi" },
   { key: "mardi", label: "Mardi" },

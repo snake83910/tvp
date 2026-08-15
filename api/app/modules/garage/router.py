@@ -4,13 +4,14 @@ import re
 import secrets
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import (
     APIRouter,
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -21,7 +22,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import get_current_user, get_db, require_role
+from app.core.deps import (
+    get_current_user,
+    get_current_user_optional,
+    get_db,
+    require_role,
+)
 from app.core.rate_limit import rate_limit
 from app.core.security import create_password_reset_token, hash_password
 from app.core.storage import document_path, save_document
@@ -31,6 +37,8 @@ from app.models.garage import Garage, GarageReview
 from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
 from app.modules.auth.service import issue_token_pair
+from app.modules.cart.service import find_cart_items
+from app.modules.garage import booking
 from app.modules.mailer.service import (
     send_admin_new_garage,
     send_password_reset,
@@ -49,6 +57,7 @@ from app.schemas.garage import (
     PartnerOrderItem,
     ReviewIn,
     ReviewOut,
+    SlotsOut,
 )
 
 router = APIRouter(tags=["garages"])
@@ -62,6 +71,23 @@ _VISIBLE_ORDER_STATUSES = {
     OrderStatus.shipped,
     OrderStatus.delivered,
 }
+
+# Champs de la fiche garage que le partenaire ne peut PAS modifier lui-même.
+# Identité légale, adresse (géocodée, et figée dans les commandes) et
+# canaux de contact officiels : leur correction passe par l'admin.
+# `is_published` en fait partie — la publication reste une décision admin.
+_PARTNER_LOCKED_FIELDS = frozenset(
+    {
+        "name",
+        "address",
+        "postal_code",
+        "city",
+        "phone",
+        "email",
+        "siret",
+        "is_published",
+    }
+)
 
 
 def _slugify(text: str) -> str:
@@ -419,6 +445,30 @@ async def partner_reviews(
     return [_review_view(r) for r in rows]
 
 
+@router.get("/garages/{garage_id}/slots", response_model=SlotsOut)
+async def garage_slots(
+    garage_id: uuid.UUID,
+    days: int = Query(21, ge=1, le=booking.MAX_HORIZON_DAYS),
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+    x_cart_session: str | None = Header(default=None),
+):
+    """Créneaux de montage proposables pour le panier de l'appelant.
+
+    La date au plus tôt dépend du panier (livraison estimée des pneus) :
+    l'endpoint la calcule lui-même à partir du panier de la session, il
+    ne la reçoit jamais du client. Accessible sans compte — le tunnel
+    invité doit pouvoir réserver.
+    """
+    g = await db.scalar(
+        select(Garage).where(Garage.id == garage_id, Garage.is_published.is_(True))
+    )
+    if g is None:
+        raise HTTPException(status_code=404, detail="Garage introuvable")
+    items = await find_cart_items(db, user, x_cart_session)
+    return await booking.availability(db, g, items, days=days)
+
+
 @router.get("/garages/{slug}", response_model=GaragePublic)
 async def public_garage(slug: str, db: AsyncSession = Depends(get_db)):
     g = await db.scalar(
@@ -530,26 +580,23 @@ async def partner_update_garage(
 ):
     g = await _own_garage(db, user)
     fields = data.model_dump(exclude_unset=True)
-    # La publication reste une décision admin.
-    fields.pop("is_published", None)
-    address_changed = any(
-        k in fields and fields[k] != getattr(g, k)
-        for k in ("address", "postal_code", "city")
-    )
-    new_siret = "".join(c for c in (fields.get("siret") or "") if c.isdigit())
-    siret_needs_check = "siret" in fields and (
-        new_siret != (g.siret or "") or g.siret_company_name is None
-    )
-    if "email" in fields and fields["email"] is not None:
-        fields["email"] = str(fields["email"])
+    # Les coordonnées identifient le centre (raison sociale, adresse
+    # géocodée, SIRET vérifié) et servent de référence à la facturation et
+    # au calcul du garage le plus proche : elles ne se corrigent que côté
+    # admin, sur demande. Un refus explicite plutôt qu'une modification
+    # silencieusement ignorée — sinon le partenaire croit avoir enregistré.
+    locked = _PARTNER_LOCKED_FIELDS & fields.keys()
+    if locked:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Les coordonnées du centre ne sont modifiables que par "
+                "l'équipe tousvospneus.com. Contactez-nous pour toute "
+                "correction."
+            ),
+        )
     for k, v in fields.items():
         setattr(g, k, v)
-    if "name" in fields and fields["name"]:
-        g.slug = await _unique_slug(db, _slugify(g.name), exclude_id=g.id)
-    if address_changed:
-        await _geocode_into(g)
-    if siret_needs_check:
-        await _verify_siret_into(g)
     await db.commit()
     await db.refresh(g)
     return g
@@ -608,7 +655,13 @@ def _partner_order_view(order: Order, cust: User | None) -> PartnerOrder:
             )
             for it in order.items
         ],
-        mounting_at=order.mounting_at.isoformat() if order.mounting_at else None,
+        # Renvoyé en heure locale du garage : le planning doit afficher
+        # « 9h00 » quel que soit le fuseau du navigateur du partenaire.
+        mounting_at=(
+            order.mounting_at.astimezone(booking.PARIS).isoformat()
+            if order.mounting_at
+            else None
+        ),
         mounting_note=order.mounting_note,
     )
 
@@ -658,9 +711,17 @@ async def partner_set_appointment(
         raise HTTPException(status_code=404, detail="Commande introuvable")
     if data.mounting_at:
         try:
-            order.mounting_at = datetime.fromisoformat(data.mounting_at)
+            at = datetime.fromisoformat(data.mounting_at)
         except ValueError as e:
             raise HTTPException(status_code=422, detail="Date invalide") from e
+        # Le garage saisit une heure locale. Sans fuseau explicite, la
+        # colonne timestamptz l'interpréterait en UTC : un RDV de 9h
+        # s'affichait à 11h en été.
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=booking.PARIS)
+        # Le garage reste maître de son planning : il peut caler un RDV
+        # hors créneaux standards (dépannage, arrangement téléphonique).
+        order.mounting_at = at.astimezone(UTC)
     else:
         order.mounting_at = None
     order.mounting_note = (data.note or "").strip() or None

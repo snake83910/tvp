@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Garage, GaragePayload, GarageClosure } from "@/lib/partner";
+import type { Garage, PartnerEditablePayload, GarageClosure } from "@/lib/partner";
 import { SaveButton, TabHeader } from "@/components/partner/ui";
 
 export function CongesTab({
@@ -10,7 +10,7 @@ export function CongesTab({
   saving,
 }: {
   garage: Garage;
-  save: (p: Partial<GaragePayload>) => Promise<void>;
+  save: (p: PartnerEditablePayload) => Promise<void>;
   saving: boolean;
 }) {
   const [rows, setRows] = useState<GarageClosure[]>(garage.closures ?? []);

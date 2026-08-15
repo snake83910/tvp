@@ -74,6 +74,9 @@ def _serialize(cart: Cart) -> CartOut:
     else:
         shipping_ht = shipping_ttc = 0.0
 
+    from app.modules.garage.booking import delivery_estimate_date
+    estimate = delivery_estimate_date(list(cart.items))
+
     return CartOut(
         id=cart.id,
         session_token=cart.session_token,
@@ -84,6 +87,7 @@ def _serialize(cart: Cart) -> CartOut:
         shipping_ttc=shipping_ttc,
         free_shipping=bool(items) and shipping_ttc == 0,
         grand_total_ttc=round(total_ttc + shipping_ttc, 2),
+        delivery_estimate=estimate.isoformat() if estimate else None,
     )
 
 
@@ -262,6 +266,7 @@ async def checkout(
             promo_code=data.promo_code,
             billing_address_id=data.billing_address_id,
             garage_id=data.garage_id,
+            mounting_at=data.mounting_at,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -360,6 +365,7 @@ async def checkout_guest(
             promo_code=data.promo_code,
             billing_address_id=billing.id if billing is not None else None,
             garage_id=data.garage_id,
+            mounting_at=data.mounting_at,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

@@ -129,6 +129,8 @@ export interface GarageNearby {
   lat: number | null;
   lng: number | null;
   distance_km: number | null;
+  // Le garage propose la prise de rendez-vous de montage en ligne.
+  appointments_enabled: boolean;
 }
 
 export interface GarageReview {
@@ -163,6 +165,7 @@ export interface GaragePublic {
   photos: string[];
   lat: number | null;
   lng: number | null;
+  appointments_enabled: boolean;
 }
 
 export interface VehicleDimension {

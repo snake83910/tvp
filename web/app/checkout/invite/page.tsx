@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Input } from "@/components/checkout/fields";
+import { DeliveryModeSelector } from "@/components/checkout/DeliveryModeSelector";
 import { useCart } from "@/components/CartProvider";
 import { cartApi } from "@/lib/cart";
+import type { GarageNearby } from "@/lib/api";
 import { saveTokens, getToken } from "@/lib/auth";
 import { formatEuro } from "@/lib/money";
 
@@ -32,6 +34,12 @@ export default function GuestCheckoutPage() {
   const [postalCode, setPostalCode] = useState("");
   const [city, setCity] = useState("");
   const [terms, setTerms] = useState(false);
+  // Montage en garage partenaire : même choix que dans le tunnel connecté.
+  // L'omettre ici priverait de l'option la majorité des clients, la
+  // commande sans compte étant le chemin principal.
+  const [deliveryMode, setDeliveryMode] = useState<"home" | "partner_garage">("home");
+  const [selectedGarage, setSelectedGarage] = useState<GarageNearby | null>(null);
+  const [mountingAt, setMountingAt] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +63,10 @@ export default function GuestCheckoutPage() {
     if (busy) return;
     setError(null);
     setAccountExists(false);
+    if (deliveryMode === "partner_garage" && !selectedGarage) {
+      setError("Veuillez sélectionner un garage partenaire pour le montage.");
+      return;
+    }
     setBusy(true);
     try {
       const res = await cartApi.checkoutGuest({
@@ -70,6 +82,9 @@ export default function GuestCheckoutPage() {
           country: "FR",
           label: "Livraison",
         },
+        delivery_mode: deliveryMode,
+        garage_id: deliveryMode === "partner_garage" ? selectedGarage?.id : null,
+        mounting_at: deliveryMode === "partner_garage" ? mountingAt : null,
         accept_terms: terms,
       });
 
@@ -165,6 +180,30 @@ export default function GuestCheckoutPage() {
                 />
                 <Input label="Ville" value={city} onChange={setCity} />
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-line bg-paper p-6 shadow-card">
+              <h2 className="mb-4 font-display text-lg font-bold text-ink">
+                Mode de livraison
+              </h2>
+              <DeliveryModeSelector
+                mode={deliveryMode}
+                onSelectHome={() => {
+                  setDeliveryMode("home");
+                  setSelectedGarage(null);
+                  setMountingAt(null);
+                }}
+                onSelectPartner={() => setDeliveryMode("partner_garage")}
+                shippingHt={cart.shipping_ht}
+                isFreeShipping={cart.free_shipping}
+                selectedGarage={selectedGarage}
+                onSelectGarage={(g) => {
+                  setSelectedGarage(g);
+                  setMountingAt(null);
+                }}
+                mountingAt={mountingAt}
+                onSelectSlot={setMountingAt}
+              />
             </section>
 
             <section className="rounded-2xl border border-line bg-paper p-6 shadow-card">

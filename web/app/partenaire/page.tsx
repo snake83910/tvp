@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { partnerApi, type Garage, type GaragePayload, type PartnerOrder } from "@/lib/partner";
+import {
+  partnerApi,
+  type Garage,
+  type PartnerEditablePayload,
+  type PartnerOrder,
+} from "@/lib/partner";
 import { DashboardTab } from "@/components/partner/tabs/DashboardTab";
 import { CoordonneesTab } from "@/components/partner/tabs/CoordonneesTab";
 import { HorairesTab } from "@/components/partner/tabs/HorairesTab";
@@ -65,7 +70,7 @@ export default function PartnerDashboard() {
     );
   }
 
-  async function save(patch: Partial<GaragePayload>) {
+  async function save(patch: PartnerEditablePayload) {
     setSaving(true);
     setFlash(null);
     try {
@@ -152,7 +157,15 @@ export default function PartnerDashboard() {
           <CommandesTab orders={orders} onOrderUpdate={updateOrder} />
         )}
         {tab === "media" && <MediaTab garage={garage} onChange={setGarage} />}
-        {tab === "rdv" && <RdvTab orders={orders} />}
+        {tab === "rdv" && (
+          <RdvTab
+            garage={garage}
+            orders={orders}
+            onOrderUpdate={updateOrder}
+            save={save}
+            saving={saving}
+          />
+        )}
         {tab === "avis" && <AvisTab />}
       </div>
     </main>

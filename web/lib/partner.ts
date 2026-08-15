@@ -1,7 +1,7 @@
 "use client";
 
 import { authFetch, saveTokens } from "@/lib/auth";
-import type { Garage, GaragePayload } from "@/lib/admin";
+import type { Garage, PartnerEditablePayload } from "@/lib/admin";
 
 export interface PartnerRegisterData {
   email: string;
@@ -88,6 +88,7 @@ export type {
   GaragePayload,
   GarageClosure,
   GaragePricingRow,
+  PartnerEditablePayload,
 } from "@/lib/admin";
 
 const API_BASE =
@@ -116,7 +117,9 @@ export interface PartnerReview {
 export const partnerApi = {
   getGarage: () => call<Garage>("/partner/garage"),
   listReviews: () => call<PartnerReview[]>("/partner/reviews"),
-  updateGarage: (data: Partial<GaragePayload>) =>
+  // Les coordonnées du centre sont exclues du type : le backend refuse
+  // ces champs (403), leur correction passe par l'admin.
+  updateGarage: (data: PartnerEditablePayload) =>
     call<Garage>("/partner/garage", "PATCH", data),
   listOrders: () => call<PartnerOrder[]>("/partner/orders"),
   setAppointment: (orderNumber: string, mounting_at: string | null, note: string | null) =>

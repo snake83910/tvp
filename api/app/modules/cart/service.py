@@ -30,6 +30,7 @@ from app.models.order import Cart, CartItem, Order, OrderItem, OrderStatus
 from app.models.user import Address, ProProfile, User
 from app.modules.catalog.service import connector as _connector
 from app.modules.catalog.service import load_detail, load_dimension_catalog
+from app.modules.garage import booking
 from app.modules.pricing.engine import compute_price
 from app.modules.shipping.rules import compute_home_shipping
 
@@ -79,6 +80,30 @@ async def _resolve_stock(match: dict) -> int | None:
     except Exception:
         return None  # fiche indisponible : on ne bloque pas la vente
     return detail.get("stock") if detail else None
+
+
+async def _resolve_delivery_estimate(match: dict) -> str | None:
+    """Date de livraison estimée d'une référence.
+
+    Même angle mort que le stock : la recherche liste Maxityre ne porte
+    pas les offres, et donc pas de date de livraison. On retombe sur la
+    fiche détaillée — servie par le même cache Redis que le contrôle de
+    stock juste avant, donc sans appel réseau supplémentaire.
+
+    Best effort : sans date, le calcul du premier créneau de montage
+    applique un délai de transport prudent plutôt que d'échouer.
+    """
+    if match.get("delivery_estimate"):
+        return str(match["delivery_estimate"])
+    ref = match.get("supplier_ref")
+    if not ref:
+        return None
+    try:
+        detail = await load_detail(str(ref))
+    except Exception:
+        return None
+    est = detail.get("delivery_estimate") if detail else None
+    return str(est) if est else None
 
 
 async def _load_cart_with_items(
@@ -139,6 +164,27 @@ async def _get_or_create_cart(
     db.add(cart)
     await db.flush()
     return cart
+
+
+async def find_cart_items(
+    db: AsyncSession,
+    user: User | None,
+    session_token: str | None,
+) -> list[CartItem]:
+    """Lignes du panier courant, SANS le créer s'il n'existe pas.
+
+    Lecture seule : sert aux écrans qui ont besoin du contenu du panier
+    (créneaux de montage) sans avoir à en provoquer l'existence.
+    """
+    stmt = select(Cart).options(selectinload(Cart.items))
+    if user is not None:
+        stmt = stmt.where(Cart.user_id == user.id)
+    elif session_token:
+        stmt = stmt.where(Cart.session_token == session_token)
+    else:
+        return []
+    cart = await db.scalar(stmt)
+    return list(cart.items) if cart else []
 
 
 async def merge_anonymous_cart(
@@ -280,6 +326,9 @@ async def add_item(
                 # Affichage panier : vignette + saison sans re-fetch
                 "image_url": match.get("image_url"),
                 "season": match.get("season"),
+                # Livraison estimée fournisseur : plancher du créneau de
+                # montage proposé au checkout (RDV au plus tôt à J+1 après).
+                "delivery_estimate": await _resolve_delivery_estimate(match),
             },
         )
     )
@@ -393,6 +442,7 @@ async def checkout(
     promo_code: str | None = None,
     billing_address_id: uuid.UUID | None = None,
     garage_id: uuid.UUID | None = None,
+    mounting_at: str | None = None,
 ) -> tuple[Order | None, list[PriceChange]]:
     """
     Transforme le panier en commande.
@@ -440,6 +490,16 @@ async def checkout(
     )
     if cart is None or not cart.items:
         raise ValueError("Panier vide")
+
+    # Créneau de montage : validé APRÈS le chargement du panier, parce que
+    # la date au plus tôt dépend de la livraison estimée des articles.
+    mounting_dt = None
+    if mounting_at:
+        if garage is None:
+            raise ValueError(
+                "Un créneau de montage suppose un garage partenaire sélectionné"
+            )
+        mounting_dt = await booking.reserve_slot(db, garage, cart.items, mounting_at)
 
     account_type = user.account_type.value
     price_tier = None
@@ -645,6 +705,7 @@ async def checkout(
         billing_address=_address_snapshot(billing),
         garage_id=garage.id if garage is not None else None,
         garage_snapshot=garage_snapshot,
+        mounting_at=mounting_dt,
         shipping_ht_cents=ship.ht_cents,
         shipping_vat_cents=ship.vat_cents,
         total_ht_cents=total_ht,

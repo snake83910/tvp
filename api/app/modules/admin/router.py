@@ -22,6 +22,7 @@ from app.core.deps import get_db, require_role
 from app.models.order import ALLOWED_TRANSITIONS, Order, OrderStatus
 from app.models.promo import PromoCode
 from app.models.user import AccountType, Address, ProProfile, User, UserRole
+from app.modules.garage.booking import PARIS
 from app.modules.mailer.service import (
     send_order_cancelled,
     send_order_delivered,
@@ -80,6 +81,13 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
         delivery_mode=order.delivery_mode,
         shipping_address=order.shipping_address,
         billing_address=order.billing_address or order.shipping_address,
+        garage=order.garage_snapshot or {},
+        mounting_at=(
+            order.mounting_at.astimezone(PARIS).isoformat()
+            if order.mounting_at
+            else None
+        ),
+        mounting_note=order.mounting_note,
         invoice_number=order.invoice_number,
         promo_code=order.promo_code,
         discount_ttc=order.discount_ttc_cents / 100,

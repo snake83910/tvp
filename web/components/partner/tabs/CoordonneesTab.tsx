@@ -1,74 +1,151 @@
 "use client";
 
 import { useState } from "react";
-import type { Garage, GaragePayload } from "@/lib/partner";
-import { Field, SaveButton, TabHeader } from "@/components/partner/ui";
+import type { Garage, PartnerEditablePayload } from "@/lib/partner";
+import { SaveButton, TabHeader } from "@/components/partner/ui";
+import { SUPPORT_EMAIL, SUPPORT_PHONE } from "@/components/partner/constants";
 
+/** Coordonnées du centre : lecture seule.
+ *
+ *  Ces informations identifient l'établissement (raison sociale, adresse
+ *  géocodée, SIRET vérifié) et sont figées dans chaque commande passée
+ *  chez lui. Les laisser modifiables côté partenaire, c'est risquer de
+ *  voir une commande partir à une adresse qui ne correspond plus à celle
+ *  affichée au client. Leur correction passe donc par l'équipe — le
+ *  backend refuse d'ailleurs ces champs sur /partner/garage (403).
+ *
+ *  Seule la présentation, texte purement commercial, reste éditable ici. */
 export function CoordonneesTab({
   garage,
   save,
   saving,
 }: {
   garage: Garage;
-  save: (p: Partial<GaragePayload>) => Promise<void>;
+  save: (p: PartnerEditablePayload) => Promise<void>;
   saving: boolean;
 }) {
-  const [f, setF] = useState({
-    name: garage.name,
-    address: garage.address,
-    postal_code: garage.postal_code,
-    city: garage.city,
-    phone: garage.phone ?? "",
-    email: garage.email ?? "",
-    description: garage.description ?? "",
-  });
+  const [description, setDescription] = useState(garage.description ?? "");
 
-  function set<K extends keyof typeof f>(k: K, v: string) {
-    setF((p) => ({ ...p, [k]: v }));
-  }
+  const mailto =
+    `mailto:${SUPPORT_EMAIL}` +
+    `?subject=${encodeURIComponent(`Modification des coordonnées — ${garage.name}`)}` +
+    `&body=${encodeURIComponent(
+      `Bonjour,\n\nJe souhaite modifier les coordonnées du centre « ${garage.name} » ` +
+        `(${garage.address}, ${garage.postal_code} ${garage.city}).\n\n` +
+        `Information à corriger :\n\nNouvelle valeur :\n\nMerci.`,
+    )}`;
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        save({
-          name: f.name.trim(),
-          address: f.address.trim(),
-          postal_code: f.postal_code.trim(),
-          city: f.city.trim(),
-          phone: f.phone.trim() || null,
-          email: f.email.trim() || null,
-          description: f.description.trim() || null,
-        });
-      }}
-      className="max-w-xl space-y-3"
-    >
-      <TabHeader
-        title="Coordonnées du centre"
-        subtitle="Ces informations apparaissent sur votre page publique et au checkout."
-      />
-      <Field label="Nom du garage" value={f.name} onChange={(v) => set("name", v)} required />
-      <Field label="Adresse" value={f.address} onChange={(v) => set("address", v)} required />
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Code postal" value={f.postal_code} onChange={(v) => set("postal_code", v)} required />
-        <Field label="Ville" value={f.city} onChange={(v) => set("city", v)} required />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Téléphone" value={f.phone} onChange={(v) => set("phone", v)} />
-        <Field label="Email" type="email" value={f.email} onChange={(v) => set("email", v)} />
-      </div>
+    <div className="max-w-2xl space-y-8">
       <div>
-        <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-ink-muted">
-          Présentation
-        </label>
+        <TabHeader
+          title="Coordonnées du centre"
+          subtitle="Ces informations apparaissent sur votre page publique et au checkout."
+        />
+
+        <dl className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-paper">
+          <Row label="Nom du centre" value={garage.name} />
+          <Row
+            label="Adresse"
+            value={`${garage.address}, ${garage.postal_code} ${garage.city}`}
+          />
+          <Row label="Téléphone" value={garage.phone} />
+          <Row label="Email" value={garage.email} />
+          <Row
+            label="SIRET"
+            value={garage.siret}
+            badge={
+              garage.siret_verified
+                ? { text: "Vérifié Sirene", tone: "ok" }
+                : { text: "Non vérifié", tone: "warn" }
+            }
+          />
+          {garage.siret_company_name && (
+            <Row label="Raison sociale" value={garage.siret_company_name} />
+          )}
+        </dl>
+
+        <div className="mt-4 rounded-xl border border-line bg-paper-dim p-4">
+          <p className="text-sm font-semibold text-ink">
+            Une information est incorrecte ?
+          </p>
+          <p className="mt-1 text-sm text-ink-muted">
+            Les coordonnées de votre centre sont verrouillées : elles sont
+            figées dans chaque commande et servent au calcul du garage le
+            plus proche. Notre équipe les met à jour sur simple demande.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a
+              href={mailto}
+              className="rounded-lg bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-signal"
+            >
+              Demander une modification
+            </a>
+            {SUPPORT_PHONE && (
+              <a
+                href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`}
+                className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink-soft transition hover:border-signal hover:text-signal"
+              >
+                {SUPPORT_PHONE}
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save({ description: description.trim() || null });
+        }}
+      >
+        <TabHeader
+          title="Présentation"
+          subtitle="Le texte affiché sur votre page publique. Libre à vous de le modifier."
+        />
         <textarea
-          value={f.description}
-          onChange={(e) => set("description", e.target.value)}
-          rows={4}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={6}
+          placeholder="Présentez votre centre : équipe, équipements, spécialités…"
           className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-signal"
         />
-      </div>
-      <SaveButton saving={saving} />
-    </form>
+        <div className="mt-3">
+          <SaveButton saving={saving} />
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  badge,
+}: {
+  label: string;
+  value: string | null | undefined;
+  badge?: { text: string; tone: "ok" | "warn" };
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3">
+      <dt className="w-40 shrink-0 text-xs font-bold uppercase tracking-wider text-ink-muted">
+        {label}
+      </dt>
+      <dd className="flex flex-wrap items-center gap-2 text-sm text-ink">
+        <span>{value?.trim() || <span className="text-ink-muted">—</span>}</span>
+        {badge && (
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+              badge.tone === "ok"
+                ? "bg-ok/10 text-ok"
+                : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {badge.text}
+          </span>
+        )}
+      </dd>
+    </div>
   );
 }

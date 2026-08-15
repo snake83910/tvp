@@ -59,6 +59,10 @@ class CartOut(BaseModel):
     shipping_ttc: float = 0
     free_shipping: bool = False
     grand_total_ttc: float = 0
+    # Livraison estimée du panier : la plus tardive des lignes (une
+    # commande part en un seul envoi). None si le fournisseur ne la donne
+    # pas. Sert de plancher au choix du créneau de montage.
+    delivery_estimate: str | None = None
 
 
 class PriceChangeOut(BaseModel):
@@ -74,6 +78,10 @@ class CheckoutIn(BaseModel):
     delivery_mode: str = "home"
     # Requis si delivery_mode == "partner_garage" : garage de montage choisi
     garage_id: uuid.UUID | None = None
+    # Créneau de montage choisi par le client (ISO 8601, heure locale du
+    # garage). Optionnel : seuls les garages ayant activé la prise de RDV
+    # en ligne en proposent. Revalidé côté serveur.
+    mounting_at: str | None = None
     accept_terms: bool
     promo_code: str | None = None
 
@@ -194,6 +202,7 @@ class GuestCheckoutIn(BaseModel):
 
     delivery_mode: str = "home"
     garage_id: uuid.UUID | None = None
+    mounting_at: str | None = None
     accept_terms: bool
     promo_code: str | None = None
 
@@ -255,6 +264,12 @@ class OrderDetail(BaseModel):
     delivery_mode: str
     shipping_address: dict
     billing_address: dict = {}
+
+    # Montage en garage partenaire : fiche figée du garage + créneau
+    # réservé (heure locale du garage). Vides pour une livraison à domicile.
+    garage: dict = {}
+    mounting_at: str | None = None
+    mounting_note: str | None = None
 
     # Numéro de facture (assigné au paiement)
     invoice_number: int | None = None

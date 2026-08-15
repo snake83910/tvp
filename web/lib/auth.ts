@@ -179,6 +179,19 @@ export interface OrderDetail {
   shipping_address: AddressSnapshot;
   // Égale à shipping_address si le client ne les a pas dissociées
   billing_address?: AddressSnapshot;
+  // Montage en garage partenaire : fiche figée + créneau réservé
+  garage?: {
+    id?: string;
+    name?: string;
+    address?: string;
+    postal_code?: string;
+    city?: string;
+    phone?: string | null;
+    email?: string | null;
+    mounting_price_cents?: number;
+  };
+  mounting_at?: string | null;
+  mounting_note?: string | null;
   invoice_number: number | null;
   promo_code?: string | null;
   discount_ttc?: number;

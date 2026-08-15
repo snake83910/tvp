@@ -20,10 +20,13 @@ type FormState = {
   siret: string;
   mounting_price_eur: string;
   services: string;
-  hours: string;
   description: string;
   is_published: boolean;
   owner_email: string;
+  appointments_enabled: boolean;
+  slot_minutes: string;
+  slot_capacity: string;
+  appointment_lead_days: string;
 };
 
 const EMPTY: FormState = {
@@ -36,10 +39,13 @@ const EMPTY: FormState = {
   siret: "",
   mounting_price_eur: "",
   services: "",
-  hours: "",
   description: "",
   is_published: true,
   owner_email: "",
+  appointments_enabled: false,
+  slot_minutes: "30",
+  slot_capacity: "1",
+  appointment_lead_days: "1",
 };
 
 function toForm(g: Garage): FormState {
@@ -53,15 +59,23 @@ function toForm(g: Garage): FormState {
     siret: g.siret ?? "",
     mounting_price_eur: (g.mounting_price_cents / 100).toFixed(2),
     services: (g.services ?? []).join(", "),
-    hours: (g.hours?.text as string | undefined) ?? "",
     description: g.description ?? "",
     is_published: g.is_published,
     owner_email: "",
+    appointments_enabled: g.appointments_enabled,
+    slot_minutes: String(g.slot_minutes ?? 30),
+    slot_capacity: String(g.slot_capacity ?? 1),
+    appointment_lead_days: String(g.appointment_lead_days ?? 1),
   };
 }
 
 function toPayload(f: FormState): GaragePayload {
   const cents = Math.round((parseFloat(f.mounting_price_eur.replace(",", ".")) || 0) * 100);
+  // `hours` est volontairement ABSENT du payload : les horaires sont
+  // structurés par jour et saisis par le partenaire dans son espace. Ce
+  // formulaire les renvoyait autrefois en texte libre ({text: "…"}), ce
+  // qui écrasait la grille horaire — et donc, désormais, les créneaux de
+  // rendez-vous qui en sont déduits.
   return {
     name: f.name.trim(),
     address: f.address.trim(),
@@ -76,9 +90,44 @@ function toPayload(f: FormState): GaragePayload {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
-    hours: f.hours.trim() ? { text: f.hours.trim() } : {},
     is_published: f.is_published,
+    appointments_enabled: f.appointments_enabled,
+    slot_minutes: Number(f.slot_minutes) || 30,
+    slot_capacity: Number(f.slot_capacity) || 1,
+    appointment_lead_days: Number(f.appointment_lead_days) || 1,
   };
+}
+
+const DAY_LABELS: [string, string][] = [
+  ["lundi", "Lundi"],
+  ["mardi", "Mardi"],
+  ["mercredi", "Mercredi"],
+  ["jeudi", "Jeudi"],
+  ["vendredi", "Vendredi"],
+  ["samedi", "Samedi"],
+  ["dimanche", "Dimanche"],
+];
+
+/** Résumé lisible des horaires structurés du garage (lecture seule ici :
+ *  c'est le partenaire qui les saisit). */
+function hoursSummary(hours: Record<string, unknown> | null | undefined): string {
+  const h = hours ?? {};
+  if (typeof h.text === "string" && h.text.trim()) return h.text.trim();
+  const parts: string[] = [];
+  for (const [key, label] of DAY_LABELS) {
+    const d = h[key] as
+      | { open?: string; close?: string; closed?: boolean; break_start?: string; break_end?: string }
+      | undefined;
+    if (!d) continue;
+    if (d.closed) {
+      parts.push(`${label} : fermé`);
+    } else if (d.open && d.close) {
+      const pause =
+        d.break_start && d.break_end ? ` (pause ${d.break_start}–${d.break_end})` : "";
+      parts.push(`${label} : ${d.open}–${d.close}${pause}`);
+    }
+  }
+  return parts.join(" · ");
 }
 
 export default function AdminGaragesPage() {
@@ -195,6 +244,7 @@ export default function AdminGaragesPage() {
                 <th className="p-3">Montage / pneu</th>
                 <th className="p-3">Géoloc.</th>
                 <th className="p-3">Kbis</th>
+                <th className="p-3">RDV</th>
                 <th className="p-3">Publié</th>
                 <th className="p-3" />
               </tr>
@@ -224,6 +274,15 @@ export default function AdminGaragesPage() {
                       >
                         ↓ voir
                       </button>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    {g.appointments_enabled ? (
+                      <span className="text-ok">
+                        ✓ {g.slot_minutes} min ×{g.slot_capacity}
+                      </span>
                     ) : (
                       <span className="text-ink-muted">—</span>
                     )}
@@ -266,9 +325,13 @@ export default function AdminGaragesPage() {
             onSubmit={submit}
             className="my-8 w-full max-w-lg rounded-2xl bg-paper p-6 shadow-lift"
           >
-            <h2 className="mb-4 font-display text-lg font-black text-ink">
+            <h2 className="font-display text-lg font-black text-ink">
               {editing ? "Éditer le garage" : "Nouveau garage"}
             </h2>
+            <p className="mb-4 mt-1 text-xs text-ink-muted">
+              Les coordonnées ci-dessous sont verrouillées côté partenaire :
+              cet écran est le seul endroit où les corriger.
+            </p>
             <div className="space-y-3">
               <Field label="Nom" required value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
               <Field label="Adresse" required value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
@@ -326,12 +389,20 @@ export default function AdminGaragesPage() {
                 onChange={(v) => setForm({ ...form, services: v })}
                 placeholder="équilibrage, valve, recyclage"
               />
-              <Field
-                label="Horaires"
-                value={form.hours}
-                onChange={(v) => setForm({ ...form, hours: v })}
-                placeholder="Lun-Ven 8h-18h, Sam 9h-12h"
-              />
+              {editing && (
+                <div className="rounded-lg border border-line bg-paper-dim p-3">
+                  <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+                    Horaires déclarés par le partenaire
+                  </p>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    {hoursSummary(editing.hours) || "Aucun horaire renseigné."}
+                  </p>
+                  <p className="mt-1 text-xs text-ink-muted">
+                    Saisis par le garage depuis son espace. Ils déterminent
+                    les créneaux de rendez-vous proposés au checkout.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-ink-muted">
                   Description
@@ -352,6 +423,48 @@ export default function AdminGaragesPage() {
                 />
                 Publié (visible au checkout)
               </label>
+
+              {/* Prise de rendez-vous : normalement pilotée par le
+                  partenaire, réglable ici pour dépanner un centre. */}
+              <div className="rounded-lg border border-line bg-paper-dim p-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <input
+                    type="checkbox"
+                    checked={form.appointments_enabled}
+                    onChange={(e) =>
+                      setForm({ ...form, appointments_enabled: e.target.checked })
+                    }
+                    className="accent-signal"
+                  />
+                  Prise de rendez-vous en ligne
+                </label>
+                {form.appointments_enabled && (
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <Field
+                      label="Créneau (min)"
+                      type="number"
+                      value={form.slot_minutes}
+                      onChange={(v) => setForm({ ...form, slot_minutes: v })}
+                    />
+                    <Field
+                      label="En parallèle"
+                      type="number"
+                      value={form.slot_capacity}
+                      onChange={(v) => setForm({ ...form, slot_capacity: v })}
+                    />
+                    <Field
+                      label="Délai (J+)"
+                      type="number"
+                      value={form.appointment_lead_days}
+                      onChange={(v) => setForm({ ...form, appointment_lead_days: v })}
+                    />
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-ink-muted">
+                  Le partenaire gère ces réglages depuis son espace. Les
+                  créneaux sont déduits de ses horaires d&apos;ouverture.
+                </p>
+              </div>
 
               <div className="rounded-lg border border-line bg-paper-dim p-3">
                 <Field

@@ -57,6 +57,31 @@ export interface Cart {
   shipping_ttc: number;
   free_shipping: boolean;
   grand_total_ttc: number;
+  // Livraison estimée du panier (YYYY-MM-DD), la plus tardive des lignes.
+  // null si le fournisseur ne la communique pas.
+  delivery_estimate?: string | null;
+}
+
+export interface MountingSlot {
+  start: string; // ISO 8601, heure locale du garage
+  available: boolean;
+}
+
+export interface MountingSlotDay {
+  date: string; // YYYY-MM-DD
+  closure_label: string | null;
+  slots: MountingSlot[];
+}
+
+/** Créneaux de montage proposables pour le panier courant. Le premier
+ *  jour réservable est calculé par le serveur (livraison estimée + délai
+ *  du garage) : le front l'affiche, il ne le recalcule pas. */
+export interface MountingSlots {
+  enabled: boolean;
+  delivery_estimate: string | null;
+  earliest_date: string;
+  slot_minutes: number;
+  days: MountingSlotDay[];
 }
 
 async function call<T>(
@@ -135,6 +160,13 @@ export const cartApi = {
 
   merge: () => call<Cart>("/cart/merge", "POST"),
 
+  /** Créneaux de montage d'un garage pour le panier courant. Passe par le
+   *  même appel que le panier : le serveur a besoin de l'en-tête de
+   *  session pour retrouver les articles et en déduire la date au plus
+   *  tôt. */
+  mountingSlots: (garageId: string, days = 21) =>
+    call<MountingSlots>(`/garages/${garageId}/slots?days=${days}`, "GET"),
+
   validatePromo: (code: string) =>
     call<{
       valid: boolean;
@@ -152,6 +184,8 @@ export const cartApi = {
     // null = facturation identique à la livraison
     billingAddressId?: string | null,
     garageId?: string | null,
+    // Créneau de montage choisi (ISO local), si le garage prend des RDV
+    mountingAt?: string | null,
   ) =>
     call<{
       order_number: string | null;
@@ -168,6 +202,7 @@ export const cartApi = {
       billing_address_id: billingAddressId || null,
       delivery_mode: deliveryMode,
       garage_id: garageId || null,
+      mounting_at: mountingAt || null,
       accept_terms: acceptTerms,
       promo_code: promoCode || null,
     }),
@@ -185,6 +220,7 @@ export const cartApi = {
     billing?: AddressPayload | null;
     delivery_mode?: string;
     garage_id?: string | null;
+    mounting_at?: string | null;
     accept_terms: boolean;
     promo_code?: string | null;
   }) =>
@@ -206,6 +242,7 @@ export const cartApi = {
       billing: payload.billing ?? null,
       delivery_mode: payload.delivery_mode ?? "home",
       garage_id: payload.garage_id || null,
+      mounting_at: payload.mounting_at || null,
       promo_code: payload.promo_code || null,
     }),
 };

@@ -10,6 +10,7 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.order import Order
 from app.models.user import Address, User
+from app.modules.garage.booking import PARIS
 from app.schemas.auth import AddressIn, AddressOut, UserOut
 from app.schemas.order import OrderDetail, OrderItemDetail, OrderSummary
 
@@ -224,6 +225,13 @@ async def get_my_order(
         delivery_mode=order.delivery_mode,
         shipping_address=order.shipping_address,
         billing_address=order.billing_address or order.shipping_address,
+        garage=order.garage_snapshot or {},
+        mounting_at=(
+            order.mounting_at.astimezone(PARIS).isoformat()
+            if order.mounting_at
+            else None
+        ),
+        mounting_note=order.mounting_note,
         invoice_number=order.invoice_number,
         promo_code=order.promo_code,
         discount_ttc=order.discount_ttc_cents / 100,

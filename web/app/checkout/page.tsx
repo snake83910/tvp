@@ -50,6 +50,8 @@ export default function CheckoutPage() {
   const [showNewBilling, setShowNewBilling] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<"home" | "partner_garage">("home");
   const [selectedGarage, setSelectedGarage] = useState<GarageNearby | null>(null);
+  // Créneau de montage choisi (ISO local du garage). Null = pas de RDV.
+  const [mountingAt, setMountingAt] = useState<string | null>(null);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +182,7 @@ export default function CheckoutPage() {
       const res = await cartApi.checkout(
         addressId, true, deliveryMode, promo?.code ?? null, billingAddressId,
         deliveryMode === "partner_garage" ? selectedGarage?.id ?? null : null,
+        deliveryMode === "partner_garage" ? mountingAt : null,
       );
       if (res.price_changes.length > 0) {
         // Prix fournisseur modifiés : tableau avant/après explicite
@@ -319,12 +322,21 @@ export default function CheckoutPage() {
             <Section title="2 · Mode de livraison">
               <DeliveryModeSelector
                 mode={deliveryMode}
-                onSelectHome={() => { setDeliveryMode("home"); setSelectedGarage(null); }}
+                onSelectHome={() => {
+                  setDeliveryMode("home");
+                  setSelectedGarage(null);
+                  setMountingAt(null);
+                }}
                 onSelectPartner={() => setDeliveryMode("partner_garage")}
                 shippingHt={cart.shipping_ht}
                 isFreeShipping={isFreeShipping}
                 selectedGarage={selectedGarage}
-                onSelectGarage={setSelectedGarage}
+                onSelectGarage={(g) => {
+                  setSelectedGarage(g);
+                  setMountingAt(null);
+                }}
+                mountingAt={mountingAt}
+                onSelectSlot={setMountingAt}
               />
             </Section>
 

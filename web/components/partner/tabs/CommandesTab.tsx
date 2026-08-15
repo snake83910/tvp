@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { partnerApi, type PartnerOrder } from "@/lib/partner";
+import type { PartnerOrder } from "@/lib/partner";
 import { TabHeader } from "@/components/partner/ui";
+import { AppointmentEditor, formatSlot } from "@/components/partner/AppointmentEditor";
 
 const STATUS_LABEL: Record<string, string> = {
   paid: "Payée",
@@ -10,15 +11,6 @@ const STATUS_LABEL: Record<string, string> = {
   shipped: "Expédiée",
   delivered: "Livrée",
 };
-
-/** ISO -> valeur pour <input type="datetime-local"> (YYYY-MM-DDTHH:mm). */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function CommandesTab({
   orders,
@@ -75,28 +67,6 @@ function OrderCard({
   order: PartnerOrder;
   onUpdate: (o: PartnerOrder) => void;
 }) {
-  const [when, setWhen] = useState(toLocalInput(o.mounting_at));
-  const [note, setNote] = useState(o.mounting_note ?? "");
-  const [saving, setSaving] = useState(false);
-
-  async function save(cancel = false) {
-    setSaving(true);
-    try {
-      const updated = await partnerApi.setAppointment(
-        o.order_number,
-        cancel ? null : when || null,
-        cancel ? null : note || null,
-      );
-      onUpdate(updated);
-      if (cancel) {
-        setWhen("");
-        setNote("");
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className="rounded-xl border border-line bg-paper p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -142,47 +112,10 @@ function OrderCard({
         <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-muted">
           Rendez-vous de montage
         </p>
-        <div className="flex flex-wrap items-end gap-2">
-          <input
-            type="datetime-local"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-            className="rounded-lg border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-signal"
-          />
-          <input
-            type="text"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Note (optionnel)"
-            className="min-w-[140px] flex-1 rounded-lg border border-line bg-paper px-2 py-1.5 text-sm outline-none focus:border-signal"
-          />
-          <button
-            onClick={() => save(false)}
-            disabled={saving || !when}
-            className="rounded-lg bg-signal px-4 py-1.5 text-sm font-bold text-white transition hover:bg-signal-dark disabled:opacity-50"
-          >
-            {saving ? "…" : "Enregistrer le RDV"}
-          </button>
-          {o.mounting_at && (
-            <button
-              onClick={() => save(true)}
-              disabled={saving}
-              className="text-xs font-semibold text-ink-muted underline hover:text-signal"
-            >
-              Annuler le RDV
-            </button>
-          )}
-        </div>
+        <AppointmentEditor order={o} onUpdate={onUpdate} />
         {o.mounting_at && (
           <p className="mt-2 text-sm text-ok">
-            ✓ RDV fixé le{" "}
-            {new Date(o.mounting_at).toLocaleString("fr-FR", {
-              weekday: "long",
-              day: "2-digit",
-              month: "long",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            ✓ RDV fixé le {formatSlot(o.mounting_at)}
             {o.mounting_note ? ` — ${o.mounting_note}` : ""}
           </p>
         )}
