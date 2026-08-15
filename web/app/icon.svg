@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="tousvospneus.com">
+  <!-- Pneu vu de face, aux couleurs de la marque (voir SiteHeader).
+       Disque PLEIN et non trois anneaux fins : dans un onglet de 16 px,
+       des traits d'un pixel disparaissent. -->
+  <circle cx="16" cy="16" r="16" fill="#17181a"/>
+  <circle cx="16" cy="16" r="8.6" fill="none" stroke="#D8232A" stroke-width="3.5"/>
+  <circle cx="16" cy="16" r="3.2" fill="#D8232A"/>
+</svg>
