@@ -1,0 +1,50 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ headline }}
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Bonjour {{ garage_name }}, le client de la commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    vient de modifier son rendez-vous de montage depuis son espace.
+  </p>
+
+  <div style="margin:20px 0;padding:16px;background:#f6f6f4;border-radius:8px;">
+    {% if previous_label %}
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:4px;">
+      Ancien créneau
+    </div>
+    <div style="color:#7a7a72;text-decoration:line-through;margin-bottom:12px;">
+      {{ previous_label }}
+    </div>
+    {% endif %}
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:4px;">
+      Nouveau créneau
+    </div>
+    <div style="font-size:18px;font-weight:800;color:#17181a;">
+      {{ new_label }}
+    </div>
+  </div>
+
+  <div style="margin:20px 0;padding:14px 16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Client
+    </div>
+    <div style="color:#17181a;">
+      {{ customer_name }}
+      {% if customer_phone %}<br />Tél. : {{ customer_phone }}{% endif %}
+    </div>
+  </div>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ partner_url }}"
+       style="display:inline-block;padding:12px 22px;background:#17181a;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:800;">
+      Voir mon planning
+    </a>
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    L&rsquo;équipe Tous Vos Pneus
+  </p>
+{% endblock %}

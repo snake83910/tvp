@@ -461,8 +461,11 @@ export default function AdminGaragesPage() {
                   </div>
                 )}
                 <p className="mt-2 text-xs text-ink-muted">
-                  Le partenaire gère ces réglages depuis son espace. Les
-                  créneaux sont déduits de ses horaires d&apos;ouverture.
+                  Durée de créneau et véhicules en parallèle sont pilotés par
+                  le partenaire depuis son espace. Le <strong>délai
+                  après livraison</strong> (J+) est verrouillé côté partenaire
+                  et ne se règle qu&apos;ici : il engage la promesse faite au
+                  client dès la fiche produit.
                 </p>
               </div>
 

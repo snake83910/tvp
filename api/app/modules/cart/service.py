@@ -493,13 +493,16 @@ async def checkout(
 
     # Créneau de montage : validé APRÈS le chargement du panier, parce que
     # la date au plus tôt dépend de la livraison estimée des articles.
+    # L'estimation est figée sur la commande : le panier disparaît juste
+    # après, et le client doit pouvoir redéplacer son rendez-vous ensuite.
+    estimate = booking.delivery_estimate_date(cart.items)
     mounting_dt = None
     if mounting_at:
         if garage is None:
             raise ValueError(
                 "Un créneau de montage suppose un garage partenaire sélectionné"
             )
-        mounting_dt = await booking.reserve_slot(db, garage, cart.items, mounting_at)
+        mounting_dt = await booking.reserve_slot(db, garage, estimate, mounting_at)
 
     account_type = user.account_type.value
     price_tier = None
@@ -706,6 +709,7 @@ async def checkout(
         garage_id=garage.id if garage is not None else None,
         garage_snapshot=garage_snapshot,
         mounting_at=mounting_dt,
+        delivery_estimate=estimate,
         shipping_ht_cents=ship.ht_cents,
         shipping_vat_cents=ship.vat_cents,
         total_ht_cents=total_ht,

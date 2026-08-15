@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.garage import Garage
+from app.models.garage import Garage, GarageSlotBlock
 from app.models.order import CartItem, Order, OrderStatus
 
 # Le réseau de garages est français : les horaires saisis ("08:00") sont
@@ -146,12 +146,20 @@ def delivery_estimate_date(items: list[CartItem]) -> date | None:
 
 def earliest_mounting_date(
     garage: Garage,
-    items: list[CartItem],
+    estimate: date | None,
     today: date | None = None,
+    already_delivered: bool = False,
 ) -> date:
-    """Première date de rendez-vous acceptable pour ce panier."""
+    """Première date de rendez-vous acceptable.
+
+    `already_delivered` : les pneus sont physiquement au garage (commande
+    expédiée ou livrée). Le délai après livraison n'a plus lieu d'être —
+    seul reste le minimum de politesse d'un jour.
+    """
     today = today or datetime.now(PARIS).date()
-    base = delivery_estimate_date(items)
+    if already_delivered:
+        return today + timedelta(days=1)
+    base = estimate
     if base is None or base < today:
         # Pas d'estimation fournisseur (ou estimation périmée) : on repart
         # d'aujourd'hui + un délai de transport prudent.
@@ -165,17 +173,19 @@ async def _booked_counts(
     garage_id: uuid.UUID,
     start: datetime,
     end: datetime,
+    exclude_order_id: uuid.UUID | None = None,
 ) -> dict[datetime, int]:
     """Nombre de véhicules déjà réservés par créneau, sur une fenêtre."""
-    rows = await db.scalars(
-        select(Order.mounting_at).where(
-            Order.garage_id == garage_id,
-            Order.mounting_at.is_not(None),
-            Order.mounting_at >= start,
-            Order.mounting_at < end,
-            Order.status.in_(_ACTIVE_STATUSES),
-        )
+    stmt = select(Order.mounting_at).where(
+        Order.garage_id == garage_id,
+        Order.mounting_at.is_not(None),
+        Order.mounting_at >= start,
+        Order.mounting_at < end,
+        Order.status.in_(_ACTIVE_STATUSES),
     )
+    if exclude_order_id is not None:
+        stmt = stmt.where(Order.id != exclude_order_id)
+    rows = await db.scalars(stmt)
     counts: dict[datetime, int] = {}
     for at in rows:
         # Les datetimes remontent en UTC : on les ramène en heure locale
@@ -185,24 +195,48 @@ async def _booked_counts(
     return counts
 
 
+async def _blocks(
+    db: AsyncSession, garage_id: uuid.UUID, start: datetime, end: datetime
+) -> list[tuple[datetime, datetime]]:
+    """Plages bloquées à la main par le garage, sur une fenêtre."""
+    rows = await db.scalars(
+        select(GarageSlotBlock).where(
+            GarageSlotBlock.garage_id == garage_id,
+            GarageSlotBlock.ends_at > start,
+            GarageSlotBlock.starts_at < end,
+        )
+    )
+    return [(b.starts_at, b.ends_at) for b in rows]
+
+
+def _is_blocked(
+    slot: datetime, duration: timedelta, blocks: list[tuple[datetime, datetime]]
+) -> bool:
+    """Le créneau chevauche-t-il une plage bloquée ?"""
+    slot_end = slot + duration
+    return any(start < slot_end and slot < end for start, end in blocks)
+
+
 async def availability(
     db: AsyncSession,
     garage: Garage,
-    items: list[CartItem],
+    estimate: date | None,
     days: int = 21,
+    already_delivered: bool = False,
 ) -> dict:
     """Créneaux proposables au client, jour par jour."""
-    first = earliest_mounting_date(garage, items)
+    first = earliest_mounting_date(
+        garage, estimate, already_delivered=already_delivered
+    )
     span = max(1, min(days, MAX_HORIZON_DAYS))
     last = first + timedelta(days=span)
+    window_start = datetime.combine(first, time.min, tzinfo=PARIS)
+    window_end = datetime.combine(last, time.min, tzinfo=PARIS)
 
-    counts = await _booked_counts(
-        db,
-        garage.id,
-        datetime.combine(first, time.min, tzinfo=PARIS),
-        datetime.combine(last, time.min, tzinfo=PARIS),
-    )
+    counts = await _booked_counts(db, garage.id, window_start, window_end)
+    blocks = await _blocks(db, garage.id, window_start, window_end)
     capacity = max(1, garage.slot_capacity or 1)
+    duration = timedelta(minutes=max(5, garage.slot_minutes or 30))
 
     out_days: list[dict] = []
     # Garage sans prise de RDV : on renvoie la structure (le front sait
@@ -212,7 +246,13 @@ async def availability(
         d = first + timedelta(days=i)
         closure = is_closed_period(garage.closures, d)
         slots = [
-            {"start": s.isoformat(), "available": counts.get(s, 0) < capacity}
+            {
+                "start": s.isoformat(),
+                "available": (
+                    counts.get(s, 0) < capacity
+                    and not _is_blocked(s, duration, blocks)
+                ),
+            }
             for s in day_slot_starts(garage, d)
         ]
         out_days.append(
@@ -223,7 +263,6 @@ async def availability(
             }
         )
 
-    estimate = delivery_estimate_date(items)
     return {
         "enabled": bool(garage.appointments_enabled),
         "delivery_estimate": estimate.isoformat() if estimate else None,
@@ -236,8 +275,10 @@ async def availability(
 async def reserve_slot(
     db: AsyncSession,
     garage: Garage,
-    items: list[CartItem],
+    estimate: date | None,
     mounting_at: str | datetime,
+    already_delivered: bool = False,
+    exclude_order_id: uuid.UUID | None = None,
 ) -> datetime:
     """Valide un créneau demandé au checkout et le renvoie normalisé.
 
@@ -263,13 +304,17 @@ async def reserve_slot(
     )
 
     d = requested.date()
-    if d < earliest_mounting_date(garage, items):
+    if d < earliest_mounting_date(
+        garage, estimate, already_delivered=already_delivered
+    ):
         raise BookingError(
             "Ce créneau est trop tôt : le montage ne peut pas être planifié "
             "avant la livraison des pneus au garage"
         )
     if requested not in day_slot_starts(garage, d):
         raise BookingError("Ce créneau n'est pas proposé par le garage")
+
+    duration = timedelta(minutes=max(5, garage.slot_minutes or 30))
 
     # Verrou transactionnel par garage : sans lui, deux checkouts
     # simultanés comptent tous les deux « une place restante » et
@@ -278,8 +323,19 @@ async def reserve_slot(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
         {"k": f"garage-slots:{garage.id}"},
     )
+    if _is_blocked(
+        requested, duration, await _blocks(db, garage.id, requested, requested + duration)
+    ):
+        raise BookingError("Ce créneau n'est plus disponible. Choisissez-en un autre.")
+
     counts = await _booked_counts(
-        db, garage.id, requested, requested + timedelta(microseconds=1)
+        db,
+        garage.id,
+        requested,
+        requested + timedelta(microseconds=1),
+        # Déplacer un rendez-vous vers le créneau qu'il occupe déjà ne doit
+        # pas se heurter à sa propre réservation.
+        exclude_order_id=exclude_order_id,
     )
     if counts.get(requested, 0) >= max(1, garage.slot_capacity or 1):
         raise BookingError("Ce créneau vient d'être réservé. Choisissez-en un autre.")

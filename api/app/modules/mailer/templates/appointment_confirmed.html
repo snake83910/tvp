@@ -1,0 +1,44 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre rendez-vous de montage est confirmé
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Votre commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    sera montée par <strong>{{ garage_name }}</strong>.
+  </p>
+
+  <div style="margin:20px 0;padding:16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Rendez-vous
+    </div>
+    <div style="font-size:18px;font-weight:800;color:#17181a;">
+      {{ appointment_label }}
+    </div>
+    <div style="margin-top:10px;color:#17181a;">
+      {{ garage_name }}<br />
+      {{ garage_address }}<br />
+      {{ garage_postal_code }} {{ garage_city }}
+      {% if garage_phone %}<br />Tél. : {{ garage_phone }}{% endif %}
+    </div>
+  </div>
+
+  <p style="margin:0 0 20px 0;">
+    Vos pneus sont livrés directement au garage. Présentez-vous à
+    l&rsquo;heure convenue avec votre véhicule : le montage est réglé sur
+    place, auprès du garage.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ order_url }}"
+       style="display:inline-block;padding:12px 22px;background:#17181a;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:800;">
+      Déplacer ou annuler mon rendez-vous
+    </a>
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    L&rsquo;équipe Tous Vos Pneus
+  </p>
+{% endblock %}

@@ -26,6 +26,7 @@ from app.integrations.payment import get_payment_provider
 from app.models.order import Order, OrderStatus, Payment
 from app.models.user import User
 from app.modules.mailer.service import (
+    send_appointment_confirmed,
     send_garage_order_notification,
     send_order_confirmation,
 )
@@ -162,6 +163,9 @@ async def payment_ipn(
             send_order_confirmation(order_full, order_user)
             if order_full.garage_id:
                 send_garage_order_notification(order_full, order_user)
+                # Le créneau n'est confirmé au client qu'une fois la
+                # commande payée : avant, rien n'est acquis.
+                send_appointment_confirmed(order_full, order_user)
 
     return {"status": "ok", "order_status": order.status.value}
 
@@ -220,6 +224,7 @@ async def simulate_payment(
         send_order_confirmation(order_full, user)
         if order_full.garage_id:
             send_garage_order_notification(order_full, user)
+            send_appointment_confirmed(order_full, user)
 
     return {"status": "ok", "order_status": order.status.value}
 
@@ -309,6 +314,7 @@ async def sync_payment(
         send_order_confirmation(order_full, user)
         if order_full.garage_id:
             send_garage_order_notification(order_full, user)
+            send_appointment_confirmed(order_full, user)
 
     return {"status": "synced", "order_status": OrderStatus.paid.value}
 
@@ -424,5 +430,6 @@ async def verify_kr_answer(
         send_order_confirmation(order_full, user)
         if order_full.garage_id:
             send_garage_order_notification(order_full, user)
+            send_appointment_confirmed(order_full, user)
 
     return {"status": "ok", "order_status": OrderStatus.paid.value}

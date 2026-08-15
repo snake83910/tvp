@@ -107,6 +107,15 @@ async function upload(path: string, file: File): Promise<Garage> {
   return res.json() as Promise<Garage>;
 }
 
+/** Plage rendue indisponible à la main par le garage (RDV pris par
+ *  téléphone, pont immobilisé…). Dates ISO en heure locale du garage. */
+export interface SlotBlock {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
+}
+
 export interface PartnerReview {
   author_name: string;
   rating: number;
@@ -127,6 +136,13 @@ export const partnerApi = {
       mounting_at,
       note,
     }),
+  listSlotBlocks: () => call<SlotBlock[]>("/partner/slot-blocks"),
+  addSlotBlock: (starts_at: string, ends_at: string, reason: string | null) =>
+    call<SlotBlock>("/partner/slot-blocks", "POST", { starts_at, ends_at, reason }),
+  removeSlotBlock: async (id: string) => {
+    const res = await authFetch(`/partner/slot-blocks/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  },
   addPhoto: (file: File) => upload("/partner/garage/photos", file),
   removePhoto: (path: string) =>
     call<Garage>(`/partner/garage/photos?path=${encodeURIComponent(path)}`, "DELETE"),

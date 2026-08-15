@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { cartApi, type MountingSlots } from "@/lib/cart";
+import { accountApi } from "@/lib/auth";
 
 function formatDay(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", {
@@ -29,19 +30,29 @@ function formatHour(iso: string): string {
 /** Choix du créneau de montage chez le garage partenaire.
  *
  *  La liste des jours et la date au plus tôt viennent du serveur : elles
- *  dépendent de la livraison estimée du panier, que le client ne doit pas
- *  pouvoir contourner. Le composant affiche, il ne calcule pas.
+ *  dépendent de la livraison estimée, que le client ne doit pas pouvoir
+ *  contourner. Le composant affiche, il ne calcule pas.
  *
- *  Le parent le remonte via `key={garageId}` quand le client change de
- *  garage : l'état repart de zéro sans réinitialisation manuelle. */
+ *  Deux sources selon le contexte : le panier au checkout, la commande
+ *  quand le client redéplace son rendez-vous. D'où `garageId` (checkout)
+ *  ou `orderNumber` (après commande) — l'un ou l'autre.
+ *
+ *  Le parent le remonte via `key=…` quand la source change : l'état
+ *  repart de zéro sans réinitialisation manuelle. */
 export function MountingSlotPicker({
   garageId,
+  orderNumber,
   value,
   onChange,
+  title = "Prenez rendez-vous pour le montage",
+  optionalHint = true,
 }: {
-  garageId: string;
+  garageId?: string;
+  orderNumber?: string;
   value: string | null;
   onChange: (iso: string | null) => void;
+  title?: string;
+  optionalHint?: boolean;
 }) {
   const [data, setData] = useState<MountingSlots | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,8 +60,10 @@ export function MountingSlotPicker({
 
   useEffect(() => {
     let cancelled = false;
-    cartApi
-      .mountingSlots(garageId)
+    const load = orderNumber
+      ? accountApi.orderSlots(orderNumber)
+      : cartApi.mountingSlots(garageId!);
+    load
       .then((res) => {
         if (cancelled) return;
         setData(res);
@@ -66,7 +79,7 @@ export function MountingSlotPicker({
     return () => {
       cancelled = true;
     };
-  }, [garageId]);
+  }, [garageId, orderNumber]);
 
   if (error) {
     return (
@@ -89,9 +102,7 @@ export function MountingSlotPicker({
 
   return (
     <div className="mt-3 rounded-lg border border-line bg-paper p-4">
-      <p className="text-sm font-semibold text-ink">
-        Prenez rendez-vous pour le montage
-      </p>
+      <p className="text-sm font-semibold text-ink">{title}</p>
       <p className="mt-1 text-sm text-ink-muted">
         {data.delivery_estimate ? (
           <>
@@ -185,19 +196,22 @@ export function MountingSlotPicker({
             )}
           </div>
 
-          <p className="mt-3 text-xs text-ink-muted">
-            {value ? (
-              <span className="font-semibold text-ok">
-                ✓ Rendez-vous du {formatLongDay(value.slice(0, 10))} à{" "}
-                {formatHour(value)} — confirmé à la validation de la commande.
-              </span>
-            ) : (
-              <>
-                Le rendez-vous est facultatif : sans créneau choisi, le garage
-                vous contactera pour convenir d&apos;une date.
-              </>
-            )}
-          </p>
+          {(value || optionalHint) && (
+            <p className="mt-3 text-xs text-ink-muted">
+              {value ? (
+                <span className="font-semibold text-ok">
+                  ✓ Rendez-vous du {formatLongDay(value.slice(0, 10))} à{" "}
+                  {formatHour(value)}
+                  {optionalHint ? " — confirmé à la validation de la commande." : ""}
+                </span>
+              ) : (
+                <>
+                  Le rendez-vous est facultatif : sans créneau choisi, le garage
+                  vous contactera pour convenir d&apos;une date.
+                </>
+              )}
+            </p>
+          )}
         </>
       )}
     </div>

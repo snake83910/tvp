@@ -100,3 +100,88 @@ async def dunning(
         "relanced": relanced,
         "abandoned": abandoned,
     }
+
+
+@router.post("/appointments")
+async def appointments(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_require_cron_token),
+):
+    """Relances liées aux rendez-vous de montage.
+
+    Deux passes, à lancer une fois par heure :
+
+    1. **Rappel J-1** — le client reçoit un rappel la veille du montage.
+       Le no-show est le premier coût d'un planning en ligne : un pont
+       réservé et personne devant, c'est un créneau perdu pour tout le
+       monde.
+
+    2. **Rendez-vous à risque** — le créneau approche mais la commande
+       n'est toujours pas expédiée : les pneus ont peu de chances d'être
+       au garage à temps. On prévient le client AVANT qu'il se déplace,
+       avec un lien pour décaler lui-même.
+
+    Chaque commande n'est relancée qu'une fois par créneau : les
+    horodatages sont remis à NULL quand le rendez-vous change.
+    """
+    from app.modules.garage.booking import PARIS
+    from app.modules.mailer.service import (
+        send_appointment_at_risk,
+        send_appointment_reminder,
+    )
+
+    now = datetime.now(UTC)
+    today_local = now.astimezone(PARIS).date()
+
+    # Rappel : rendez-vous entre maintenant et dans 48 h. La fenêtre est
+    # large exprès — le job tourne toutes les heures, et un rendez-vous à
+    # 8 h du matin doit être rappelé la veille, pas à 7 h le jour même.
+    reminder_horizon = now + timedelta(hours=48)
+    # À risque : le créneau tombe dans les 3 jours et rien n'est parti.
+    risk_horizon = now + timedelta(days=3)
+
+    rows = (await db.execute(
+        select(Order, User)
+        .join(User, User.id == Order.user_id)
+        .where(
+            Order.mounting_at.is_not(None),
+            Order.mounting_at > now,
+            Order.mounting_at <= risk_horizon,
+            Order.status.in_(
+                [
+                    OrderStatus.paid,
+                    OrderStatus.sent_to_supplier,
+                    OrderStatus.shipped,
+                ]
+            ),
+        )
+    )).all()
+
+    reminded = 0
+    at_risk = 0
+    for order, user in rows:
+        local_day = order.mounting_at.astimezone(PARIS).date()
+
+        # 1) Pneus pas encore expédiés à quelques jours du montage.
+        if (
+            order.status != OrderStatus.shipped
+            and order.appointment_risk_notified_at is None
+            and local_day > today_local
+        ):
+            send_appointment_at_risk(order, user)
+            order.appointment_risk_notified_at = now
+            at_risk += 1
+
+        # 2) Rappel de la veille. Envoyé même si le colis n'est pas parti :
+        #    le client a alors déjà reçu l'alerte ci-dessus et décide.
+        if (
+            order.mounting_at <= reminder_horizon
+            and order.appointment_reminded_at is None
+            and local_day <= today_local + timedelta(days=1)
+        ):
+            send_appointment_reminder(order, user)
+            order.appointment_reminded_at = now
+            reminded += 1
+
+    await db.commit()
+    return {"checked": len(rows), "reminded": reminded, "at_risk": at_risk}

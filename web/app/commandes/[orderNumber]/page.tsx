@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, use } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { AppointmentCard } from "@/components/checkout/AppointmentCard";
 import { formatEuro } from "@/lib/money";
 import {
   accountApi,
@@ -296,51 +297,10 @@ export default function OrderDetailPage(
               </p>
             </div>
 
-            {/* Rendez-vous de montage : le client doit retrouver son
-                créneau sans avoir à rouvrir l'email de confirmation. */}
+            {/* Rendez-vous de montage : le client retrouve son créneau et
+                peut le déplacer lui-même, sans appeler le garage. */}
             {order.delivery_mode === "partner_garage" && (
-              <div className="rounded-2xl border border-line bg-paper p-6 shadow-card">
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
-                  Montage
-                </p>
-                {order.garage?.name && (
-                  <p className="text-sm font-semibold text-ink">
-                    {order.garage.name}
-                  </p>
-                )}
-                {order.garage?.phone && (
-                  <p className="mt-1 text-sm text-ink-soft">
-                    Tél. :{" "}
-                    <a
-                      href={`tel:${order.garage.phone.replace(/\s/g, "")}`}
-                      className="text-signal hover:underline"
-                    >
-                      {order.garage.phone}
-                    </a>
-                  </p>
-                )}
-                {order.mounting_at ? (
-                  <p className="mt-3 rounded-lg bg-ok/10 px-3 py-2 text-sm font-semibold text-ok">
-                    Rendez-vous le{" "}
-                    {new Date(order.mounting_at).toLocaleString("fr-FR", {
-                      weekday: "long",
-                      day: "2-digit",
-                      month: "long",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    {order.mounting_note ? ` — ${order.mounting_note}` : ""}
-                  </p>
-                ) : (
-                  <p className="mt-3 text-sm text-ink-muted">
-                    Aucun rendez-vous fixé pour l&apos;instant : le garage vous
-                    contactera dès réception de vos pneus.
-                  </p>
-                )}
-                <p className="mt-2 text-xs text-ink-muted">
-                  La prestation de montage est réglée directement au garage.
-                </p>
-              </div>
+              <AppointmentCard order={order} onChange={setOrder} />
             )}
 
             {billingDiffers && (

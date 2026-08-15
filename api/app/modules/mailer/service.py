@@ -221,6 +221,9 @@ def send_garage_order_notification(order: Order, user: User) -> None:
             customer_name=customer_name,
             customer_phone=user.phone,
             items=items_view,
+            # Vide si le client n'a pas réservé de créneau : le garage
+            # lit alors la consigne « contactez le client ».
+            appointment_label=appointment_label(order),
             site_url=_site_url(),
         )
     )
@@ -330,6 +333,146 @@ def send_order_cancelled(
             order_number=order.order_number,
             reason=reason or "",
             total_ttc=round(order.total_ttc_cents / 100, 2),
+            site_url=_site_url(),
+        )
+    )
+
+
+# ─────────────────────────────────────────────────────────────────
+# Rendez-vous de montage
+# ─────────────────────────────────────────────────────────────────
+
+def appointment_label(order: Order) -> str:
+    """« vendredi 21 août 2026 à 10h30 », en heure locale du garage."""
+    from app.modules.garage.booking import PARIS
+
+    if order.mounting_at is None:
+        return ""
+    at = order.mounting_at.astimezone(PARIS)
+    jours = [
+        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+    ]
+    mois = [
+        "janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+        "août", "septembre", "octobre", "novembre", "décembre",
+    ]
+    # strftime dépend de la locale du conteneur (souvent C) : on formate
+    # à la main pour que l'email soit en français partout.
+    return (
+        f"{jours[at.weekday()]} {at.day} {mois[at.month - 1]} {at.year} "
+        f"à {at.hour}h{at.minute:02d}"
+    )
+
+
+def _appointment_context(order: Order, user: User) -> dict:
+    garage = order.garage_snapshot or {}
+    return {
+        "civilite": _civilite(user),
+        "order_number": order.order_number,
+        "order_url": f"{_site_url()}/commandes/{order.order_number}",
+        "site_url": _site_url(),
+        "appointment_label": appointment_label(order),
+        "garage_name": garage.get("name", ""),
+        "garage_address": garage.get("address", ""),
+        "garage_postal_code": garage.get("postal_code", ""),
+        "garage_city": garage.get("city", ""),
+        "garage_phone": garage.get("phone"),
+    }
+
+
+def send_appointment_confirmed(order: Order, user: User) -> None:
+    """Confirme au client le créneau de montage qu'il vient de réserver.
+
+    Envoyé à la commande ET à chaque déplacement : le dernier email reçu
+    porte toujours la date qui fait foi.
+    """
+    if order.mounting_at is None:
+        return
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject=f"Rendez-vous de montage confirmé — {order.order_number}",
+            template="appointment_confirmed.html",
+            **_appointment_context(order, user),
+        )
+    )
+
+
+def send_appointment_reminder(order: Order, user: User) -> None:
+    """Rappel la veille du montage. Le no-show est le premier coût d'un
+    planning en ligne : mieux vaut un email de trop qu'un pont vide."""
+    if order.mounting_at is None:
+        return
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject=f"Rappel : montage demain — {order.order_number}",
+            template="appointment_reminder.html",
+            **_appointment_context(order, user),
+        )
+    )
+
+
+def send_appointment_at_risk(order: Order, user: User) -> None:
+    """Prévient le client que ses pneus ne sont pas encore expédiés alors
+    que son rendez-vous approche. On le dit AVANT qu'il se déplace."""
+    if order.mounting_at is None:
+        return
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject=f"Votre rendez-vous du {appointment_label(order)} est à confirmer",
+            template="appointment_at_risk.html",
+            **_appointment_context(order, user),
+        )
+    )
+
+
+def send_appointment_changed_to_garage(
+    order: Order, user: User, previous_label: str
+) -> None:
+    """Prévient le garage qu'un client a déplacé ou annulé son créneau.
+
+    Sans cet email, le garage découvre le changement en rouvrant son
+    planning — c'est-à-dire trop tard.
+    """
+    garage = order.garage_snapshot or {}
+    to = garage.get("email")
+    if not to:
+        return
+    cancelled = order.mounting_at is None
+    customer_name = (
+        " ".join(p for p in [user.first_name, user.last_name] if p) or user.email
+    )
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=to,
+            subject=(
+                f"Rendez-vous annulé — {order.order_number}"
+                if cancelled
+                else f"Rendez-vous déplacé — {order.order_number}"
+            ),
+            template="appointment_changed_garage.html",
+            headline=(
+                "Un rendez-vous vient d'être annulé"
+                if cancelled
+                else "Un rendez-vous vient d'être déplacé"
+            ),
+            garage_name=garage.get("name", ""),
+            order_number=order.order_number,
+            previous_label=previous_label,
+            new_label=(
+                "Annulé — le créneau est de nouveau libre"
+                if cancelled
+                else appointment_label(order)
+            ),
+            customer_name=customer_name,
+            customer_phone=user.phone,
+            partner_url=f"{_site_url()}/partenaire",
             site_url=_site_url(),
         )
     )

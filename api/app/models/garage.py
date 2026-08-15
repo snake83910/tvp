@@ -101,6 +101,32 @@ class Garage(Base):
     )
 
 
+class GarageSlotBlock(Base):
+    """Plage indisponible déclarée à la main par le garage.
+
+    Complète les congés (qui portent sur des journées entières) pour les
+    indisponibilités à l'heure : rendez-vous pris par téléphone, pont
+    immobilisé, livraison à réceptionner. Sans ce garde-fou, un créneau
+    déjà occupé hors du site reste réservable en ligne — et le garage se
+    retrouve avec deux véhicules pour un pont.
+    """
+
+    __tablename__ = "garage_slot_blocks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    garage_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("garages.id", ondelete="CASCADE"), index=True
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reason: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class GarageReview(Base):
     """Avis client sur un garage partenaire (après montage)."""
 

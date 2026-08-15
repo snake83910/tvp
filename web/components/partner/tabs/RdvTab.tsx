@@ -4,6 +4,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import type { Garage, PartnerEditablePayload, PartnerOrder } from "@/lib/partner";
 import { TabHeader } from "@/components/partner/ui";
 import { AppointmentEditor } from "@/components/partner/AppointmentEditor";
+import { SlotBlocks } from "@/components/partner/SlotBlocks";
 import { DAYS } from "@/components/partner/constants";
 
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90];
@@ -95,7 +96,6 @@ export function RdvTab({
   const [cfg, setCfg] = useState({
     slot_minutes: garage.slot_minutes ?? 30,
     slot_capacity: garage.slot_capacity ?? 1,
-    appointment_lead_days: garage.appointment_lead_days ?? 1,
   });
 
   const hours = (garage.hours ?? {}) as Record<string, DayCfg>;
@@ -278,31 +278,27 @@ export function RdvTab({
             </span>
           </label>
 
-          <label className="block">
+          {/* Réglage du site, pas du centre : il engage la promesse faite
+              au client dès la fiche produit. Affiché ici pour que le
+              partenaire sache à quoi s'en tenir, mais non modifiable. */}
+          <div>
             <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-ink-muted">
               Délai après livraison
             </span>
-            <select
-              value={cfg.appointment_lead_days}
-              onChange={(e) =>
-                setCfg((c) => ({
-                  ...c,
-                  appointment_lead_days: Number(e.target.value),
-                }))
-              }
-              className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-signal"
-            >
-              {[1, 2, 3, 5, 7].map((d) => (
-                <option key={d} value={d}>
-                  J+{d} minimum
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 rounded-lg border border-line bg-paper-dim px-3 py-2 text-sm text-ink">
+              <span className="font-semibold">
+                J+{garage.appointment_lead_days ?? 1} minimum
+              </span>
+              <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-semibold text-ink-muted">
+                fixé par tousvospneus.com
+              </span>
+            </div>
             <span className="mt-1 block text-xs text-ink-muted">
               Aucun rendez-vous ne peut être pris avant ce délai après la
-              livraison estimée des pneus chez vous.
+              livraison estimée des pneus chez vous. Contactez-nous si votre
+              organisation demande un délai différent.
             </span>
-          </label>
+          </div>
         </div>
 
         {/* Aperçu de capacité */}
@@ -345,6 +341,8 @@ export function RdvTab({
           </button>
         </div>
       </form>
+
+      {garage.appointments_enabled && <SlotBlocks />}
 
       {/* Planning */}
       <div>

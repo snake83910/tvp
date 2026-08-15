@@ -1,0 +1,43 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre rendez-vous est peut-être trop tôt
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Votre rendez-vous de montage approche, mais les pneus de la commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    ne sont pas encore partis de chez notre fournisseur. Ils risquent de
+    ne pas être arrivés au garage à temps.
+  </p>
+
+  <div style="margin:20px 0;padding:16px;background:#fdf6e3;border-radius:8px;border-left:4px solid #d99e2b;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#8a6d1f;margin-bottom:6px;">
+      Rendez-vous actuel
+    </div>
+    <div style="font-size:18px;font-weight:800;color:#17181a;">
+      {{ appointment_label }}
+    </div>
+    <div style="margin-top:6px;color:#17181a;">
+      {{ garage_name }} — {{ garage_postal_code }} {{ garage_city }}
+    </div>
+  </div>
+
+  <p style="margin:0 0 20px 0;">
+    Nous préférons vous prévenir avant que vous ne vous déplaciez pour
+    rien. Vous pouvez décaler votre créneau dès maintenant, ou attendre
+    l&rsquo;email d&rsquo;expédition pour choisir en connaissance de
+    cause : nous vous le ferons parvenir dès le départ du colis.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ order_url }}"
+       style="display:inline-block;padding:12px 22px;background:#17181a;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:800;">
+      Choisir un autre créneau
+    </a>
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    L&rsquo;équipe Tous Vos Pneus
+  </p>
+{% endblock %}

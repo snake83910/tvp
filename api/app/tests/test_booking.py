@@ -7,13 +7,15 @@ Ces cas DOIVENT rester verts.
 
 Lancer : pytest app/tests/test_booking.py
 """
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 
 import pytest
 
 from app.modules.garage.booking import (
     DEFAULT_TRANSIT_DAYS,
+    PARIS,
+    _is_blocked,
     day_ranges,
     day_slot_starts,
     delivery_estimate_date,
@@ -56,9 +58,7 @@ def item(delivery_estimate=None):
 # ── Plages d'ouverture ────────────────────────────────────────────────
 
 def test_journee_simple():
-    assert day_ranges(HORAIRES, LUNDI) == [
-        (__import__("datetime").time(8, 0), __import__("datetime").time(18, 0))
-    ]
+    assert day_ranges(HORAIRES, LUNDI) == [(time(8, 0), time(18, 0))]
 
 
 def test_jour_ferme_explicitement():
@@ -141,27 +141,30 @@ def test_livraison_estimee_absente():
 
 
 def test_rdv_au_plus_tot_est_j_plus_1_apres_la_livraison():
-    g = garage()
-    first = earliest_mounting_date(g, [item("2026-08-19")], today=date(2026, 8, 15))
+    first = earliest_mounting_date(
+        garage(), date(2026, 8, 19), today=date(2026, 8, 15)
+    )
     assert first == date(2026, 8, 20)
 
 
-def test_delai_configurable_par_le_garage():
+def test_delai_configurable_cote_admin():
+    # Le délai est un réglage du site (admin), pas du garage — mais il est
+    # bien porté par la fiche garage, donc réglable centre par centre.
     g = garage(appointment_lead_days=3)
-    first = earliest_mounting_date(g, [item("2026-08-19")], today=date(2026, 8, 15))
+    first = earliest_mounting_date(g, date(2026, 8, 19), today=date(2026, 8, 15))
     assert first == date(2026, 8, 22)
 
 
 def test_delai_nul_est_ramene_a_j_plus_1():
     # Le minimum métier est J+1 : jamais le jour même de la livraison.
     g = garage(appointment_lead_days=0)
-    first = earliest_mounting_date(g, [item("2026-08-19")], today=date(2026, 8, 15))
+    first = earliest_mounting_date(g, date(2026, 8, 19), today=date(2026, 8, 15))
     assert first == date(2026, 8, 20)
 
 
 def test_sans_estimation_on_applique_un_delai_de_transport_prudent():
     today = date(2026, 8, 15)
-    first = earliest_mounting_date(garage(), [item(None)], today=today)
+    first = earliest_mounting_date(garage(), None, today=today)
     assert first == today + timedelta(days=DEFAULT_TRANSIT_DAYS + 1)
 
 
@@ -169,8 +172,58 @@ def test_estimation_perimee_ne_permet_pas_un_rdv_dans_le_passe():
     # Une date de livraison déjà dépassée (panier ancien) ne doit pas
     # ouvrir des créneaux antérieurs à aujourd'hui.
     today = date(2026, 8, 15)
-    first = earliest_mounting_date(garage(), [item("2026-07-01")], today=today)
+    first = earliest_mounting_date(garage(), date(2026, 7, 1), today=today)
     assert first > today
+
+
+def test_pneus_deja_livres_le_delai_ne_s_applique_plus():
+    # Commande expédiée : les pneus sont au garage, on peut replanifier
+    # dès demain quel que soit le délai configuré.
+    today = date(2026, 8, 15)
+    first = earliest_mounting_date(
+        garage(appointment_lead_days=7),
+        date(2026, 8, 30),
+        today=today,
+        already_delivered=True,
+    )
+    assert first == date(2026, 8, 16)
+
+
+# ── Créneaux bloqués à la main ────────────────────────────────────────
+
+def test_blocage_recouvrant_rend_le_creneau_indisponible():
+    slot = datetime(2026, 8, 17, 10, 0, tzinfo=PARIS)
+    blocks = [
+        (
+            datetime(2026, 8, 17, 9, 30, tzinfo=PARIS),
+            datetime(2026, 8, 17, 10, 15, tzinfo=PARIS),
+        )
+    ]
+    assert _is_blocked(slot, timedelta(minutes=30), blocks) is True
+
+
+def test_blocage_adjacent_ne_bloque_pas():
+    # Un blocage qui finit pile à l'heure du créneau le laisse libre :
+    # sinon poser « 9h-10h » supprimerait aussi le créneau de 10h.
+    slot = datetime(2026, 8, 17, 10, 0, tzinfo=PARIS)
+    blocks = [
+        (
+            datetime(2026, 8, 17, 9, 0, tzinfo=PARIS),
+            datetime(2026, 8, 17, 10, 0, tzinfo=PARIS),
+        )
+    ]
+    assert _is_blocked(slot, timedelta(minutes=30), blocks) is False
+
+
+def test_blocage_couvrant_la_fin_du_creneau():
+    slot = datetime(2026, 8, 17, 10, 0, tzinfo=PARIS)
+    blocks = [
+        (
+            datetime(2026, 8, 17, 10, 29, tzinfo=PARIS),
+            datetime(2026, 8, 17, 12, 0, tzinfo=PARIS),
+        )
+    ]
+    assert _is_blocked(slot, timedelta(minutes=30), blocks) is True
 
 
 @pytest.mark.parametrize("value", ["2026-08-19T10:30:00", "2026-08-19"])

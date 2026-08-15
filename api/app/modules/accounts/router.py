@@ -8,10 +8,18 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
-from app.models.order import Order
+from app.models.garage import Garage
+from app.models.order import Order, OrderStatus
 from app.models.user import Address, User
+from app.modules.garage import booking
 from app.modules.garage.booking import PARIS
+from app.modules.mailer.service import (
+    appointment_label,
+    send_appointment_changed_to_garage,
+    send_appointment_confirmed,
+)
 from app.schemas.auth import AddressIn, AddressOut, UserOut
+from app.schemas.garage import AppointmentIn, SlotsOut
 from app.schemas.order import OrderDetail, OrderItemDetail, OrderSummary
 
 router = APIRouter(prefix="/me", tags=["account"])
@@ -176,26 +184,12 @@ async def list_my_orders(
     ]
 
 
-@router.get("/orders/{order_number}", response_model=OrderDetail)
-async def get_my_order(
-    order_number: str,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """Détail d'une commande.
+def _order_detail(order: Order) -> OrderDetail:
+    """Vue détaillée d'une commande pour son propriétaire.
 
-    Sécurité : on vérifie que la commande appartient au caller. Pas
-    moyen de lire la commande de quelqu'un d'autre en devinant un
-    order_number.
+    Extraite de la route : la gestion du rendez-vous renvoie la même vue,
+    et deux constructions parallèles finiraient par diverger.
     """
-    order = await db.scalar(
-        select(Order)
-        .where(Order.order_number == order_number)
-        .options(selectinload(Order.items))
-    )
-    if order is None or order.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Commande introuvable")
-
     items_detail = []
     articles_ht_cents = 0
     articles_ttc_cents = 0
@@ -249,6 +243,135 @@ async def get_my_order(
     )
 
 
+@router.get("/orders/{order_number}", response_model=OrderDetail)
+async def get_my_order(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Détail d'une commande.
+
+    Sécurité : on vérifie que la commande appartient au caller. Pas
+    moyen de lire la commande de quelqu'un d'autre en devinant un
+    order_number.
+    """
+    order = await db.scalar(
+        select(Order)
+        .where(Order.order_number == order_number)
+        .options(selectinload(Order.items))
+    )
+    if order is None or order.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+    return _order_detail(order)
+
+
+# ── Rendez-vous de montage : le client gère le sien ────────────────
+
+# Une fois la commande livrée, le montage a eu lieu (ou n'aura plus lieu
+# via le site) : plus rien à déplacer.
+_APPOINTMENT_EDITABLE_STATUSES = {
+    OrderStatus.paid,
+    OrderStatus.sent_to_supplier,
+    OrderStatus.shipped,
+}
+# Pneus déjà partis : le délai « après livraison estimée » n'a plus de
+# sens, seul le minimum d'un jour subsiste.
+_DELIVERED_STATUSES = {OrderStatus.shipped, OrderStatus.delivered}
+
+
+async def _own_order_for_appointment(
+    order_number: str, db: AsyncSession, user: User
+) -> tuple[Order, Garage]:
+    order = await db.scalar(
+        select(Order)
+        .where(Order.order_number == order_number)
+        .options(selectinload(Order.items))
+    )
+    if order is None or order.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+    if order.garage_id is None:
+        raise HTTPException(
+            status_code=400, detail="Cette commande n'est pas montée en garage"
+        )
+    if order.status not in _APPOINTMENT_EDITABLE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Le rendez-vous de cette commande n'est plus modifiable en "
+                "ligne. Contactez directement le garage."
+            ),
+        )
+    garage = await db.get(Garage, order.garage_id)
+    if garage is None:
+        raise HTTPException(status_code=404, detail="Garage introuvable")
+    return order, garage
+
+
+@router.get("/orders/{order_number}/slots", response_model=SlotsOut)
+async def my_order_slots(
+    order_number: str,
+    days: int = 21,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Créneaux disponibles pour redéplacer le rendez-vous d'une commande.
+
+    Le panier n'existe plus à ce stade : la date au plus tôt s'appuie sur
+    la livraison estimée figée dans la commande.
+    """
+    order, garage = await _own_order_for_appointment(order_number, db, user)
+    return await booking.availability(
+        db,
+        garage,
+        order.delivery_estimate,
+        days=days,
+        already_delivered=order.status in _DELIVERED_STATUSES,
+    )
+
+
+@router.patch("/orders/{order_number}/appointment", response_model=OrderDetail)
+async def set_my_appointment(
+    order_number: str,
+    data: AppointmentIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Déplace ou annule le rendez-vous de montage de sa propre commande.
+
+    `mounting_at` à None annule le rendez-vous : le créneau redevient
+    disponible pour un autre client, et le garage est prévenu.
+    """
+    order, garage = await _own_order_for_appointment(order_number, db, user)
+    previous_label = appointment_label(order)
+
+    if data.mounting_at:
+        try:
+            order.mounting_at = await booking.reserve_slot(
+                db,
+                garage,
+                order.delivery_estimate,
+                data.mounting_at,
+                already_delivered=order.status in _DELIVERED_STATUSES,
+                exclude_order_id=order.id,
+            )
+        except booking.BookingError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    else:
+        order.mounting_at = None
+
+    # Nouveau créneau, nouvelles relances : les horodatages anti-doublon
+    # doivent repartir de zéro, sinon le rappel J-1 saute.
+    order.appointment_reminded_at = None
+    order.appointment_risk_notified_at = None
+    await db.commit()
+    await db.refresh(order)
+
+    send_appointment_changed_to_garage(order, user, previous_label)
+    if order.mounting_at is not None:
+        send_appointment_confirmed(order, user)
+    return _order_detail(order)
+
+
 @router.post("/orders/{order_number}/cancel")
 async def cancel_my_order(
     order_number: str,
@@ -262,7 +385,6 @@ async def cancel_my_order(
     navigateur) — sans ce bouton, la commande restait bloquée en
     attente jusqu'à l'annulation automatique à J+7.
     """
-    from app.models.order import OrderStatus
     from app.modules.mailer.service import send_order_cancelled
 
     order = await db.scalar(

@@ -32,10 +32,26 @@
     {% endfor %}
   </div>
 
+  {% if appointment_label %}
+  <div style="margin:20px 0;padding:14px 16px;background:#eef7ef;border-radius:8px;border-left:4px solid #2f8f4e;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#2f8f4e;margin-bottom:6px;">
+      Rendez-vous réservé par le client
+    </div>
+    <div style="font-size:17px;font-weight:800;color:#17181a;">
+      {{ appointment_label }}
+    </div>
+  </div>
+
+  <p style="margin:0 0 20px 0;">
+    Le créneau est déjà dans votre planning : rien à rappeler au client.
+    Le règlement du montage se fait directement auprès de votre garage.
+  </p>
+  {% else %}
   <p style="margin:0 0 20px 0;">
     Merci de contacter le client pour convenir d'un rendez-vous de montage.
     Le règlement du montage se fait directement auprès de votre garage.
   </p>
+  {% endif %}
 
   <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
     L'équipe Tous Vos Pneus

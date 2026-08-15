@@ -135,6 +135,21 @@ class PartnerOrder(BaseModel):
     mounting_note: str | None = None
 
 
+class SlotBlockIn(BaseModel):
+    """Plage indisponible déclarée par le garage (heures locales ISO)."""
+
+    starts_at: str
+    ends_at: str
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class SlotBlockOut(BaseModel):
+    id: uuid.UUID
+    starts_at: str
+    ends_at: str
+    reason: str | None = None
+
+
 class AppointmentIn(BaseModel):
     mounting_at: str | None = None  # ISO 8601 ; None = annuler le RDV
     note: str | None = None

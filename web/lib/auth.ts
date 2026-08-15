@@ -235,6 +235,26 @@ export const accountApi = {
   getOrder: (orderNumber: string) =>
     call<OrderDetail>(`/me/orders/${orderNumber}`, "GET", undefined, true),
 
+  /** Créneaux disponibles pour redéplacer le montage d'une commande.
+   *  La date au plus tôt s'appuie sur la livraison estimée figée dans la
+   *  commande — le panier n'existe plus à ce stade. */
+  orderSlots: (orderNumber: string) =>
+    call<import("@/lib/cart").MountingSlots>(
+      `/me/orders/${orderNumber}/slots`,
+      "GET",
+      undefined,
+      true,
+    ),
+
+  /** Déplace (ISO local) ou annule (null) son rendez-vous de montage. */
+  setOrderAppointment: (orderNumber: string, mountingAt: string | null) =>
+    call<OrderDetail>(
+      `/me/orders/${orderNumber}/appointment`,
+      "PATCH",
+      { mounting_at: mountingAt, note: null },
+      true,
+    ),
+
   cancelOrder: (orderNumber: string) =>
     call<{ status: string }>(
       `/me/orders/${orderNumber}/cancel`,

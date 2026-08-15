@@ -33,7 +33,7 @@ from app.core.security import create_password_reset_token, hash_password
 from app.core.storage import document_path, save_document
 from app.integrations.geocode import geocode, haversine_km
 from app.integrations.sirene import verify_siret
-from app.models.garage import Garage, GarageReview
+from app.models.garage import Garage, GarageReview, GarageSlotBlock
 from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
 from app.modules.auth.service import issue_token_pair
@@ -41,6 +41,7 @@ from app.modules.cart.service import find_cart_items
 from app.modules.garage import booking
 from app.modules.mailer.service import (
     send_admin_new_garage,
+    send_appointment_confirmed,
     send_password_reset,
     send_welcome,
 )
@@ -57,6 +58,8 @@ from app.schemas.garage import (
     PartnerOrderItem,
     ReviewIn,
     ReviewOut,
+    SlotBlockIn,
+    SlotBlockOut,
     SlotsOut,
 )
 
@@ -86,6 +89,10 @@ _PARTNER_LOCKED_FIELDS = frozenset(
         "email",
         "siret",
         "is_published",
+        # Le délai entre la livraison estimée et le premier rendez-vous
+        # engage la promesse faite au client sur la fiche produit : il
+        # relève de la politique du site, pas de chaque centre.
+        "appointment_lead_days",
     }
 )
 
@@ -466,7 +473,9 @@ async def garage_slots(
     if g is None:
         raise HTTPException(status_code=404, detail="Garage introuvable")
     items = await find_cart_items(db, user, x_cart_session)
-    return await booking.availability(db, g, items, days=days)
+    return await booking.availability(
+        db, g, booking.delivery_estimate_date(items), days=days
+    )
 
 
 @router.get("/garages/{slug}", response_model=GaragePublic)
@@ -636,6 +645,94 @@ async def partner_remove_photo(
     return g
 
 
+# --------------------------------------------------------------------------
+#  Créneaux bloqués à la main par le garage
+# --------------------------------------------------------------------------
+
+def _block_view(b: GarageSlotBlock) -> SlotBlockOut:
+    return SlotBlockOut(
+        id=b.id,
+        starts_at=b.starts_at.astimezone(booking.PARIS).isoformat(),
+        ends_at=b.ends_at.astimezone(booking.PARIS).isoformat(),
+        reason=b.reason,
+    )
+
+
+def _parse_local(value: str, label: str) -> datetime:
+    """Parse une date ISO saisie par le garage, en heure locale."""
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"{label} invalide") from e
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=booking.PARIS)
+    return dt.astimezone(UTC)
+
+
+@router.get("/partner/slot-blocks", response_model=list[SlotBlockOut])
+async def partner_list_slot_blocks(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    """Plages bloquées à venir. Les plages passées ne servent plus à rien
+    et encombreraient l'écran."""
+    g = await _own_garage(db, user)
+    rows = await db.scalars(
+        select(GarageSlotBlock)
+        .where(
+            GarageSlotBlock.garage_id == g.id,
+            GarageSlotBlock.ends_at > datetime.now(UTC),
+        )
+        .order_by(GarageSlotBlock.starts_at)
+    )
+    return [_block_view(b) for b in rows]
+
+
+@router.post("/partner/slot-blocks", response_model=SlotBlockOut, status_code=201)
+async def partner_add_slot_block(
+    data: SlotBlockIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    """Rend une plage horaire indisponible à la réservation en ligne.
+
+    Ne touche PAS aux rendez-vous déjà pris sur cette plage : les annuler
+    d'office reviendrait à poser un lapin à des clients sans les
+    prévenir. Le garage les déplace lui-même depuis son planning.
+    """
+    g = await _own_garage(db, user)
+    starts = _parse_local(data.starts_at, "Date de début")
+    ends = _parse_local(data.ends_at, "Date de fin")
+    if ends <= starts:
+        raise HTTPException(
+            status_code=422, detail="La fin doit être après le début"
+        )
+    b = GarageSlotBlock(
+        garage_id=g.id,
+        starts_at=starts,
+        ends_at=ends,
+        reason=(data.reason or "").strip() or None,
+    )
+    db.add(b)
+    await db.commit()
+    await db.refresh(b)
+    return _block_view(b)
+
+
+@router.delete("/partner/slot-blocks/{block_id}", status_code=204)
+async def partner_remove_slot_block(
+    block_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(_garage_user),
+):
+    g = await _own_garage(db, user)
+    b = await db.get(GarageSlotBlock, block_id)
+    if b is None or b.garage_id != g.id:
+        raise HTTPException(status_code=404, detail="Blocage introuvable")
+    await db.delete(b)
+    await db.commit()
+
+
 def _partner_order_view(order: Order, cust: User | None) -> PartnerOrder:
     name = None
     if cust:
@@ -709,6 +806,7 @@ async def partner_set_appointment(
     )
     if order is None:
         raise HTTPException(status_code=404, detail="Commande introuvable")
+    previous_at = order.mounting_at
     if data.mounting_at:
         try:
             at = datetime.fromisoformat(data.mounting_at)
@@ -725,7 +823,16 @@ async def partner_set_appointment(
     else:
         order.mounting_at = None
     order.mounting_note = (data.note or "").strip() or None
+    if order.mounting_at != previous_at:
+        # Créneau déplacé : les relances de l'ancienne date n'ont plus
+        # lieu d'être, celle-ci mérite les siennes.
+        order.appointment_reminded_at = None
+        order.appointment_risk_notified_at = None
     await db.commit()
     await db.refresh(order)
     cust = await db.get(User, order.user_id)
+    # Le client doit apprendre le nouveau créneau autrement qu'en
+    # rouvrant sa commande.
+    if cust is not None and order.mounting_at != previous_at:
+        send_appointment_confirmed(order, cust)
     return _partner_order_view(order, cust)
