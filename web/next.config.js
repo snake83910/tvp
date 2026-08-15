@@ -80,6 +80,15 @@ const nextConfig = {
         destination: '/checkout',
         permanent: true,
       },
+      {
+        // Il existait DEUX pages de commande, distinguées par un seul
+        // « s » : /commande/<n> (confirmation post-paiement, quasi vide)
+        // et /commandes/<n> (le détail réel). Elles ont fusionné dans la
+        // seconde, qui affiche la confirmation quand on arrive du tunnel.
+        source: '/commande/:orderNumber',
+        destination: '/commandes/:orderNumber?paiement=ok',
+        permanent: true,
+      },
     ];
   },
   // Proxy API → FastAPI interne.

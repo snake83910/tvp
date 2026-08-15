@@ -59,7 +59,7 @@ function RetourContent() {
           setCountdown(n);
           if (n <= 0) {
             clearInterval(interval);
-            router.push(`/commande/${orderNumber}`);
+            router.push(`/commandes/${orderNumber}?paiement=ok`);
           }
         }, 1000);
       }
@@ -75,7 +75,7 @@ function RetourContent() {
       setCountdown((n) => {
         if (n <= 1) {
           clearInterval(interval);
-          router.push(`/commande/${orderNumber}`);
+          router.push(`/commandes/${orderNumber}`);
         }
         return n - 1;
       });
@@ -146,7 +146,11 @@ function RetourContent() {
 
       {orderNumber && (
         <button
-          onClick={() => router.push(`/commande/${orderNumber}`)}
+          onClick={() =>
+            router.push(
+              `/commandes/${orderNumber}${refused ? "" : "?paiement=ok"}`,
+            )
+          }
           className="mt-8 rounded-full bg-signal px-6 py-3 text-sm font-bold text-white transition hover:bg-signal-dark"
         >
           Voir ma commande →

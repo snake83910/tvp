@@ -123,11 +123,21 @@ test("tunnel : produit → panier → connexion → checkout → paiement simul�
   if (await simulateBtn.isVisible().catch(() => false)) {
     // Dev : on va au bout — paiement simulé puis page de confirmation
     await simulateBtn.click();
-    await page.waitForURL(/\/commande\/CMD-/, { timeout: 30_000 });
+    // Page de commande UNIQUE : la confirmation post-paiement et le détail
+    // ont fusionné (elles ne se distinguaient que par un « s »).
+    await page.waitForURL(/\/commandes\/CMD-[\d-]+\?paiement=ok/, {
+      timeout: 30_000,
+    });
     const paid = await request.get(`${API}/me/orders/${orderNumber}`, {
       headers: auth,
     });
     expect((await paid.json()).status).toBe("paid");
+
+    // La confirmation s'affiche, ET le client voit enfin sa commande sans
+    // avoir à la retrouver dans son espace.
+    await expect(page.getByText(/merci pour votre commande/i)).toBeVisible();
+    await expect(page.getByText(orderNumber!)).toBeVisible();
+    await expect(page.getByText(/Total TTC/i).first()).toBeVisible();
   } else {
     // Provider réel (mode TEST) : le tunnel s'arrête à l'initialisation.
     // On annule la commande de test pour ne pas polluer le compte.

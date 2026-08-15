@@ -62,7 +62,7 @@ export default function PaymentPage(
       .getOrder(params.orderNumber)
       .then((o) => {
         if (o.status !== "pending_payment") {
-          router.replace(`/commande/${params.orderNumber}`);
+          router.replace(`/commandes/${params.orderNumber}`);
         } else {
           setOrder(o);
         }
@@ -205,7 +205,7 @@ export default function PaymentPage(
         { method: "POST" },
       );
       if (res.ok) {
-        router.push(`/commande/${params.orderNumber}`);
+        router.push(`/commandes/${params.orderNumber}?paiement=ok`);
       } else {
         const body = await res.json().catch(() => ({}));
         setError(body.detail ?? "Simulation refusée");

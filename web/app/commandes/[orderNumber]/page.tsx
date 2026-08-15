@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, use } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { useCart } from "@/components/CartProvider";
 import { AppointmentCard } from "@/components/checkout/AppointmentCard";
 import { formatEuro } from "@/lib/money";
 import {
@@ -23,6 +24,14 @@ const STATUS_LABEL: Record<string, string> = {
   refunded: "Remboursée",
 };
 
+/** Statuts pour lesquels le paiement est effectivement encaissé. */
+const PAID_STATUSES = new Set([
+  "paid",
+  "sent_to_supplier",
+  "shipped",
+  "delivered",
+]);
+
 const STATUS_COLOR: Record<string, string> = {
   pending_payment: "bg-paper-dim text-ink-soft",
   paid: "bg-ok/10 text-ok",
@@ -40,7 +49,11 @@ export default function OrderDetailPage(
 ) {
   const params = use(props.params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading } = useCurrentUser();
+  const { refresh } = useCart();
+  // Arrivée depuis le tunnel de paiement.
+  const fromPayment = searchParams.get("paiement") === "ok";
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -83,6 +96,11 @@ export default function OrderDetailPage(
   useEffect(() => {
     if (!loading && !user) router.push("/connexion");
   }, [loading, user, router]);
+
+  // Le panier a été consommé côté serveur : on remet le compteur à jour.
+  useEffect(() => {
+    if (fromPayment) refresh();
+  }, [fromPayment, refresh]);
 
   useEffect(() => {
     if (!user) return;
@@ -148,6 +166,38 @@ export default function OrderDetailPage(
     <>
       <SiteHeader />
       <main className="mx-auto max-w-4xl px-6 py-10">
+        {/* Confirmation de paiement.
+            Adossée au STATUT réel, pas au seul paramètre d'URL : la page
+            de confirmation précédente annonçait « enregistrée et payée »
+            y compris quand le paiement venait d'être REFUSÉ ou la
+            commande annulée — le tunnel y renvoyait dans les deux cas. */}
+        {fromPayment && PAID_STATUSES.has(order.status) && (
+          <div className="mb-6 flex items-start gap-4 rounded-2xl border border-ok/40 bg-ok/5 p-5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ok/15">
+              <svg viewBox="0 0 24 24" className="h-6 w-6 text-ok" fill="none" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+            <div>
+              <p className="font-display text-lg font-black text-ink">
+                Merci pour votre commande !
+              </p>
+              <p className="mt-1 text-sm text-ink-soft">
+                Votre paiement est confirmé. Un email de récapitulatif vous a
+                été envoyé — le détail ci-dessous reste consultable à tout
+                moment depuis votre espace client.
+              </p>
+            </div>
+          </div>
+        )}
+        {fromPayment && order.status === "pending_payment" && (
+          <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-800">
+            Votre paiement n&apos;est pas encore confirmé. Si vous venez de le
+            valider, patientez quelques instants et rechargez la page ; sinon,
+            vous pouvez le reprendre depuis le bouton ci-dessous.
+          </div>
+        )}
+
         <Link
           href="/compte"
           className="text-sm text-ink-muted hover:text-signal"
