@@ -7,5 +7,5 @@
 # dernière version, notamment la base de vulnérabilités de pip-audit.
 pytest==9.1.1
 pytest-asyncio==1.4.0
-ruff>=0.6
-pip-audit>=2.7
+ruff>=0.16.2
+pip-audit>=2.10.1
