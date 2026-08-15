@@ -23,6 +23,29 @@ function freshEmail(): string {
   return `e2e-invite-${Date.now()}-${Math.floor(Math.random() * 1e4)}@example.com`;
 }
 
+// Compte fixe réutilisé d'un run à l'autre : évite de consommer le quota
+// d'inscription (3/h/IP) à chaque exécution.
+const ACCOUNT_EMAIL = process.env.E2E_EMAIL || "e2e-tunnel@example.com";
+const ACCOUNT_PASSWORD = process.env.E2E_PASSWORD || "PneusE2e!2026-tvp";
+
+/** Paire de jetons valides, en créant le compte au besoin. */
+async function realSession(
+  request: APIRequestContext,
+): Promise<{ access: string; refresh: string }> {
+  const creds = { email: ACCOUNT_EMAIL, password: ACCOUNT_PASSWORD };
+  let res = await request.post(`${API}/auth/login`, { data: creds });
+  if (!res.ok()) {
+    const reg = await request.post(`${API}/auth/register`, {
+      data: { ...creds, account_type: "particulier", first_name: "Test", last_name: "E2E" },
+    });
+    expect(reg.ok(), `inscription e2e : ${reg.status()}`).toBeTruthy();
+    res = await request.post(`${API}/auth/login`, { data: creds });
+  }
+  expect(res.ok(), `login e2e : ${res.status()}`).toBeTruthy();
+  const body = await res.json();
+  return { access: body.access_token, refresh: body.refresh_token };
+}
+
 interface CatalogItem {
   supplier_ref: string;
   stock: number | null;
@@ -150,22 +173,28 @@ test("tunnel invité : panier anonyme → commande sans compte → paiement", as
 
 test("checkout invité : un client déjà connecté est renvoyé vers le tunnel complet", async ({
   page,
+  request,
 }) => {
   // Un client connecté a ses adresses enregistrées : lui créer un second
   // compte invité dupliquerait son historique sur deux identités.
   //
-  // Le test pose directement un jeton en session au lieu de dérouler une
-  // vraie commande invité. Deux raisons : la redirection testée ne dépend
-  // que de la PRÉSENCE d'un jeton (cf. getToken() dans la page), et une
-  // seconde commande consommerait le quota de /cart/checkout/guest
-  // (5 par 10 min et par IP) — le test deviendrait rouge au bout de
-  // quelques exécutions rapprochées, pour une raison sans rapport avec ce
-  // qu'il vérifie.
+  // Le test injecte une VRAIE session plutôt que de dérouler une commande
+  // invité, qui consommerait le quota de /cart/checkout/guest (5 par
+  // 10 min et par IP) et rendrait le test rouge au bout de quelques
+  // exécutions rapprochées.
+  //
+  // Elle doit être vraie, et pas un jeton bidon : au chargement, le
+  // panier appelle l'API via authFetch, qui sur 401 tente un refresh
+  // puis EFFACE les jetons. Avec un faux jeton, cet effacement pouvait
+  // précéder l'effet de redirection de la page — le test échouait alors
+  // une fois sur deux, d'autant plus que le rendu était lent.
+  const tokens = await realSession(request);
+
   await page.goto("/panier");
-  await page.evaluate(() => {
-    localStorage.setItem("tvp_access", "jeton-de-test-e2e");
-    localStorage.setItem("tvp_refresh", "refresh-de-test-e2e");
-  });
+  await page.evaluate((t) => {
+    localStorage.setItem("tvp_access", t.access);
+    localStorage.setItem("tvp_refresh", t.refresh);
+  }, tokens);
 
   await page.goto("/checkout/invite");
   await page.waitForURL(/\/checkout(\?|$)/, { timeout: 20_000 });

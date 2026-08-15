@@ -201,6 +201,14 @@ export function TyreDetail({
               {tyre.ean && <Row k="EAN" v={tyre.ean} />}
             </dl>
 
+            {/* Réassurance : reprise de l'ancienne fiche /produit lors de
+                la fusion des deux gabarits. */}
+            <ul className="space-y-2 rounded-2xl border border-line bg-paper p-6 text-sm text-ink-soft shadow-card">
+              <li>Livraison à domicile ou chez un garage partenaire</li>
+              <li>Paiement 100&nbsp;% sécurisé</li>
+              <li>Retour sous 14 jours</li>
+            </ul>
+
             <p className="text-center text-sm text-ink-muted">
               Besoin d&apos;aide pour choisir ?{" "}
               <Link href="/guide" className="font-semibold text-signal hover:underline">
@@ -222,6 +230,23 @@ export function TyreDetail({
             />
           </section>
         )}
+
+        {/* Conseil générique, complémentaire du descriptif fournisseur :
+            l'erreur d'indice est le premier motif de retour sur ce marché.
+            Récupéré de l'ancienne fiche /produit à la fusion. */}
+        <section className="mt-10 rounded-2xl border border-line bg-paper p-8 shadow-card">
+          <h2 className="font-display text-xl font-black tracking-tightest text-ink">
+            Bien choisir son pneu
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-soft">
+            Les indices de charge et de vitesse inscrits sur le flanc doivent
+            être au moins égaux à ceux préconisés sur votre carte grise. Il est
+            autorisé de monter un indice supérieur (pneu renforcé, marqué XL),
+            mais jamais inférieur. En cas de doute sur la compatibilité avec
+            votre véhicule, vérifiez la monte d&apos;origine ou rapprochez-vous
+            d&apos;un professionnel.
+          </p>
+        </section>
       </main>
     </>
   );
