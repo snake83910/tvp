@@ -6,7 +6,7 @@ import { TyreImage } from "@/components/TyreImage";
 import { TierBadge } from "@/components/TierBadge";
 import { useCompare } from "@/components/CompareProvider";
 import { brandTierLabel, type TyreResult } from "@/lib/api";
-import { productUrl } from "@/lib/slug";
+import { productUrlOrNull } from "@/lib/slug";
 import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
@@ -16,19 +16,7 @@ const SEASON: Record<string, string> = {
   inconnu: "—",
 };
 
-function link(t: TyreResult): string {
-  return t.width != null && t.aspect_ratio != null && t.diameter != null
-    ? productUrl({
-        ref: t.supplier_ref,
-        brand: t.brand,
-        model: t.model,
-        width: t.width,
-        ratio: t.aspect_ratio,
-        diameter: t.diameter,
-        category: t.category,
-      })
-    : `/produit/${encodeURIComponent(t.supplier_ref)}`;
-}
+
 
 const grade = (v: unknown) => {
   const g = String(v ?? "").toUpperCase();
@@ -98,14 +86,19 @@ export default function ComparerPage() {
                         <p className="truncate text-center text-xs text-ink-muted" title={t.model}>
                           {t.model}
                         </p>
-                        <div className="mt-2 text-center">
-                          <Link
-                            href={link(t)}
-                            className="text-xs font-semibold text-signal hover:underline"
-                          >
-                            Voir la fiche
-                          </Link>
-                        </div>
+                        {/* Pas de fiche pour un pneu dont la dimension
+                            n'a pas pu être lue : on n'affiche pas un lien
+                            qui mènerait à une impasse. */}
+                        {productUrlOrNull(t) && (
+                          <div className="mt-2 text-center">
+                            <Link
+                              href={productUrlOrNull(t)!}
+                              className="text-xs font-semibold text-signal hover:underline"
+                            >
+                              Voir la fiche
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     </th>
                   ))}

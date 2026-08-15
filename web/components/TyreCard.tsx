@@ -12,7 +12,7 @@ import { useCompare } from "@/components/CompareProvider";
 import { TyreImage } from "@/components/TyreImage";
 import { BrandLogo } from "@/components/BrandLogo";
 import { TierBadge } from "@/components/TierBadge";
-import { productUrl } from "@/lib/slug";
+import { productUrlOrNull } from "@/lib/slug";
 import { formatEuro } from "@/lib/money";
 import { CartError } from "@/lib/cart";
 
@@ -68,19 +68,13 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
   >("idle");
 
   const price = formatEuro(tyre.display_price);
-  // URL SEO-friendly avec brand/model dans le path
-  const detailHref =
-    tyre.width != null && tyre.aspect_ratio != null && tyre.diameter != null
-      ? productUrl({
-          ref: tyre.supplier_ref,
-          brand: tyre.brand,
-          model: tyre.model,
-          width: tyre.width,
-          ratio: tyre.aspect_ratio,
-          diameter: tyre.diameter,
-          category: tyre.category,
-        })
-      : `/produit/${encodeURIComponent(tyre.supplier_ref)}`;
+  // URL SEO-friendly avec brand/model dans le path — null quand le
+  // fournisseur n'a pas su lire la dimension. Ni fiche, ni ajout au
+  // panier ne sont alors possibles : le catalogue s'interroge PAR
+  // dimension. La carte reste affichée (le pneu existe) mais cesse de
+  // promettre des actions qui échoueraient.
+  const detailHref = productUrlOrNull(tyre);
+  const unusable = detailHref === null;
 
   function clamp(n: number) {
     if (Number.isNaN(n)) return Math.min(DEFAULT_QTY, maxQty);
@@ -90,11 +84,11 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function handleAdd() {
-    if (
-      tyre.width == null ||
-      tyre.aspect_ratio == null ||
-      tyre.diameter == null
-    ) {
+    if (tyre.width == null || tyre.aspect_ratio == null || tyre.diameter == null) {
+      // Ne devrait pas arriver : le bouton est désactivé dans ce cas.
+      // Garde conservée par sécurité, mais avec un message plutôt qu'un
+      // « Erreur, réessayer » qui inviterait à retenter en vain.
+      setErrorMsg("Dimension non reconnue : ce pneu ne peut pas être commandé en ligne.");
       setState("error");
       return;
     }
@@ -146,13 +140,21 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
   return (
     <article className="flex flex-col rounded-xl border border-line bg-paper p-5 shadow-card transition hover:border-signal hover:shadow-lift">
       <div className="relative mb-4">
-        <Link href={detailHref} className="block">
+        {detailHref ? (
+          <Link href={detailHref} className="block">
+            <TyreImage
+              src={tyre.image_url}
+              alt={`${tyre.brand} ${tyre.model} ${tyre.dimension}`}
+              className="h-40 w-full rounded-lg"
+            />
+          </Link>
+        ) : (
           <TyreImage
             src={tyre.image_url}
             alt={`${tyre.brand} ${tyre.model} ${tyre.dimension}`}
             className="h-40 w-full rounded-lg"
           />
-        </Link>
+        )}
         <button
           type="button"
           onClick={() => compare.toggle(tyre)}
@@ -179,13 +181,22 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
           <div className="mb-1 h-6">
             <BrandLogo brand={tyre.brand} brandSlug={tyre.brand_slug} className="h-6" />
           </div>
-          <Link
-            href={detailHref}
-            className="block truncate text-sm font-semibold text-ink hover:text-signal"
-            title={tyre.model}
-          >
-            {tyre.model}
-          </Link>
+          {detailHref ? (
+            <Link
+              href={detailHref}
+              className="block truncate text-sm font-semibold text-ink hover:text-signal"
+              title={tyre.model}
+            >
+              {tyre.model}
+            </Link>
+          ) : (
+            <p
+              className="block truncate text-sm font-semibold text-ink"
+              title={tyre.model}
+            >
+              {tyre.model}
+            </p>
+          )}
           {tyre.brand_tier && (
             <TierBadge tier={tyre.brand_tier} className="mt-1.5" />
           )}
@@ -306,14 +317,21 @@ export function TyreCard({ tyre }: { tyre: TyreResult }) {
 
         <button
           onClick={handleAdd}
-          disabled={state === "adding" || outOfStock}
+          disabled={state === "adding" || outOfStock || unusable}
+          title={
+            unusable
+              ? "Dimension non reconnue par notre fournisseur"
+              : undefined
+          }
           className={`w-full rounded-full px-5 py-2.5 text-sm font-bold text-white transition ${
             state === "done"
               ? "bg-ok"
               : "bg-signal hover:bg-signal-dark disabled:opacity-60"
           }`}
         >
-          {outOfStock
+          {unusable
+            ? "Non commandable en ligne"
+            : outOfStock
             ? "Indisponible"
             : state === "adding"
               ? "Ajout…"

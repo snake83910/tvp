@@ -6,6 +6,7 @@ import {
   formatDimension,
   parseDimSlug,
   parseProductSlug,
+  productUrlOrNull,
 } from "@/lib/slug";
 
 describe("slugify", () => {
@@ -109,4 +110,33 @@ describe("parseProductSlug", () => {
   it("renvoie null si la ref est vide", () => {
     expect(parseProductSlug("205-55-r16", "")).toBeNull();
   });
+});
+
+describe("productUrlOrNull", () => {
+  const base = {
+    supplier_ref: "REF123",
+    brand: "Michelin",
+    model: "Primacy 4",
+    width: 205 as number | null,
+    aspect_ratio: 55 as number | null,
+    diameter: 16 as number | null,
+  };
+
+  it("rend l'URL canonique quand la dimension est connue", () => {
+    expect(productUrlOrNull(base)).toBe("/pneus/205-55-r16/michelin-primacy-4-REF123");
+  });
+
+  it("garde la famille de véhicule hors auto", () => {
+    expect(productUrlOrNull({ ...base, category: "camion" })).toContain("?t=camion");
+  });
+
+  // Le fournisseur renvoie null plutôt que d'inventer une dimension qu'il
+  // n'a pas su lire. Sans URL, l'appelant doit cesser de proposer la
+  // fiche : le catalogue s'interroge PAR dimension, le lien serait mort.
+  it.each(["width", "aspect_ratio", "diameter"] as const)(
+    "renvoie null si %s manque",
+    (champ) => {
+      expect(productUrlOrNull({ ...base, [champ]: null })).toBeNull();
+    },
+  );
 });

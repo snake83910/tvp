@@ -34,6 +34,46 @@ export function productUrl(args: {
 }
 
 /**
+ * URL de fiche produit, ou `null` si le pneu n'en a pas.
+ *
+ * Le connecteur fournisseur refuse volontairement les dimensions qu'il ne
+ * sait pas lire (format pouces US, libellés exotiques) et renvoie alors
+ * width/ratio/diameter à null. Ces références apparaissent bien dans les
+ * résultats, mais aucune fiche ne peut être construite pour elles : le
+ * catalogue s'interroge PAR dimension.
+ *
+ * Renvoyer null oblige l'appelant à traiter le cas plutôt qu'à fabriquer
+ * un lien mort — ce que faisait le repli `/produit/<ref>` sans
+ * dimensions, qui menait à une impasse.
+ */
+export function productUrlOrNull(tyre: {
+  supplier_ref: string;
+  brand: string;
+  model: string;
+  width: number | null;
+  aspect_ratio: number | null;
+  diameter: number | null;
+  category?: string;
+}): string | null {
+  if (
+    tyre.width == null ||
+    tyre.aspect_ratio == null ||
+    tyre.diameter == null
+  ) {
+    return null;
+  }
+  return productUrl({
+    ref: tyre.supplier_ref,
+    brand: tyre.brand,
+    model: tyre.model,
+    width: tyre.width,
+    ratio: tyre.aspect_ratio,
+    diameter: tyre.diameter,
+    category: tyre.category,
+  });
+}
+
+/**
  * URL propre d'une page d'atterrissage dimension.
  * Ex: dimensionUrl(205, 55, 16) -> "/pneus/205-55-r16"
  */
