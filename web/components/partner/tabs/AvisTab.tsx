@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { partnerApi, type PartnerReview } from "@/lib/partner";
-import { TabHeader } from "@/components/partner/ui";
+import { TabHeader } from "@/components/garage/ui";
 
 function Stars({ rating }: { rating: number }) {
   return (

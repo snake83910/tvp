@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { PartnerOrder } from "@/lib/partner";
-import { TabHeader } from "@/components/partner/ui";
+import { TabHeader } from "@/components/garage/ui";
 import { AppointmentEditor, formatSlot } from "@/components/partner/AppointmentEditor";
 
 const STATUS_LABEL: Record<string, string> = {

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { Garage, PartnerEditablePayload } from "@/lib/partner";
-import { TabHeader } from "@/components/partner/ui";
-import { PAYMENT_METHODS } from "@/components/partner/constants";
+import { TabHeader } from "@/components/garage/ui";
+import { PAYMENT_METHODS } from "@/components/garage/constants";
 
 export function PaiementTab({
   garage,

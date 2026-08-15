@@ -8,11 +8,11 @@ import {
   type PartnerOrder,
 } from "@/lib/partner";
 import { DashboardTab } from "@/components/partner/tabs/DashboardTab";
-import { CoordonneesTab } from "@/components/partner/tabs/CoordonneesTab";
-import { HorairesTab } from "@/components/partner/tabs/HorairesTab";
-import { CongesTab } from "@/components/partner/tabs/CongesTab";
-import { TarifsTab } from "@/components/partner/tabs/TarifsTab";
-import { PaiementTab } from "@/components/partner/tabs/PaiementTab";
+import { CoordonneesTab } from "@/components/garage/CoordonneesTab";
+import { HorairesTab } from "@/components/garage/HorairesTab";
+import { CongesTab } from "@/components/garage/CongesTab";
+import { TarifsTab } from "@/components/garage/TarifsTab";
+import { PaiementTab } from "@/components/garage/PaiementTab";
 import { CommandesTab } from "@/components/partner/tabs/CommandesTab";
 import { MediaTab } from "@/components/partner/tabs/MediaTab";
 import { RdvTab } from "@/components/partner/tabs/RdvTab";

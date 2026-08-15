@@ -5,7 +5,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { api, type GaragePublic, type GarageReview } from "@/lib/api";
 import { formatEuro } from "@/lib/money";
-import { paymentLabel, vehicleLabel } from "@/components/partner/constants";
+import { paymentLabel, vehicleLabel } from "@/components/garage/constants";
 import { GarageReviewForm } from "@/components/GarageReviewForm";
 
 export const dynamic = "force-dynamic";

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { Garage, PartnerEditablePayload } from "@/lib/partner";
-import { SaveButton, TabHeader } from "@/components/partner/ui";
-import { SUPPORT_EMAIL, SUPPORT_PHONE } from "@/components/partner/constants";
+import type { Garage, GaragePayload, PartnerEditablePayload } from "@/lib/partner";
+import { Field, SaveButton, TabHeader } from "@/components/garage/ui";
+import { SUPPORT_EMAIL, SUPPORT_PHONE } from "@/components/garage/constants";
 
-/** Coordonnées du centre : lecture seule.
+/** Coordonnées du centre — partagé par l'espace partenaire et l'admin.
  *
  *  Ces informations identifient l'établissement (raison sociale, adresse
  *  géocodée, SIRET vérifié) et sont figées dans chaque commande passée
@@ -14,17 +14,40 @@ import { SUPPORT_EMAIL, SUPPORT_PHONE } from "@/components/partner/constants";
  *  affichée au client. Leur correction passe donc par l'équipe — le
  *  backend refuse d'ailleurs ces champs sur /partner/garage (403).
  *
- *  Seule la présentation, texte purement commercial, reste éditable ici. */
+ *  D'où les deux modes du MÊME composant : le partenaire lit sa fiche et
+ *  ne modifie que sa présentation ; l'admin édite tout. Un seul endroit
+ *  définit ces champs, leur ordre et leurs libellés — c'est précisément
+ *  la divergence entre les deux écrans qui avait laissé le formulaire
+ *  admin écraser les horaires du partenaire. */
 export function CoordonneesTab({
   garage,
   save,
   saving,
+  // Mode admin : les coordonnées deviennent éditables et partent par
+  // `saveIdentity`, distinct de `save` pour que le type du partenaire
+  // continue d'interdire ces champs à la compilation.
+  saveIdentity,
 }: {
   garage: Garage;
   save: (p: PartnerEditablePayload) => Promise<void>;
   saving: boolean;
+  saveIdentity?: (p: Partial<GaragePayload>) => Promise<void>;
 }) {
+  const editable = saveIdentity !== undefined;
   const [description, setDescription] = useState(garage.description ?? "");
+  const [identity, setIdentity] = useState({
+    name: garage.name,
+    address: garage.address,
+    postal_code: garage.postal_code,
+    city: garage.city,
+    phone: garage.phone ?? "",
+    email: garage.email ?? "",
+    siret: garage.siret ?? "",
+  });
+
+  function setField<K extends keyof typeof identity>(k: K, v: string) {
+    setIdentity((p) => ({ ...p, [k]: v }));
+  }
 
   const mailto =
     `mailto:${SUPPORT_EMAIL}` +
@@ -43,6 +66,46 @@ export function CoordonneesTab({
           subtitle="Ces informations apparaissent sur votre page publique et au checkout."
         />
 
+        {editable ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveIdentity!({
+                name: identity.name.trim(),
+                address: identity.address.trim(),
+                postal_code: identity.postal_code.trim(),
+                city: identity.city.trim(),
+                phone: identity.phone.trim() || null,
+                email: identity.email.trim() || null,
+                siret: identity.siret.trim() || null,
+              });
+            }}
+            className="space-y-3"
+          >
+            <Field label="Nom du centre" value={identity.name} onChange={(v) => setField("name", v)} required />
+            <Field label="Adresse" value={identity.address} onChange={(v) => setField("address", v)} required />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Code postal" value={identity.postal_code} onChange={(v) => setField("postal_code", v)} required />
+              <Field label="Ville" value={identity.city} onChange={(v) => setField("city", v)} required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Téléphone" value={identity.phone} onChange={(v) => setField("phone", v)} />
+              <Field label="Email" type="email" value={identity.email} onChange={(v) => setField("email", v)} />
+            </div>
+            <Field label="SIRET" value={identity.siret} onChange={(v) => setField("siret", v)} />
+            <p className="text-xs text-ink-muted">
+              {garage.siret_verified ? (
+                <span className="font-semibold text-ok">✓ SIRET vérifié auprès de Sirene</span>
+              ) : (
+                <span className="font-semibold text-amber-700">⚠ SIRET non vérifié auprès de Sirene</span>
+              )}
+              {garage.siret_company_name && ` — raison sociale : ${garage.siret_company_name}`}
+              . L&apos;adresse est re-géocodée et le SIRET re-vérifié à
+              l&apos;enregistrement.
+            </p>
+            <SaveButton saving={saving}>Enregistrer les coordonnées</SaveButton>
+          </form>
+        ) : (
         <dl className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-paper">
           <Row label="Nom du centre" value={garage.name} />
           <Row
@@ -64,7 +127,9 @@ export function CoordonneesTab({
             <Row label="Raison sociale" value={garage.siret_company_name} />
           )}
         </dl>
+        )}
 
+        {!editable && (
         <div className="mt-4 rounded-xl border border-line bg-paper-dim p-4">
           <p className="text-sm font-semibold text-ink">
             Une information est incorrecte ?
@@ -91,6 +156,7 @@ export function CoordonneesTab({
             )}
           </div>
         </div>
+        )}
       </div>
 
       <form

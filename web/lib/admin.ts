@@ -232,6 +232,7 @@ export const adminApi = {
     call<{ sent: number }>(`/admin/bulk-email`, "POST", { order_numbers, subject, body }),
 
   listGarages: () => call<Garage[]>("/admin/garages"),
+  getGarage: (id: string) => call<Garage>(`/admin/garages/${id}`),
   createGarage: (data: GaragePayload) => call<Garage>("/admin/garages", "POST", data),
   updateGarage: (id: string, data: Partial<GaragePayload>) =>
     call<Garage>(`/admin/garages/${id}`, "PATCH", data),

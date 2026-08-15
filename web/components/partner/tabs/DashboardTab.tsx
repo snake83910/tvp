@@ -2,7 +2,7 @@
 
 import type { Garage, PartnerOrder } from "@/lib/partner";
 import { formatEuro } from "@/lib/money";
-import { paymentLabel, vehicleLabel } from "@/components/partner/constants";
+import { paymentLabel, vehicleLabel } from "@/components/garage/constants";
 
 export function DashboardTab({
   garage,

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { Garage, PartnerEditablePayload } from "@/lib/partner";
-import { SaveButton, TabHeader } from "@/components/partner/ui";
-import { DAYS } from "@/components/partner/constants";
+import { SaveButton, TabHeader } from "@/components/garage/ui";
+import { DAYS } from "@/components/garage/constants";
 
 type DayHours = {
   open: string;

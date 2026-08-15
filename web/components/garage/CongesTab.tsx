@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Garage, PartnerEditablePayload, GarageClosure } from "@/lib/partner";
-import { SaveButton, TabHeader } from "@/components/partner/ui";
+import { SaveButton, TabHeader } from "@/components/garage/ui";
 
 export function CongesTab({
   garage,

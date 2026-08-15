@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { partnerApi, type SlotBlock } from "@/lib/partner";
-import { TabHeader } from "@/components/partner/ui";
+import { TabHeader } from "@/components/garage/ui";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");

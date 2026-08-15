@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { partnerApi, mediaUrl, type Garage } from "@/lib/partner";
-import { TabHeader } from "@/components/partner/ui";
+import { TabHeader } from "@/components/garage/ui";
 
 export function MediaTab({
   garage,

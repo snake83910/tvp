@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { Garage, PartnerEditablePayload, GaragePricingRow } from "@/lib/partner";
-import { TabHeader } from "@/components/partner/ui";
-import { VEHICLE_TYPES, vehicleLabel } from "@/components/partner/constants";
+import { TabHeader } from "@/components/garage/ui";
+import { VEHICLE_TYPES, vehicleLabel } from "@/components/garage/constants";
 
 const emptyRow: GaragePricingRow = {
   vehicle: "voiture",

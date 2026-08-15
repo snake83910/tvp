@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   adminApi,
   downloadGarageKbis,
@@ -8,9 +10,21 @@ import {
   type GaragePayload,
 } from "@/lib/admin";
 import { useToast } from "@/components/admin/Toast";
+import { errorMessage } from "@/lib/errors";
 import { formatEuro } from "@/lib/money";
 
-type FormState = {
+/**
+ * Liste des garages partenaires.
+ *
+ * L'édition vit désormais sur `/admin/garages/[id]`, où elle réutilise
+ * les onglets de l'espace partenaire. Cette page ne garde que ce qui lui
+ * revient : la vue d'ensemble et la création.
+ *
+ * La création se limite volontairement à l'identité du centre. Horaires,
+ * congés, grille tarifaire ou créneaux n'ont pas de sens avant que la
+ * fiche existe — ils se remplissent ensuite, dans l'éditeur.
+ */
+type NewGarage = {
   name: string;
   address: string;
   postal_code: string;
@@ -18,18 +32,9 @@ type FormState = {
   phone: string;
   email: string;
   siret: string;
-  mounting_price_eur: string;
-  services: string;
-  description: string;
-  is_published: boolean;
-  owner_email: string;
-  appointments_enabled: boolean;
-  slot_minutes: string;
-  slot_capacity: string;
-  appointment_lead_days: string;
 };
 
-const EMPTY: FormState = {
+const EMPTY: NewGarage = {
   name: "",
   address: "",
   postal_code: "",
@@ -37,45 +42,9 @@ const EMPTY: FormState = {
   phone: "",
   email: "",
   siret: "",
-  mounting_price_eur: "",
-  services: "",
-  description: "",
-  is_published: true,
-  owner_email: "",
-  appointments_enabled: false,
-  slot_minutes: "30",
-  slot_capacity: "1",
-  appointment_lead_days: "1",
 };
 
-function toForm(g: Garage): FormState {
-  return {
-    name: g.name,
-    address: g.address,
-    postal_code: g.postal_code,
-    city: g.city,
-    phone: g.phone ?? "",
-    email: g.email ?? "",
-    siret: g.siret ?? "",
-    mounting_price_eur: (g.mounting_price_cents / 100).toFixed(2),
-    services: (g.services ?? []).join(", "),
-    description: g.description ?? "",
-    is_published: g.is_published,
-    owner_email: "",
-    appointments_enabled: g.appointments_enabled,
-    slot_minutes: String(g.slot_minutes ?? 30),
-    slot_capacity: String(g.slot_capacity ?? 1),
-    appointment_lead_days: String(g.appointment_lead_days ?? 1),
-  };
-}
-
-function toPayload(f: FormState): GaragePayload {
-  const cents = Math.round((parseFloat(f.mounting_price_eur.replace(",", ".")) || 0) * 100);
-  // `hours` est volontairement ABSENT du payload : les horaires sont
-  // structurés par jour et saisis par le partenaire dans son espace. Ce
-  // formulaire les renvoyait autrefois en texte libre ({text: "…"}), ce
-  // qui écrasait la grille horaire — et donc, désormais, les créneaux de
-  // rendez-vous qui en sont déduits.
+function toPayload(f: NewGarage): GaragePayload {
   return {
     name: f.name.trim(),
     address: f.address.trim(),
@@ -84,72 +53,30 @@ function toPayload(f: FormState): GaragePayload {
     phone: f.phone.trim() || null,
     email: f.email.trim() || null,
     siret: f.siret.trim() || null,
-    description: f.description.trim() || null,
-    mounting_price_cents: cents,
-    services: f.services
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    is_published: f.is_published,
-    appointments_enabled: f.appointments_enabled,
-    slot_minutes: Number(f.slot_minutes) || 30,
-    slot_capacity: Number(f.slot_capacity) || 1,
-    appointment_lead_days: Number(f.appointment_lead_days) || 1,
+    // Créé non publié : la fiche est vide, et la publication suppose un
+    // contrôle du SIRET et du Kbis.
+    is_published: false,
   };
-}
-
-const DAY_LABELS: [string, string][] = [
-  ["lundi", "Lundi"],
-  ["mardi", "Mardi"],
-  ["mercredi", "Mercredi"],
-  ["jeudi", "Jeudi"],
-  ["vendredi", "Vendredi"],
-  ["samedi", "Samedi"],
-  ["dimanche", "Dimanche"],
-];
-
-/** Résumé lisible des horaires structurés du garage (lecture seule ici :
- *  c'est le partenaire qui les saisit). */
-function hoursSummary(hours: Record<string, unknown> | null | undefined): string {
-  const h = hours ?? {};
-  if (typeof h.text === "string" && h.text.trim()) return h.text.trim();
-  const parts: string[] = [];
-  for (const [key, label] of DAY_LABELS) {
-    const d = h[key] as
-      | { open?: string; close?: string; closed?: boolean; break_start?: string; break_end?: string }
-      | undefined;
-    if (!d) continue;
-    if (d.closed) {
-      parts.push(`${label} : fermé`);
-    } else if (d.open && d.close) {
-      const pause =
-        d.break_start && d.break_end ? ` (pause ${d.break_start}–${d.break_end})` : "";
-      parts.push(`${label} : ${d.open}–${d.close}${pause}`);
-    }
-  }
-  return parts.join(" · ");
 }
 
 export default function AdminGaragesPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const [garages, setGarages] = useState<Garage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<Garage | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY);
+  const [form, setForm] = useState<NewGarage>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
   // Chaîne de promesses, sans setLoading(true) synchrone : `loading`
-  // démarre à true pour le montage, et les rechargements après une
-  // création/édition se font en place, liste affichée.
+  // démarre à true pour le montage, et les rechargements se font en
+  // place, liste affichée.
   const load = useCallback(
     () =>
       adminApi
         .listGarages()
         .then(setGarages)
-        .catch((e) => {
-          toast(e instanceof Error ? e.message : "Erreur de chargement", "error");
-        })
+        .catch((e) => toast(errorMessage(e, "Erreur de chargement"), "error"))
         .finally(() => setLoading(false)),
     [toast],
   );
@@ -158,42 +85,17 @@ export default function AdminGaragesPage() {
     load();
   }, [load]);
 
-  function startCreate() {
-    setEditing(null);
-    setForm(EMPTY);
-    setShowForm(true);
-  }
-
-  function startEdit(g: Garage) {
-    setEditing(g);
-    setForm(toForm(g));
-    setShowForm(true);
-  }
-
-  async function submit(e: React.FormEvent) {
+  async function create(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = toPayload(form);
-      let garageId = editing?.id;
-      if (editing) {
-        await adminApi.updateGarage(editing.id, payload);
-        toast("Garage mis à jour", "success");
-      } else {
-        const created = await adminApi.createGarage(payload);
-        garageId = created.id;
-        toast("Garage créé", "success");
-      }
-      const ownerEmail = form.owner_email.trim();
-      if (ownerEmail && garageId) {
-        await adminApi.setGarageOwner(garageId, ownerEmail);
-        toast("Compte gérant rattaché", "success");
-      }
-      setShowForm(false);
-      await load();
+      const created = await adminApi.createGarage(toPayload(form));
+      toast("Garage créé — complétez sa fiche", "success");
+      // Droit dans l'éditeur : une fiche neuve n'a ni horaires ni tarifs,
+      // la laisser dans la liste inviterait à l'oublier en l'état.
+      router.push(`/admin/garages/${created.id}`);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Échec de l'enregistrement", "error");
-    } finally {
+      toast(errorMessage(e, "Échec de la création"), "error");
       setSaving(false);
     }
   }
@@ -205,7 +107,7 @@ export default function AdminGaragesPage() {
       toast("Garage supprimé", "success");
       await load();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Échec de la suppression", "error");
+      toast(errorMessage(e, "Échec de la suppression"), "error");
     }
   }
 
@@ -221,7 +123,10 @@ export default function AdminGaragesPage() {
           </p>
         </div>
         <button
-          onClick={startCreate}
+          onClick={() => {
+            setForm(EMPTY);
+            setShowForm(true);
+          }}
           className="rounded-lg bg-signal px-4 py-2 text-sm font-bold text-white transition hover:bg-signal-dark"
         >
           + Nouveau garage
@@ -252,7 +157,14 @@ export default function AdminGaragesPage() {
             <tbody>
               {garages.map((g) => (
                 <tr key={g.id} className="border-b border-line last:border-0">
-                  <td className="p-3 font-semibold text-ink">{g.name}</td>
+                  <td className="p-3 font-semibold text-ink">
+                    <Link
+                      href={`/admin/garages/${g.id}`}
+                      className="hover:text-signal"
+                    >
+                      {g.name}
+                    </Link>
+                  </td>
                   <td className="p-3 text-ink-soft">
                     {g.postal_code} {g.city}
                   </td>
@@ -295,12 +207,12 @@ export default function AdminGaragesPage() {
                     )}
                   </td>
                   <td className="p-3 text-right">
-                    <button
-                      onClick={() => startEdit(g)}
+                    <Link
+                      href={`/admin/garages/${g.id}`}
                       className="mr-3 font-semibold text-signal hover:underline"
                     >
                       Éditer
-                    </button>
+                    </Link>
                     <button
                       onClick={() => remove(g)}
                       className="font-semibold text-ink-muted hover:text-signal"
@@ -322,15 +234,15 @@ export default function AdminGaragesPage() {
         >
           <form
             onClick={(e) => e.stopPropagation()}
-            onSubmit={submit}
+            onSubmit={create}
             className="my-8 w-full max-w-lg rounded-2xl bg-paper p-6 shadow-lift"
           >
             <h2 className="font-display text-lg font-black text-ink">
-              {editing ? "Éditer le garage" : "Nouveau garage"}
+              Nouveau garage
             </h2>
             <p className="mb-4 mt-1 text-xs text-ink-muted">
-              Les coordonnées ci-dessous sont verrouillées côté partenaire :
-              cet écran est le seul endroit où les corriger.
+              Seule l&apos;identité du centre est demandée ici. Horaires,
+              tarifs et rendez-vous se règlent ensuite dans sa fiche.
             </p>
             <div className="space-y-3">
               <Field label="Nom" required value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -343,146 +255,7 @@ export default function AdminGaragesPage() {
                 <Field label="Téléphone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
                 <Field label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
               </div>
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <Field label="SIRET" value={form.siret} onChange={(v) => setForm({ ...form, siret: v })} />
-                </div>
-                {editing?.kbis_path ? (
-                  <button
-                    type="button"
-                    onClick={() => downloadGarageKbis(editing.id, editing.slug)}
-                    className="mb-0.5 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-signal hover:border-signal"
-                  >
-                    ↓ Kbis
-                  </button>
-                ) : (
-                  <span className="mb-2 text-xs text-ink-muted">Pas de Kbis</span>
-                )}
-              </div>
-              {editing && (
-                <div className="text-xs">
-                  <p>
-                    SIRET :{" "}
-                    {editing.siret_verified ? (
-                      <span className="font-semibold text-ok">✓ vérifié auprès de la base Sirene (actif)</span>
-                    ) : (
-                      <span className="font-semibold text-signal">⚠ non vérifié Sirene — à contrôler manuellement</span>
-                    )}
-                  </p>
-                  {editing.siret_company_name && (
-                    <p className="mt-0.5 text-ink-muted">
-                      Raison sociale Sirene :{" "}
-                      <span className="font-semibold text-ink">{editing.siret_company_name}</span>
-                    </p>
-                  )}
-                </div>
-              )}
-              <Field
-                label="Prix du montage / pneu (€ TTC)"
-                type="number"
-                value={form.mounting_price_eur}
-                onChange={(v) => setForm({ ...form, mounting_price_eur: v })}
-              />
-              <Field
-                label="Prestations (séparées par des virgules)"
-                value={form.services}
-                onChange={(v) => setForm({ ...form, services: v })}
-                placeholder="équilibrage, valve, recyclage"
-              />
-              {editing && (
-                <div className="rounded-lg border border-line bg-paper-dim p-3">
-                  <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">
-                    Horaires déclarés par le partenaire
-                  </p>
-                  <p className="mt-1 text-sm text-ink-soft">
-                    {hoursSummary(editing.hours) || "Aucun horaire renseigné."}
-                  </p>
-                  <p className="mt-1 text-xs text-ink-muted">
-                    Saisis par le garage depuis son espace. Ils déterminent
-                    les créneaux de rendez-vous proposés au checkout.
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-ink-muted">
-                  Description
-                </label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  rows={3}
-                  className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-signal"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-ink-soft">
-                <input
-                  type="checkbox"
-                  checked={form.is_published}
-                  onChange={(e) => setForm({ ...form, is_published: e.target.checked })}
-                  className="accent-signal"
-                />
-                Publié (visible au checkout)
-              </label>
-
-              {/* Prise de rendez-vous : normalement pilotée par le
-                  partenaire, réglable ici pour dépanner un centre. */}
-              <div className="rounded-lg border border-line bg-paper-dim p-3">
-                <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <input
-                    type="checkbox"
-                    checked={form.appointments_enabled}
-                    onChange={(e) =>
-                      setForm({ ...form, appointments_enabled: e.target.checked })
-                    }
-                    className="accent-signal"
-                  />
-                  Prise de rendez-vous en ligne
-                </label>
-                {form.appointments_enabled && (
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <Field
-                      label="Créneau (min)"
-                      type="number"
-                      value={form.slot_minutes}
-                      onChange={(v) => setForm({ ...form, slot_minutes: v })}
-                    />
-                    <Field
-                      label="En parallèle"
-                      type="number"
-                      value={form.slot_capacity}
-                      onChange={(v) => setForm({ ...form, slot_capacity: v })}
-                    />
-                    <Field
-                      label="Délai (J+)"
-                      type="number"
-                      value={form.appointment_lead_days}
-                      onChange={(v) => setForm({ ...form, appointment_lead_days: v })}
-                    />
-                  </div>
-                )}
-                <p className="mt-2 text-xs text-ink-muted">
-                  Durée de créneau et véhicules en parallèle sont pilotés par
-                  le partenaire depuis son espace. Le <strong>délai
-                  après livraison</strong> (J+) est verrouillé côté partenaire
-                  et ne se règle qu&apos;ici : il engage la promesse faite au
-                  client dès la fiche produit.
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-line bg-paper-dim p-3">
-                <Field
-                  label="Email du gérant (accès au portail partenaire)"
-                  type="email"
-                  value={form.owner_email}
-                  onChange={(v) => setForm({ ...form, owner_email: v })}
-                  placeholder="gerant@garage.fr"
-                />
-                <p className="mt-1 text-xs text-ink-muted">
-                  {editing?.owner_user_id
-                    ? "Un compte gérant est déjà rattaché. Saisir un email le remplace."
-                    : "Rattache (ou crée) le compte qui gérera la page et verra les commandes. Un email d'accès est envoyé si le compte est créé."}
-                </p>
-              </div>
+              <Field label="SIRET" value={form.siret} onChange={(v) => setForm({ ...form, siret: v })} />
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
@@ -498,12 +271,12 @@ export default function AdminGaragesPage() {
                 disabled={saving}
                 className="rounded-lg bg-signal px-5 py-2 text-sm font-bold text-white transition hover:bg-signal-dark disabled:opacity-60"
               >
-                {saving ? "Enregistrement…" : editing ? "Enregistrer" : "Créer"}
+                {saving ? "Création…" : "Créer et compléter"}
               </button>
             </div>
             <p className="mt-3 text-xs text-ink-muted">
-              L&apos;adresse est géocodée automatiquement à l&apos;enregistrement
-              pour le calcul du garage le plus proche.
+              L&apos;adresse est géocodée et le SIRET vérifié auprès de Sirene
+              à l&apos;enregistrement. La fiche est créée non publiée.
             </p>
           </form>
         </div>
