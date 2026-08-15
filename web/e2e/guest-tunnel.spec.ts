@@ -100,7 +100,11 @@ async function fillGuestForm(page: import("@playwright/test").Page, email: strin
   await champ("Adresse").fill("8 rue des Verifications");
   await champ("Code postal").fill("13100");
   await champ("Ville").fill("Aix-en-Provence");
-  await page.getByRole("checkbox").first().check();
+  // Ciblage par nom, pas par position : le tunnel unifié porte aussi la
+  // case « facturation identique », qui vient avant dans le DOM.
+  await page
+    .getByRole("checkbox", { name: /conditions générales/i })
+    .check();
 }
 
 test("tunnel invité : panier anonyme → commande sans compte → paiement", async ({
@@ -120,12 +124,12 @@ test("tunnel invité : panier anonyme → commande sans compte → paiement", as
   await page.goto("/panier");
   const commander = page.getByRole("link", { name: /passer commande/i });
   await expect(commander).toBeVisible();
-  await expect(commander).toHaveAttribute("href", "/checkout/invite");
+  await expect(commander).toHaveAttribute("href", "/checkout");
   await expect(page.getByRole("link", { name: /déjà un compte/i })).toBeVisible();
 
   // ── Formulaire invité ───────────────────────────────────────────────
   await commander.click();
-  await page.waitForURL(/\/checkout\/invite/);
+  await page.waitForURL(/\/checkout(\?|$)/);
   const email = freshEmail();
   await fillGuestForm(page, email);
   await page.getByRole("button", { name: /continuer vers le paiement/i }).click();
@@ -171,23 +175,19 @@ test("tunnel invité : panier anonyme → commande sans compte → paiement", as
   expect(corps.access_token ?? null).toBeNull();
 });
 
-test("checkout invité : un client déjà connecté est renvoyé vers le tunnel complet", async ({
+test("tunnel unique : l'ancienne URL redirige, et le connecté n'a pas à ressaisir son identité", async ({
   page,
   request,
 }) => {
-  // Un client connecté a ses adresses enregistrées : lui créer un second
-  // compte invité dupliquerait son historique sur deux identités.
+  // Les deux tunnels (/checkout et /checkout/invite) ont fusionné. Deux
+  // choses doivent rester vraies : l'ancienne adresse continue d'aboutir,
+  // et la page unique s'adapte — un client connecté ne doit pas se voir
+  // redemander email, nom et prénom que son compte porte déjà.
   //
-  // Le test injecte une VRAIE session plutôt que de dérouler une commande
-  // invité, qui consommerait le quota de /cart/checkout/guest (5 par
-  // 10 min et par IP) et rendrait le test rouge au bout de quelques
-  // exécutions rapprochées.
-  //
-  // Elle doit être vraie, et pas un jeton bidon : au chargement, le
-  // panier appelle l'API via authFetch, qui sur 401 tente un refresh
-  // puis EFFACE les jetons. Avec un faux jeton, cet effacement pouvait
-  // précéder l'effet de redirection de la page — le test échouait alors
-  // une fois sur deux, d'autant plus que le rendu était lent.
+  // La session injectée est une VRAIE session, pas un jeton bidon : au
+  // chargement, le panier appelle l'API via authFetch, qui sur 401 tente
+  // un refresh puis EFFACE les jetons. Le test devenait alors instable
+  // pour une raison sans rapport avec ce qu'il vérifie.
   const tokens = await realSession(request);
 
   await page.goto("/panier");
@@ -196,7 +196,12 @@ test("checkout invité : un client déjà connecté est renvoyé vers le tunnel 
     localStorage.setItem("tvp_refresh", t.refresh);
   }, tokens);
 
+  // L'ancienne URL du tunnel invité aboutit toujours.
   await page.goto("/checkout/invite");
   await page.waitForURL(/\/checkout(\?|$)/, { timeout: 20_000 });
   expect(page.url()).not.toContain("/checkout/invite");
+
+  // Et le tunnel est en mode « compte » : pas de saisie d'identité.
+  await expect(page.getByText("Vos coordonnées")).toHaveCount(0);
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
 });

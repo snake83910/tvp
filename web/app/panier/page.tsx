@@ -204,7 +204,7 @@ export default function CartPage() {
                   d'abandon en e-commerce ; la connexion reste offerte en
                   second pour ceux qui ont déjà leurs adresses enregistrées. */}
               <Link
-                href={getToken() ? "/checkout" : "/checkout/invite"}
+                href="/checkout"
                 className="mt-6 block rounded-full bg-signal py-3 text-center font-display font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
               >
                 Passer commande

@@ -70,6 +70,18 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        // Le tunnel invité et le tunnel connecté ont fusionné : /checkout
+        // gère les deux. Redirection permanente pour que les liens et
+        // favoris pointant sur l'ancienne adresse continuent d'aboutir.
+        source: '/checkout/invite',
+        destination: '/checkout',
+        permanent: true,
+      },
+    ];
+  },
   // Proxy API → FastAPI interne.
   async rewrites() {
     const dest = process.env.API_URL_INTERNAL || 'http://localhost:8000';

@@ -29,6 +29,8 @@ export function OrderSummary({
   busy,
   acceptTerms,
   onSubmit,
+  showPromo = true,
+  submitLabel,
 }: {
   items: CartItem[];
   promo: Promo | null;
@@ -47,6 +49,10 @@ export function OrderSummary({
   busy: boolean;
   acceptTerms: boolean;
   onSubmit: () => void;
+  // Masqué pour un visiteur non connecté : l'aperçu de remise
+  // (/cart/promo/validate) exige une session.
+  showPromo?: boolean;
+  submitLabel?: string;
 }) {
   return (
     <aside className="h-fit space-y-4 rounded-2xl border border-line bg-paper p-6 shadow-card">
@@ -69,7 +75,7 @@ export function OrderSummary({
         ))}
       </div>
       {/* Code promo */}
-      {promo ? (
+      {showPromo && (promo ? (
         <div className="flex items-center justify-between rounded-lg border border-ok/40 bg-ok/5 px-3 py-2 text-sm">
           <span className="font-semibold text-ok">
             🏷 {promo.code}
@@ -103,8 +109,8 @@ export function OrderSummary({
             {promoBusy ? "…" : "Appliquer"}
           </button>
         </form>
-      )}
-      {promoError && (
+      ))}
+      {showPromo && promoError && (
         <p className="rounded-lg bg-signal-light px-3 py-2 text-xs text-signal-dark">
           {promoError}
         </p>
@@ -187,7 +193,7 @@ export function OrderSummary({
         disabled={busy || !acceptTerms}
         className="w-full rounded-full bg-signal py-3 font-display font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark disabled:opacity-50"
       >
-        {busy ? "Validation…" : "Procéder au paiement"}
+        {busy ? "Validation…" : (submitLabel ?? "Procéder au paiement")}
       </button>
       <div className="space-y-1 text-center text-[11px] text-ink-muted">
         <p>🔒 Paiement sécurisé Société Générale (Sogecommerce)</p>
