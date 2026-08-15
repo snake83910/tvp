@@ -217,17 +217,35 @@ async def merge_cart(
 @router.post("/promo/validate", response_model=PromoValidateOut)
 async def validate_promo_code(
     data: PromoValidateIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User | None = Depends(get_current_user_optional),
+    x_cart_session: str | None = Header(default=None),
 ):
     """Aperçu de la remise d'un code promo sur le panier actuel.
 
     Purement informatif (UX) : le checkout re-valide de son côté.
-    Renvoie toujours 200, avec valid=False + raison si refus."""
-    cart = await db.scalar(
-        select(Cart).where(Cart.user_id == user.id)
-        .options(selectinload(Cart.items))
-    )
+    Renvoie toujours 200, avec valid=False + raison si refus.
+
+    Ouvert aux visiteurs sans compte : la commande sans compte est le
+    chemin principal du site, et leur cacher l'effet d'un code qu'ils
+    peuvent de toute façon saisir au checkout n'avait pas de sens.
+
+    D'où le quota : sans le mur de l'authentification, l'endpoint devient
+    un oracle qui dit « ce code existe ». Vingt essais par minute laissent
+    passer un client qui se trompe de casse, pas un script qui déroule un
+    dictionnaire de codes.
+    """
+    await rate_limit(request, "promo_validate", max_attempts=20, window_seconds=60)
+
+    stmt = select(Cart).options(selectinload(Cart.items))
+    if user is not None:
+        stmt = stmt.where(Cart.user_id == user.id)
+    elif x_cart_session:
+        stmt = stmt.where(Cart.session_token == x_cart_session)
+    else:
+        return PromoValidateOut(valid=False, reason="Panier vide")
+    cart = await db.scalar(stmt)
     if cart is None or not cart.items:
         return PromoValidateOut(valid=False, reason="Panier vide")
 
@@ -237,7 +255,7 @@ async def validate_promo_code(
     from app.modules.promo.service import validate_promo
     try:
         promo, discount = await validate_promo(
-            db, data.code, user.id, articles_ttc_cents
+            db, data.code, user.id if user else None, articles_ttc_cents
         )
     except ValueError as e:
         return PromoValidateOut(valid=False, reason=str(e))

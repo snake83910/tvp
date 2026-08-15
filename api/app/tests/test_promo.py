@@ -81,6 +81,33 @@ async def test_once_per_user_refuse_2e_usage():
         await validate_promo(_db(promo, uses=1), "PROMO10", uuid.uuid4(), 10000)
 
 
+# ── Aperçu sans compte (checkout invité) ──────────────────────────
+
+async def test_apercu_anonyme_ignore_once_per_user():
+    """user_id à None = visiteur sans compte : la règle « une fois par
+    client » n'est pas évaluable, faute d'identité. L'aperçu l'ignore
+    plutôt que de refuser à tort un code parfaitement valable."""
+    promo = _promo(once_per_user=True)
+    p, remise = await validate_promo(_db(promo, uses=3), "PROMO10", None, 10000)
+    assert (p.code, remise) == ("PROMO10", 1000)
+
+
+async def test_apercu_anonyme_applique_les_autres_regles():
+    """Le quota GLOBAL, lui, reste évaluable sans identité : un code
+    épuisé doit être refusé dès l'aperçu."""
+    promo = _promo(max_uses=5, once_per_user=True)
+    with pytest.raises(ValueError, match="maximum"):
+        await validate_promo(_db(promo, uses=5), "PROMO10", None, 10000)
+
+
+async def test_le_checkout_tranche_avec_le_compte_reel():
+    """La règle n'est pas perdue : au checkout, la même fonction est
+    rappelée avec le compte créé, et c'est elle qui fait foi."""
+    promo = _promo(once_per_user=True)
+    with pytest.raises(ValueError, match="déjà utilisé"):
+        await validate_promo(_db(promo, uses=1), "PROMO10", uuid.uuid4(), 10000)
+
+
 def test_split_discount_tva_20():
     ht, tva = split_discount(1200)  # 12 € TTC
     assert ht + tva == 1200

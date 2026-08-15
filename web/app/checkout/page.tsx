@@ -87,8 +87,8 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([]);
 
-  // Code promo : aperçu validé par l'API, re-vérifié au checkout.
-  // Réservé aux connectés — /cart/promo/validate exige une session.
+  // Code promo : aperçu validé par l'API, re-vérifié au checkout —
+  // avec ou sans compte.
   const [promoInput, setPromoInput] = useState("");
   const [promo, setPromo] = useState<{
     code: string;
@@ -214,6 +214,7 @@ export default function CheckoutPage() {
           delivery_mode: deliveryMode,
           garage_id: garageId,
           mounting_at: slot,
+          promo_code: promo?.code ?? null,
           accept_terms: true,
         });
         // Les jetons AVANT toute navigation : la page de paiement appelle
@@ -521,7 +522,6 @@ export default function CheckoutPage() {
             }}
             onApplyPromo={applyPromo}
             onRemovePromo={() => setPromo(null)}
-            showPromo={!isGuest}
             articlesTtc={articlesTtc}
             discountTtc={discountTtc}
             shippingTtc={shippingTtc}

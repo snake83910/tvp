@@ -29,7 +29,6 @@ export function OrderSummary({
   busy,
   acceptTerms,
   onSubmit,
-  showPromo = true,
   submitLabel,
 }: {
   items: CartItem[];
@@ -49,9 +48,6 @@ export function OrderSummary({
   busy: boolean;
   acceptTerms: boolean;
   onSubmit: () => void;
-  // Masqué pour un visiteur non connecté : l'aperçu de remise
-  // (/cart/promo/validate) exige une session.
-  showPromo?: boolean;
   submitLabel?: string;
 }) {
   return (
@@ -75,7 +71,7 @@ export function OrderSummary({
         ))}
       </div>
       {/* Code promo */}
-      {showPromo && (promo ? (
+      {promo ? (
         <div className="flex items-center justify-between rounded-lg border border-ok/40 bg-ok/5 px-3 py-2 text-sm">
           <span className="font-semibold text-ok">
             🏷 {promo.code}
@@ -109,8 +105,8 @@ export function OrderSummary({
             {promoBusy ? "…" : "Appliquer"}
           </button>
         </form>
-      ))}
-      {showPromo && promoError && (
+      )}
+      {promoError && (
         <p className="rounded-lg bg-signal-light px-3 py-2 text-xs text-signal-dark">
           {promoError}
         </p>

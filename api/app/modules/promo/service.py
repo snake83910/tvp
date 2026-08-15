@@ -38,11 +38,19 @@ async def _uses_count(
 async def validate_promo(
     db: AsyncSession,
     code: str,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     articles_ttc_cents: int,
 ) -> tuple[PromoCode, int]:
     """Renvoie (promo, remise_ttc_cents) ou lève ValueError (message FR
-    affichable tel quel au client)."""
+    affichable tel quel au client).
+
+    `user_id` à None = aperçu pour un visiteur sans compte. La seule
+    règle qui devient inévaluable est `once_per_user` : il n'y a pas
+    encore d'identité à laquelle rattacher un usage passé. Elle n'est pas
+    perdue pour autant — le checkout rappelle cette fonction avec le
+    compte réellement créé, et c'est LUI qui fait foi. L'aperçu, lui,
+    n'accorde aucune remise : il informe.
+    """
     code = normalize_code(code)
     promo = await db.scalar(
         select(PromoCode).where(PromoCode.code == code)
@@ -66,7 +74,7 @@ async def validate_promo(
         if await _uses_count(db, code) >= promo.max_uses:
             raise ValueError("Ce code promo a atteint son nombre maximum d'utilisations")
 
-    if promo.once_per_user:
+    if promo.once_per_user and user_id is not None:
         if await _uses_count(db, code, user_id) > 0:
             raise ValueError("Vous avez déjà utilisé ce code promo")
 
