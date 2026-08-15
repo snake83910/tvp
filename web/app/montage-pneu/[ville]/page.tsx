@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { GarageCard } from "@/components/garage/GarageCard";
 import { api, type GarageNearby } from "@/lib/api";
-import { formatEuro } from "@/lib/money";
 import { slugify } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
@@ -96,36 +96,7 @@ export default async function MontageVillePage(
 
         <ul className="mt-8 space-y-4">
           {list.map((g) => (
-            <li
-              key={g.id}
-              className="rounded-2xl border border-line bg-paper p-6 shadow-card transition hover:border-signal"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-display text-lg font-bold text-ink">
-                    {g.name}
-                  </h2>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    {g.address}, {g.postal_code} {g.city}
-                  </p>
-                </div>
-                {g.mounting_price_cents > 0 && (
-                  <span className="text-sm text-ink-soft">
-                    Montage{" "}
-                    <span className="font-bold text-ink">
-                      {formatEuro(g.mounting_price_cents / 100)}
-                    </span>
-                    /pneu
-                  </span>
-                )}
-              </div>
-              <Link
-                href={`/garages/${g.slug}`}
-                className="mt-4 inline-block rounded-full bg-ink px-5 py-2 text-sm font-bold text-paper transition hover:bg-signal"
-              >
-                Voir la fiche
-              </Link>
-            </li>
+            <GarageCard key={g.id} garage={g} headingLevel="h2" />
           ))}
         </ul>
 

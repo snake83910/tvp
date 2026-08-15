@@ -8,67 +8,17 @@
  * Le stock fournisseur étant réel, le test itère sur plusieurs
  * références jusqu'à en trouver une ajoutable.
  */
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { API, EMAIL, PASSWORD, findCandidates, login } from "./helpers";
 
-const API = process.env.E2E_API_URL || "http://localhost:8000";
-// Compte fixe réutilisé d'un run à l'autre : évite de consommer le
-// rate limit d'inscription (3/h/IP) à chaque exécution.
-const EMAIL = process.env.E2E_EMAIL || "e2e-tunnel@example.com";
-const PASSWORD = process.env.E2E_PASSWORD || "PneusE2e!2026-tvp";
 const DIM = { width: 205, ratio: 55, diameter: 16 };
-
-/** Crée le compte au besoin et retourne un access token API.
- * (Un seul login API par run : le rate limit est de 5/min/IP.) */
-async function ensureAccount(request: APIRequestContext): Promise<string> {
-  const login = await request.post(`${API}/auth/login`, {
-    data: { email: EMAIL, password: PASSWORD },
-  });
-  if (login.ok()) return (await login.json()).access_token;
-  const reg = await request.post(`${API}/auth/register`, {
-    data: {
-      email: EMAIL,
-      password: PASSWORD,
-      account_type: "particulier",
-      first_name: "Test",
-      last_name: "E2E",
-    },
-  });
-  expect(reg.ok(), `inscription e2e : ${reg.status()}`).toBeTruthy();
-  const retry = await request.post(`${API}/auth/login`, {
-    data: { email: EMAIL, password: PASSWORD },
-  });
-  expect(retry.ok()).toBeTruthy();
-  return (await retry.json()).access_token;
-}
-
-interface CatalogItem {
-  supplier_ref: string;
-  stock: number | null;
-}
-
-async function findCandidates(
-  request: APIRequestContext,
-): Promise<CatalogItem[]> {
-  const res = await request.get(`${API}/search/dimensions`, {
-    params: DIM,
-    timeout: 60_000,
-  });
-  expect(res.ok(), `recherche catalogue : ${res.status()}`).toBeTruthy();
-  const items: CatalogItem[] = (await res.json()).items;
-  // Stock explicite >= 2 en priorité (stock null = inconnu en liste,
-  // la fiche détaillée peut révéler un stock insuffisant à l'ajout)
-  return items
-    .filter((t) => t.stock == null || t.stock >= 2)
-    .sort((a, b) => Number(b.stock != null) - Number(a.stock != null))
-    .slice(0, 8);
-}
 
 test("tunnel : produit → panier → connexion → checkout → paiement simulé", async ({
   page,
   request,
 }) => {
-  const apiToken = await ensureAccount(request);
-  const candidates = await findCandidates(request);
+  const apiToken = (await login(request)).access;
+  const candidates = await findCandidates(request, DIM);
   expect(candidates.length, "aucun pneu 205/55R16 disponible").toBeGreaterThan(0);
 
   // ── Ajout au panier depuis la fiche produit (anonyme) ────────────

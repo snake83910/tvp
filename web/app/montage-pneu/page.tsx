@@ -2,8 +2,8 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { MontageFaq } from "@/components/montage/MontageFaq";
 import { GaragesMap } from "@/components/montage/GaragesMap";
+import { GarageCard } from "@/components/garage/GarageCard";
 import { api, type GarageNearby } from "@/lib/api";
-import { formatEuro } from "@/lib/money";
 
 export const metadata = {
   title: "Montage de pneus en garage partenaire — tousvospneus.com",
@@ -79,61 +79,6 @@ function Check() {
     >
       <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
-  );
-}
-
-function GarageCard({ g }: { g: GarageNearby }) {
-  return (
-    <li className="rounded-2xl border border-line bg-paper p-6 shadow-card transition hover:border-signal">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="font-display text-lg font-bold text-ink">{g.name}</h3>
-          <p className="mt-1 text-sm text-ink-muted">
-            {g.address}, {g.postal_code} {g.city}
-          </p>
-        </div>
-        {g.distance_km != null && (
-          <span className="shrink-0 rounded-full bg-signal-light px-3 py-1 text-xs font-bold text-signal">
-            à {g.distance_km} km
-          </span>
-        )}
-      </div>
-
-      {g.services.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {g.services.slice(0, 6).map((s) => (
-            <span
-              key={s}
-              className="rounded-full bg-paper-dim px-2.5 py-1 text-xs font-medium text-ink-soft"
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        {g.mounting_price_cents > 0 ? (
-          <span className="text-sm text-ink-soft">
-            Montage{" "}
-            <span className="font-bold text-ink">
-              {formatEuro(g.mounting_price_cents / 100)}
-            </span>
-            /pneu <span className="text-ink-muted">(réglé sur place)</span>
-          </span>
-        ) : (
-          <span className="text-sm text-ink-muted">
-            Tarif de montage indiqué sur la fiche
-          </span>
-        )}
-        <Link
-          href={`/garages/${g.slug}`}
-          className="rounded-full bg-ink px-5 py-2 text-sm font-bold text-paper transition hover:bg-signal"
-        >
-          Voir la fiche
-        </Link>
-      </div>
-    </li>
   );
 }
 
@@ -290,7 +235,7 @@ export default async function MontagePneuPage(
               <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
                 <ul className="order-2 space-y-4 lg:order-1">
                   {garages.map((g) => (
-                    <GarageCard key={g.id} g={g} />
+                    <GarageCard key={g.id} garage={g} />
                   ))}
                 </ul>
                 {mappable.length > 0 && (
