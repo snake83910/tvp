@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { invoiceError, saveBlob } from "@/lib/download";
+import { apiError } from "@/lib/errors";
 
 const BROWSER_API =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -116,16 +117,7 @@ async function call<T>(
   const res = auth
     ? await authFetch(path, init)
     : await fetch(`${BROWSER_API}${path}`, init);
-  if (!res.ok) {
-    let detail = `Erreur ${res.status}`;
-    try {
-      const b = await res.json();
-      detail = b.detail || detail;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw await apiError(res);
   if (res.status === 204 || res.headers.get("content-length") === "0") {
     return undefined as T;
   }

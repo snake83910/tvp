@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_user, get_current_user_optional
+from app.core.errors import AppError, ErrorCode
 from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.models.order import Cart
@@ -91,6 +92,18 @@ def _serialize(cart: Cart) -> CartOut:
     )
 
 
+def _checkout_error(exc: ValueError) -> AppError:
+    """Traduit un refus de checkout en erreur codée.
+
+    Les refus de créneau portent déjà leur propre code (créneau pris,
+    trop tôt, RDV désactivés) : le client peut ainsi recharger la liste
+    au lieu d'afficher un cul-de-sac. Les autres refus métier restent en
+    `bad_request`.
+    """
+    code = getattr(exc, "code", None) or ErrorCode.BAD_REQUEST
+    return AppError(status_code=400, code=code, message=str(exc))
+
+
 @router.post("/items", response_model=CartOut)
 async def add_item(
     data: AddItemIn,
@@ -108,9 +121,11 @@ async def add_item(
         # 409 et non 404 : la référence existe, c'est la quantité qui est
         # en conflit avec le stock. `available` permet au frontend de
         # proposer d'ajuster la quantité au lieu d'un cul-de-sac.
-        raise HTTPException(
+        raise AppError(
             status_code=409,
-            detail={"message": str(e), "available": e.available, "already": e.already},
+            code=ErrorCode.STOCK_INSUFFICIENT,
+            message=str(e),
+            details={"available": e.available, "already": e.already},
         ) from e
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -153,9 +168,11 @@ async def update_item(
             db, user, x_cart_session, item_id, data.quantity
         )
     except service.StockError as e:
-        raise HTTPException(
+        raise AppError(
             status_code=409,
-            detail={"message": str(e), "available": e.available, "already": e.already},
+            code=ErrorCode.STOCK_INSUFFICIENT,
+            message=str(e),
+            details={"available": e.available, "already": e.already},
         ) from e
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -191,7 +208,9 @@ async def merge_cart(
         .options(selectinload(Cart.items))
     )
     if cart is None:
-        raise HTTPException(status_code=404, detail="Panier vide")
+        raise AppError(
+            status_code=404, code=ErrorCode.CART_EMPTY, message="Panier vide"
+        )
     return _serialize(cart)
 
 
@@ -256,9 +275,10 @@ async def checkout(
             ),
         )
     if not data.accept_terms:
-        raise HTTPException(
+        raise AppError(
             status_code=400,
-            detail="Vous devez accepter les conditions générales de vente",
+            code=ErrorCode.TERMS_NOT_ACCEPTED,
+            message="Vous devez accepter les conditions générales de vente",
         )
     try:
         order, changes = await service.checkout(
@@ -269,7 +289,7 @@ async def checkout(
             mounting_at=data.mounting_at,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise _checkout_error(e) from e
  
     if order is None:
         # Prix modifiés : commande non créée, on renvoie les écarts
@@ -335,9 +355,10 @@ async def checkout_guest(
     await rate_limit(request, "guest_checkout", max_attempts=15, window_seconds=600)
 
     if not data.accept_terms:
-        raise HTTPException(
+        raise AppError(
             status_code=400,
-            detail="Vous devez accepter les conditions générales de vente",
+            code=ErrorCode.TERMS_NOT_ACCEPTED,
+            message="Vous devez accepter les conditions générales de vente",
         )
     if not x_cart_session:
         raise HTTPException(status_code=400, detail="Panier introuvable")
@@ -368,7 +389,7 @@ async def checkout_guest(
             mounting_at=data.mounting_at,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise _checkout_error(e) from e
 
     if order is None:
         # Prix modifiés : commande non créée. On rend quand même les jetons,

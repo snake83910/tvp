@@ -10,6 +10,7 @@ import { useCart } from "@/components/CartProvider";
 import { cartApi } from "@/lib/cart";
 import type { GarageNearby } from "@/lib/api";
 import { saveTokens, getToken } from "@/lib/auth";
+import { ErrorCode, errorCode, errorMessage } from "@/lib/errors";
 import { formatEuro } from "@/lib/money";
 
 /**
@@ -108,11 +109,12 @@ export default function GuestCheckoutPage() {
         router.push(`/paiement/${res.order_number}`);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Commande impossible";
-      setError(msg);
+      setError(errorMessage(err, "Commande impossible"));
       // 409 sur email connu : on ne laisse pas le client dans une impasse,
-      // on lui ouvre le chemin de la connexion, panier conservé.
-      if (/compte existe déjà/i.test(msg)) setAccountExists(true);
+      // on lui ouvre le chemin de la connexion, panier conservé. Testé sur
+      // le code et non sur le message : reformuler la phrase côté API ne
+      // doit pas faire disparaître ce chemin de sortie.
+      if (errorCode(err) === ErrorCode.emailTaken) setAccountExists(true);
     } finally {
       setBusy(false);
     }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MountingSlotPicker } from "@/components/checkout/MountingSlotPicker";
 import { accountApi, type OrderDetail } from "@/lib/auth";
+import { ErrorCode, errorCode, errorMessage } from "@/lib/errors";
 
 /** Statuts pendant lesquels le client peut encore bouger son créneau.
  *  Une fois la commande livrée, le montage a eu lieu — le backend refuse
@@ -32,6 +33,8 @@ export function AppointmentCard({
   const [slot, setSlot] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Incrémenté pour remonter le sélecteur et donc relire les créneaux.
+  const [reloadKey, setReloadKey] = useState(0);
 
   const garage = order.garage ?? {};
   const editable = EDITABLE.has(order.status);
@@ -44,7 +47,17 @@ export function AppointmentCard({
       setEditing(false);
       setSlot(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Modification impossible");
+      setError(errorMessage(e, "Modification impossible"));
+      // Le créneau visé vient d'être pris, ou n'est plus proposé (le
+      // garage a changé ses horaires entre-temps) : afficher le message
+      // sans rafraîchir laisserait le client recliquer sur une case morte.
+      if (
+        errorCode(e) === ErrorCode.slotTaken ||
+        errorCode(e) === ErrorCode.slotNotOffered
+      ) {
+        setSlot(null);
+        setReloadKey((k) => k + 1);
+      }
     } finally {
       setBusy(false);
     }
@@ -103,7 +116,7 @@ export function AppointmentCard({
           {editing ? (
             <>
               <MountingSlotPicker
-                key={order.order_number}
+                key={`${order.order_number}-${reloadKey}`}
                 orderNumber={order.order_number}
                 value={slot}
                 onChange={setSlot}

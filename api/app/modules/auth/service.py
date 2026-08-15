@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import AppError, ErrorCode
 from app.core.net import client_ip
 from app.core.password_policy import is_pwned, validate_password
 from app.core.security import (
@@ -33,9 +34,10 @@ def _client_meta(request: Request | None) -> tuple[str | None, str | None]:
 async def register_user(db: AsyncSession, data: RegisterIn) -> User:
     existing = await db.scalar(select(User).where(User.email == data.email))
     if existing:
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Un compte existe déjà avec cet email",
+            code=ErrorCode.EMAIL_TAKEN,
+            message="Un compte existe déjà avec cet email",
         )
 
     # Politique mot de passe
@@ -82,9 +84,10 @@ async def register_user(db: AsyncSession, data: RegisterIn) -> User:
         # le check-then-insert du début ne suffit pas, la contrainte
         # UNIQUE tranche. Même réponse que le doublon détecté plus haut.
         await db.rollback()
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Un compte existe déjà avec cet email",
+            code=ErrorCode.EMAIL_TAKEN,
+            message="Un compte existe déjà avec cet email",
         ) from None
     await db.refresh(user)
     return user
@@ -172,9 +175,10 @@ async def create_guest_user(
     """
     existing = await db.scalar(select(User).where(User.email == email))
     if existing:
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
+            code=ErrorCode.EMAIL_TAKEN,
+            message=(
                 "Un compte existe déjà avec cet email. "
                 "Connectez-vous pour finaliser votre commande — "
                 "votre panier est conservé."

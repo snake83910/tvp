@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_user
+from app.core.errors import AppError, ErrorCode
 from app.db.session import get_db
 from app.models.garage import Garage
 from app.models.order import Order, OrderStatus
@@ -294,9 +295,10 @@ async def _own_order_for_appointment(
             status_code=400, detail="Cette commande n'est pas montée en garage"
         )
     if order.status not in _APPOINTMENT_EDITABLE_STATUSES:
-        raise HTTPException(
+        raise AppError(
             status_code=400,
-            detail=(
+            code=ErrorCode.APPOINTMENT_LOCKED,
+            message=(
                 "Le rendez-vous de cette commande n'est plus modifiable en "
                 "ligne. Contactez directement le garage."
             ),
@@ -355,7 +357,7 @@ async def set_my_appointment(
                 exclude_order_id=order.id,
             )
         except booking.BookingError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise AppError(status_code=400, code=e.code, message=str(e)) from e
     else:
         order.mounting_at = None
 

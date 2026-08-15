@@ -1,6 +1,7 @@
 "use client";
 
 import { authFetch, saveTokens } from "@/lib/auth";
+import { apiError } from "@/lib/errors";
 import type { Garage, PartnerEditablePayload } from "@/lib/admin";
 
 export interface PartnerRegisterData {
@@ -32,16 +33,7 @@ export async function partnerRegister(data: PartnerRegisterData): Promise<void> 
 
   // Pas de Content-Type manuel : le navigateur pose le boundary multipart.
   const res = await authFetch("/partner/register", { method: "POST", body: fd });
-  if (!res.ok) {
-    let detail = `Erreur ${res.status}`;
-    try {
-      const b = await res.json();
-      detail = b.detail || detail;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw await apiError(res);
   const r = (await res.json()) as { access_token: string; refresh_token: string };
   saveTokens(r.access_token, r.refresh_token);
 }
@@ -52,16 +44,7 @@ async function call<T>(path: string, method = "GET", body?: unknown): Promise<T>
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    let detail = `Erreur ${res.status}`;
-    try {
-      const b = await res.json();
-      detail = b.detail || detail;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw await apiError(res);
   return res.json() as Promise<T>;
 }
 
@@ -103,7 +86,7 @@ async function upload(path: string, file: File): Promise<Garage> {
   const fd = new FormData();
   fd.append("file", file);
   const res = await authFetch(path, { method: "POST", body: fd });
-  if (!res.ok) throw new Error(`Erreur ${res.status}`);
+  if (!res.ok) throw await apiError(res);
   return res.json() as Promise<Garage>;
 }
 
@@ -141,7 +124,7 @@ export const partnerApi = {
     call<SlotBlock>("/partner/slot-blocks", "POST", { starts_at, ends_at, reason }),
   removeSlotBlock: async (id: string) => {
     const res = await authFetch(`/partner/slot-blocks/${id}`, { method: "DELETE" });
-    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+    if (!res.ok) throw await apiError(res);
   },
   addPhoto: (file: File) => upload("/partner/garage/photos", file),
   removePhoto: (path: string) =>

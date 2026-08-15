@@ -10,6 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.cache import get_redis
 from app.core.config import settings
+from app.core.errors import install_error_handlers
 from app.db.session import SessionLocal
 
 
@@ -131,6 +132,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Format d'erreur unique : toute sortie d'erreur porte un `code` stable
+# que les clients peuvent tester, au lieu du message français.
+install_error_handlers(app)
 
 # CORS : le navigateur charge le site depuis une origine (ex.
 # http://localhost:3000) et appelle l'API sur une autre

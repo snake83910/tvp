@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import ErrorCode
 from app.models.garage import Garage, GarageSlotBlock
 from app.models.order import CartItem, Order, OrderStatus
 
@@ -57,7 +58,16 @@ _ACTIVE_STATUSES = (
 
 
 class BookingError(ValueError):
-    """Créneau refusé (fermé, complet, trop tôt, RDV désactivés)."""
+    """Créneau refusé (fermé, complet, trop tôt, RDV désactivés).
+
+    Porte un `code` (voir `ErrorCode`) : c'est lui qui permet au client de
+    réagir — recharger la liste des créneaux quand celui visé vient
+    d'être pris, plutôt que de se contenter d'afficher un message.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _parse_hhmm(value: object) -> time | None:
@@ -287,13 +297,18 @@ async def reserve_slot(
     réel, ou si le créneau est complet.
     """
     if not garage.appointments_enabled:
-        raise BookingError("Ce garage ne propose pas la prise de rendez-vous en ligne")
+        raise BookingError(
+            ErrorCode.APPOINTMENTS_DISABLED,
+            "Ce garage ne propose pas la prise de rendez-vous en ligne",
+        )
 
     if isinstance(mounting_at, str):
         try:
             requested = datetime.fromisoformat(mounting_at)
         except ValueError as e:
-            raise BookingError("Date de rendez-vous invalide") from e
+            raise BookingError(
+                ErrorCode.VALIDATION_ERROR, "Date de rendez-vous invalide"
+            ) from e
     else:
         requested = mounting_at
     # Une saisie sans fuseau est de l'heure locale du garage.
@@ -308,11 +323,14 @@ async def reserve_slot(
         garage, estimate, already_delivered=already_delivered
     ):
         raise BookingError(
+            ErrorCode.SLOT_TOO_EARLY,
             "Ce créneau est trop tôt : le montage ne peut pas être planifié "
-            "avant la livraison des pneus au garage"
+            "avant la livraison des pneus au garage",
         )
     if requested not in day_slot_starts(garage, d):
-        raise BookingError("Ce créneau n'est pas proposé par le garage")
+        raise BookingError(
+            ErrorCode.SLOT_NOT_OFFERED, "Ce créneau n'est pas proposé par le garage"
+        )
 
     duration = timedelta(minutes=max(5, garage.slot_minutes or 30))
 
@@ -326,7 +344,9 @@ async def reserve_slot(
     if _is_blocked(
         requested, duration, await _blocks(db, garage.id, requested, requested + duration)
     ):
-        raise BookingError("Ce créneau n'est plus disponible. Choisissez-en un autre.")
+        raise BookingError(
+            ErrorCode.SLOT_TAKEN, "Ce créneau n'est plus disponible. Choisissez-en un autre."
+        )
 
     counts = await _booked_counts(
         db,
@@ -338,6 +358,8 @@ async def reserve_slot(
         exclude_order_id=exclude_order_id,
     )
     if counts.get(requested, 0) >= max(1, garage.slot_capacity or 1):
-        raise BookingError("Ce créneau vient d'être réservé. Choisissez-en un autre.")
+        raise BookingError(
+            ErrorCode.SLOT_TAKEN, "Ce créneau vient d'être réservé. Choisissez-en un autre."
+        )
 
     return requested.astimezone(UTC)

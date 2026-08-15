@@ -1,18 +1,27 @@
 "use client";
 
 import { authFetch, getToken } from "@/lib/auth";
+import { ApiError, apiError } from "@/lib/errors";
 
 const CART_SESSION_KEY = "tvp_cart_session";
 
-/** Erreur d'appel panier. `available` n'est renseigné que sur les conflits
- *  de stock (409) : il porte la quantité encore commandable, ce qui permet
- *  à l'appelant de proposer un ajustement plutôt qu'un simple refus. */
-export class CartError extends Error {
-  available?: number;
-  constructor(message: string, available?: number) {
-    super(message);
+/** Erreur d'appel panier.
+ *
+ *  Hérite d'ApiError : elle porte donc le `code` du backend
+ *  (`stock_insufficient`, `cart_empty`…) comme n'importe quelle autre
+ *  erreur d'API. `available` est un raccourci vers `details.available`,
+ *  renseigné sur les conflits de stock — il porte la quantité encore
+ *  commandable, ce qui permet de proposer un ajustement plutôt qu'un
+ *  simple refus. */
+export class CartError extends ApiError {
+  constructor(e: ApiError) {
+    super(e.code, e.message, e.status, e.details);
     this.name = "CartError";
-    this.available = available;
+  }
+
+  get available(): number | undefined {
+    const v = this.details.available;
+    return typeof v === "number" ? v : undefined;
   }
 }
 
@@ -102,26 +111,9 @@ async function call<T>(
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    let detail = `Erreur ${res.status}`;
-    let available: number | undefined;
-    try {
-      const b = await res.json();
-      // `detail` est une chaîne pour la plupart des erreurs, mais un objet
-      // pour les conflits de stock (409), où le backend joint la quantité
-      // encore disponible. Interpoler l'objet donnerait « [object Object] »
-      // à l'utilisateur, d'où le tri explicite.
-      if (b.detail && typeof b.detail === "object") {
-        detail = b.detail.message || detail;
-        if (typeof b.detail.available === "number") available = b.detail.available;
-      } else {
-        detail = b.detail || detail;
-      }
-    } catch {
-      /* ignore */
-    }
-    throw new CartError(detail, available);
-  }
+  // Le backend renvoie une enveloppe unique : plus de tri manuel entre
+  // `detail` chaîne et `detail` objet, le contexte est dans `details`.
+  if (!res.ok) throw new CartError(await apiError(res));
   const data = (await res.json()) as T & {
     session_token?: string | null;
   };

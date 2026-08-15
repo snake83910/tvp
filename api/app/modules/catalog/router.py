@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_get, cache_set
 from app.core.deps import get_current_user_optional
+from app.core.errors import AppError, ErrorCode
 from app.db.session import get_db
 from app.integrations.supplier_base import VEHICLE_CATEGORIES
 from app.models.catalog import PricingRule
@@ -274,21 +275,29 @@ async def search_by_plate(
                 timeout=15,
             )
     except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Service immatriculation indisponible : {exc}"
+        raise AppError(
+            status_code=502,
+            code=ErrorCode.PLATE_LOOKUP_UNAVAILABLE,
+            message="Service immatriculation indisponible.",
         ) from exc
 
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Plaque non trouvée")
     if resp.status_code == 403:
-        raise HTTPException(
+        raise AppError(
             status_code=503,
-            detail="Service immatriculation temporairement indisponible. Veuillez saisir vos dimensions manuellement.",
+            code=ErrorCode.PLATE_LOOKUP_UNAVAILABLE,
+            message=(
+                "Service immatriculation temporairement indisponible. "
+                "Veuillez saisir vos dimensions manuellement."
+            ),
         )
     if resp.status_code != 200:
-        raise HTTPException(
+        raise AppError(
             status_code=502,
-            detail=f"Service immatriculation : erreur {resp.status_code}",
+            code=ErrorCode.PLATE_LOOKUP_UNAVAILABLE,
+            message="Service immatriculation indisponible.",
+            details={"upstream_status": resp.status_code},
         )
 
     raw: list[dict] = resp.json()

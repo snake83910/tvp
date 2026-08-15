@@ -28,6 +28,7 @@ from app.core.deps import (
     get_db,
     require_role,
 )
+from app.core.errors import AppError, ErrorCode
 from app.core.rate_limit import rate_limit
 from app.core.security import create_password_reset_token, hash_password
 from app.core.storage import document_path, save_document
@@ -520,8 +521,10 @@ async def partner_register(
         )
     existing = await db.scalar(select(User).where(User.email == email))
     if existing is not None:
-        raise HTTPException(
-            status_code=409, detail="Un compte existe déjà avec cet email"
+        raise AppError(
+            status_code=409,
+            code=ErrorCode.EMAIL_TAKEN,
+            message="Un compte existe déjà avec cet email",
         )
     # Vérification Sirene (best-effort : n'empêche jamais l'inscription).
     sirene = await verify_siret(siret_clean)
@@ -567,8 +570,10 @@ async def partner_register(
 async def _own_garage(db: AsyncSession, user: User) -> Garage:
     g = await db.scalar(select(Garage).where(Garage.owner_user_id == user.id))
     if g is None:
-        raise HTTPException(
-            status_code=404, detail="Aucun garage associé à ce compte"
+        raise AppError(
+            status_code=404,
+            code=ErrorCode.NO_GARAGE_FOR_ACCOUNT,
+            message="Aucun garage associé à ce compte",
         )
     return g
 
@@ -596,13 +601,17 @@ async def partner_update_garage(
     # silencieusement ignorée — sinon le partenaire croit avoir enregistré.
     locked = _PARTNER_LOCKED_FIELDS & fields.keys()
     if locked:
-        raise HTTPException(
+        raise AppError(
             status_code=403,
-            detail=(
+            code=ErrorCode.GARAGE_FIELDS_LOCKED,
+            message=(
                 "Les coordonnées du centre ne sont modifiables que par "
                 "l'équipe tousvospneus.com. Contactez-nous pour toute "
                 "correction."
             ),
+            # Le front sait ainsi quels champs afficher en lecture seule
+            # sans dupliquer la liste.
+            details={"fields": sorted(locked)},
         )
     for k, v in fields.items():
         setattr(g, k, v)

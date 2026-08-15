@@ -1,3 +1,5 @@
+import { apiError } from "@/lib/errors";
+
 /**
  * Client API vers le backend FastAPI.
  *
@@ -114,6 +116,14 @@ export interface SearchResponse {
   facets: SearchFacets;
 }
 
+export interface GaragePricingRow {
+  vehicle: string;
+  size_min: number;
+  size_max: number;
+  price_cents: number;
+  label?: string;
+}
+
 export interface GarageNearby {
   id: string;
   name: string;
@@ -124,6 +134,8 @@ export interface GarageNearby {
   phone: string | null;
   hours: Record<string, string>;
   mounting_price_cents: number;
+  // Grille tarifaire par type de véhicule et diamètre de jante.
+  pricing: GaragePricingRow[];
   services: string[];
   photo_url: string | null;
   lat: number | null;
@@ -176,10 +188,6 @@ export interface VehicleDimension {
   speed_rating: string;
 }
 
-export interface ApiError {
-  detail: string;
-}
-
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -192,16 +200,7 @@ async function request<T>(
     },
     cache: "no-store",
   });
-  if (!res.ok) {
-    let detail = `Erreur ${res.status}`;
-    try {
-      const body = (await res.json()) as ApiError;
-      detail = body.detail || detail;
-    } catch {
-      /* corps non JSON */
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw await apiError(res);
   return res.json() as Promise<T>;
 }
 

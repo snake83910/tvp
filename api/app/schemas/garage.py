@@ -183,6 +183,10 @@ class GarageNearby(BaseModel):
     phone: str | None = None
     hours: dict = {}
     mounting_price_cents: int = 0
+    # Grille tarifaire : permet d'estimer le coût du montage pour la
+    # dimension consultée, au lieu d'un prix moyen. Déjà publique sur la
+    # fiche garage — rien de nouveau n'est exposé ici.
+    pricing: list[dict] = []
     services: list[str] = []
     photo_url: str | None = None
     # Coordonnées : nécessaires pour placer le garage sur la carte publique.

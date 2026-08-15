@@ -8,6 +8,7 @@ import { TierBadge } from "@/components/TierBadge";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PriceComparator } from "@/components/PriceComparator";
+import { MountingOffer } from "@/components/MountingOffer";
 import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
@@ -170,6 +171,8 @@ export function TyreDetail({
 
               <ProductActions tyre={tyre} />
             </div>
+
+            <MountingOffer tyre={tyre} />
 
             <PriceComparator
               ourPriceTtc={tyre.price_ttc}

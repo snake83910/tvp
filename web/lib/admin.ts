@@ -3,6 +3,7 @@
 import { authFetch } from "@/lib/auth";
 import type { OrderDetail } from "@/lib/auth";
 import { invoiceError, saveBlob } from "@/lib/download";
+import { apiError } from "@/lib/errors";
 
 async function call<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const res = await authFetch(path, {
@@ -10,14 +11,7 @@ async function call<T>(path: string, method = "GET", body?: unknown): Promise<T>
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    let detail = `Erreur ${res.status}`;
-    try {
-      const b = await res.json();
-      detail = b.detail || detail;
-    } catch { /* ignore */ }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw await apiError(res);
   return res.json() as Promise<T>;
 }
 

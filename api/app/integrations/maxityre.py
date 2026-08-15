@@ -76,6 +76,15 @@ async def aclose_shared_client() -> None:
     _client = None
 
 
+class SupplierUnconfiguredError(RuntimeError):
+    """Le connecteur fournisseur n'a pas ses identifiants.
+
+    Distinct d'une panne : réessayer n'y changera rien, c'est une erreur
+    de déploiement. Le message technique reste dans les logs, jamais
+    renvoyé au client.
+    """
+
+
 class MaxityreConnector(SupplierConnector):
     name = "maxityre"
 
@@ -91,7 +100,7 @@ class MaxityreConnector(SupplierConnector):
             return  # jeton encore valide
 
         if not settings.maxityre_username or not settings.maxityre_password:
-            raise RuntimeError(
+            raise SupplierUnconfiguredError(
                 "Identifiants Maxityre manquants : configurer "
                 "MAXITYRE_USERNAME / MAXITYRE_PASSWORD dans .env"
             )

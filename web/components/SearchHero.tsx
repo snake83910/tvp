@@ -9,6 +9,7 @@ import {
   type VehicleCategory,
   type VehicleDimension,
 } from "@/lib/api";
+import { ErrorCode, errorCode, errorMessage } from "@/lib/errors";
 
 // Valeurs standard du marché PAR FAMILLE de véhicule : un <select>
 // élimine les fautes de frappe (« 2055 »), les recherches vides, et
@@ -194,17 +195,15 @@ export function SearchHero({
         setPlateDims(dims);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Plaque non reconnue.";
-      if (msg.includes("non configurée") || msg.includes("non configur")) {
-        setPlateError(
-          "La recherche par plaque n'est pas encore disponible. Utilisez l'onglet « Dimensions » pour saisir votre taille de pneu."
-        );
-      } else if (msg.includes("indisponible") || msg.includes("503") || msg.includes("502")) {
+      // Service d'immatriculation en panne : on renvoie vers la saisie
+      // manuelle plutôt que d'afficher un message technique. Le code est
+      // stable, contrairement au texte qu'on testait auparavant.
+      if (errorCode(err) === ErrorCode.plateLookupUnavailable) {
         setPlateError(
           "Service momentanément indisponible. Utilisez l'onglet « Dimensions » pour saisir votre taille de pneu."
         );
       } else {
-        setPlateError(msg);
+        setPlateError(errorMessage(err, "Plaque non reconnue."));
       }
     } finally {
       setPlateLoading(false);

@@ -5,9 +5,12 @@ même cache : avant ça, chaque ajout au panier relançait une recherche
 Maxityre complète (jusqu'à MAXITYRE_MAX_PAGES pages) pour retrouver
 UNE référence déjà présente dans le cache de la recherche.
 """
+import httpx
+
 from app.core.cache import cache_get, cache_set
 from app.core.config import settings
-from app.integrations.maxityre import MaxityreConnector
+from app.core.errors import AppError, ErrorCode
+from app.integrations.maxityre import MaxityreConnector, SupplierUnconfiguredError
 
 connector = MaxityreConnector()
 
@@ -40,9 +43,29 @@ async def load_dimension_catalog(
     cache_key = dimension_cache_key(width, ratio, diameter, category)
     raw_items = await cache_get(cache_key)
     if raw_items is None:
-        tyres = await connector.search_by_dimension(
-            width, ratio, diameter, category
-        )
+        # Une panne fournisseur ne doit pas ressortir en « Internal Server
+        # Error » : le client ne peut rien y faire, mais il a le droit de
+        # savoir que le problème n'est pas chez lui. Codes distincts pour
+        # que le front sache s'il faut réessayer (panne) ou pas (config).
+        try:
+            tyres = await connector.search_by_dimension(
+                width, ratio, diameter, category
+            )
+        except SupplierUnconfiguredError as e:
+            raise AppError(
+                status_code=503,
+                code=ErrorCode.SUPPLIER_UNCONFIGURED,
+                message="Le catalogue n'est pas disponible pour le moment.",
+            ) from e
+        except (httpx.HTTPError, TimeoutError) as e:
+            raise AppError(
+                status_code=503,
+                code=ErrorCode.SUPPLIER_UNAVAILABLE,
+                message=(
+                    "Le catalogue est momentanément indisponible. "
+                    "Réessayez dans quelques instants."
+                ),
+            ) from e
         raw_items = [t.__dict__ for t in tyres]
         await cache_set(cache_key, raw_items, settings.maxityre_cache_ttl)
     return raw_items

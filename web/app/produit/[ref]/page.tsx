@@ -5,6 +5,7 @@ import { ProductActions } from "@/components/ProductActions";
 import { TyreImage } from "@/components/TyreImage";
 import { EuLabel } from "@/components/EuLabel";
 import { PriceComparator } from "@/components/PriceComparator";
+import { MountingOffer } from "@/components/MountingOffer";
 import { api } from "@/lib/api";
 import { formatEuro } from "@/lib/money";
 
@@ -173,6 +174,8 @@ export default async function ProductPage(
                   </div>
                   <ProductActions tyre={tyre} />
                 </div>
+
+                <MountingOffer tyre={tyre} />
 
                 <PriceComparator
                   ourPriceTtc={tyre.price_ttc}

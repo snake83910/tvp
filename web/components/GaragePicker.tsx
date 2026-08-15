@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type GarageNearby } from "@/lib/api";
+import { useLocalValue } from "@/lib/localStore";
+import { isPostcode, POSTCODE_KEY } from "@/lib/mounting";
 import { formatEuro } from "@/lib/money";
 
 /** Recherche des garages partenaires les plus proches d'un code postal et
@@ -13,10 +15,26 @@ export function GaragePicker({
   selectedId: string | null;
   onSelect: (g: GarageNearby | null) => void;
 }) {
+  // Code postal déjà saisi sur la fiche produit : on ne le redemande pas.
+  const saved = useLocalValue(POSTCODE_KEY);
   const [postcode, setPostcode] = useState("");
   const [garages, setGarages] = useState<GarageNearby[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!saved || !isPostcode(saved)) return;
+    let cancelled = false;
+    api
+      .nearestGarages(saved)
+      .then((r) => !cancelled && setGarages(r))
+      .catch(() => {
+        /* recherche manuelle toujours possible */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [saved]);
 
   async function search() {
     const cp = postcode.trim();
@@ -58,7 +76,7 @@ export function GaragePicker({
             }
           }}
           inputMode="numeric"
-          placeholder="Votre code postal"
+          placeholder={saved && isPostcode(saved) ? saved : "Votre code postal"}
           className="h-11 flex-1 rounded-lg border border-line bg-paper px-3 text-sm outline-none focus:border-signal"
         />
         <button
