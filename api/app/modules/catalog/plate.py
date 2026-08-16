@@ -129,11 +129,18 @@ async def usage_today() -> dict[str, int]:
 # ── Fournisseurs ──────────────────────────────────────────────────
 
 async def _from_siv(plate: str) -> list[dict]:
-    from app.integrations.siv import lookup_by_plate
+    from app.integrations.siv import PlateAccessError, lookup_by_plate
 
     await _bump("siv")
     try:
         dims = await lookup_by_plate(plate)
+    except PlateAccessError:
+        # Clé refusée ou quota épuisé : c'est NOTRE accès qui est en
+        # cause, pas le véhicule. On laisse remonter pour que la chaîne
+        # essaie le fournisseur suivant — et surtout pour ne pas
+        # annoncer au client que sa voiture est inconnue. Doit passer
+        # AVANT le RuntimeError : PlateAccessError en hérite.
+        raise
     except RuntimeError as exc:
         # `siv.py` signale une plaque inconnue par un RuntimeError. Sans
         # cette traduction, une plaque simplement absente de leur base

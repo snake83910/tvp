@@ -1,11 +1,37 @@
 """Recherche de dimensions pneus par plaque d'immatriculation française.
 
-Provider par défaut : apiplaqueimmatriculation.com
+Provider : apiplaqueimmatriculation.com
   - Inscription gratuite : https://www.apiplaqueimmatriculation.com
   - Free tier : ~100 requêtes/jour
-  - L'API retourne les infos véhicule dont le champ "Pneus" : "205/55 R16 91V"
 
-Pour changer de provider, ajustez SIV_API_URL + la fonction _parse_response().
+Forme réelle de la réponse (relevée en production) :
+
+    {
+      "data": {
+        "erreur": "", "immat": "HG066TH", "marque": "CITROEN",
+        "modele": "DS3", "version": "1.6 E-HDI",
+        "pneus": [
+          {"name": "205/45 R 17", "width": 205, "height": 45,
+           "diameter": 17, "load_index": 88, "speed_index": "V"},
+          {"name": "195/55 R 16", ...}
+        ]
+      },
+      "api_version": "V1", "message": "", "code_erreur": 200
+    }
+
+Deux pièges que cette forme réserve :
+
+* **Tout est sous `data`.** Chercher les champs à la racine ne remonte
+  rien, et la réponse passe pour « non reconnue » alors qu'elle est
+  parfaitement valide.
+* **`pneus` est DÉJÀ structuré.** Inutile de faire des expressions
+  régulières sur une chaîne : les entiers sont là. Le parsing de
+  `name` ne sert que de filet, pour un provider qui ne rendrait que du
+  texte.
+
+Un même véhicule peut avoir plusieurs montages homologués (ici 205/45
+R17 et 195/55 R16) : on les rend TOUS, c'est au client de reconnaître le
+sien.
 """
 import re
 
@@ -13,14 +39,26 @@ import httpx
 
 from app.core.config import settings
 
-# Regex pneu : 205/55 R16 91V  ou  195/65R15  ou  205/55R16 (sans charge/vitesse)
+# Regex pneu : 205/45 R 17 · 195/65R15 · 205/55R16 (sans charge/vitesse).
+# Filet de sécurité quand seul un libellé texte est disponible.
 _TIRE_RE = re.compile(
-    r"(\d{3})\s*/\s*(\d{2,3})\s*[Rr]\s*(\d{2})\s*(\d{2,3})?([A-Za-z])?",
+    r"(\d{3})\s*/\s*(\d{2,3})\s*[Rr]\s*(\d{2})\s*(\d{2,3})?\s*([A-Za-z])?",
 )
+
+#: Codes que le provider renvoie pour un problème DE NOTRE CÔTÉ (clé
+#: invalide, quota épuisé) et non pour un véhicule inconnu. La nuance
+#: décide du message affiché au client — et du repli sur l'autre
+#: fournisseur plutôt que d'un « véhicule inconnu » mensonger.
+_ACCESS_ERROR_CODES = {401, 402, 403, 429, 500, 502, 503}
+
+
+class PlateAccessError(RuntimeError):
+    """Clé refusée, quota épuisé, provider en panne. Pas un véhicule
+    inconnu : l'appelant doit essayer ailleurs, pas conclure."""
 
 
 def _parse_tire_string(s: str) -> dict | None:
-    m = _TIRE_RE.search(s)
+    m = _TIRE_RE.search(s or "")
     if not m:
         return None
     return {
@@ -32,57 +70,102 @@ def _parse_tire_string(s: str) -> dict | None:
     }
 
 
-def _parse_response(data: dict) -> list[dict]:
-    """Extrait les dimensions pneus d'une réponse JSON SIV.
+def _normalize_tire(entry: object) -> dict | None:
+    """Une entrée de `pneus` vers notre format interne.
 
-    apiplaqueimmatriculation.com retourne un champ "Pneus" comme "205/55 R16 91V".
-    On cherche ce champ en priorité, puis on scanne tous les champs string.
-    Plusieurs montages possibles (AV/AR différents sur SUV) : on déduplique.
+    Accepte l'objet structuré du provider comme une simple chaîne : les
+    deux formes existent selon les véhicules et les providers, et rater
+    un montage parce qu'il arrive en texte serait dommage.
     """
-    # Champs courants selon le provider
-    candidate_keys = [
-        "Pneus", "pneus", "Pneumatiques", "pneumatiques",
-        "PneusAV", "PneusAR", "pneu", "tires", "tyres",
-    ]
+    if isinstance(entry, str):
+        return _parse_tire_string(entry)
+    if not isinstance(entry, dict):
+        return None
 
-    dims: dict[str, dict] = {}  # clé = "205-55-16" pour déduplication
+    try:
+        width = int(entry["width"])
+        height = int(entry["height"])
+        diameter = int(entry["diameter"])
+    except (KeyError, TypeError, ValueError):
+        # Champs numériques absents ou illisibles : on retombe sur le
+        # libellé, qui porte la même information sous forme de texte.
+        return _parse_tire_string(str(entry.get("name") or ""))
 
-    # 1. Chercher dans les champs connus
-    for key in candidate_keys:
-        val = data.get(key)
-        if isinstance(val, str):
-            d = _parse_tire_string(val)
+    # `speed_index` chez ce provider, `speed_rating` ailleurs.
+    speed = entry.get("speed_index") or entry.get("speed_rating") or ""
+    load = entry.get("load_index")
+    return {
+        "width": width,
+        "height": height,
+        "diameter": diameter,
+        "load_index": "" if load is None else str(load),
+        "speed_rating": str(speed).upper(),
+    }
+
+
+def _parse_response(payload: dict) -> list[dict]:
+    """Extrait les dimensions pneus. Déduplique les montages identiques.
+
+    Tolère la réponse enveloppée (`{"data": {...}}`) comme une réponse
+    à plat : c'est le seul point où la forme exacte du provider fuit
+    dans le code, autant qu'il l'absorbe.
+    """
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+
+    dims: dict[str, dict] = {}
+
+    def collect(value: object) -> None:
+        entries = value if isinstance(value, list) else [value]
+        for entry in entries:
+            d = _normalize_tire(entry)
             if d:
-                k = f"{d['width']}-{d['height']}-{d['diameter']}"
-                dims.setdefault(k, d)
+                dims.setdefault(
+                    f"{d['width']}-{d['height']}-{d['diameter']}", d
+                )
 
-    # 2. Scanner tous les champs string si rien trouvé
+    for key in ("pneus", "Pneus", "pneumatiques", "Pneumatiques",
+                "tires", "tyres", "PneusAV", "PneusAR"):
+        if key in data:
+            collect(data[key])
+
+    # Dernier recours : balayer les chaînes de la réponse. Utile si le
+    # provider renomme son champ sans prévenir — ça arrive.
     if not dims:
-        for val in data.values():
-            if isinstance(val, str) and _TIRE_RE.search(val):
-                d = _parse_tire_string(val)
-                if d:
-                    k = f"{d['width']}-{d['height']}-{d['diameter']}"
-                    dims.setdefault(k, d)
+        for value in data.values():
+            if isinstance(value, str) and _TIRE_RE.search(value):
+                collect(value)
 
     return list(dims.values())
 
 
+def vehicle_label(payload: dict) -> str:
+    """Libellé lisible du véhicule identifié (« CITROEN DS3 1.6 E-HDI »).
+
+    Pas utilisé par la recherche elle-même, mais c'est ce qui permet de
+    confirmer au client QUEL véhicule a été reconnu — utile quand deux
+    montages différents sont proposés.
+    """
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    parts = [data.get("marque"), data.get("modele"), data.get("version")]
+    return " ".join(str(p).strip() for p in parts if p) or ""
+
+
 async def lookup_by_plate(plate: str) -> list[dict]:
-    """Retourne les dimensions pneus (liste, car AV≠AR possible).
+    """Retourne les dimensions pneus (liste : plusieurs montages possibles).
 
     Args:
-        plate: Plaque nettoyée (ex. "AA123AA"), sans tirets ni espaces.
+        plate: Plaque nettoyée (ex. "HG066TH"), sans tirets ni espaces.
 
     Returns:
-        Liste de dicts {"width", "height", "diameter", "load_index", "speed_rating"}.
-        Liste vide si la plaque est trouvée mais sans dimensions pneus.
+        Liste de dicts {"width", "height", "diameter", "load_index",
+        "speed_rating"}. Liste vide si le véhicule est connu mais sans
+        dimensions pneus.
 
     Raises:
-        ValueError: si SIV_API_KEY n'est pas configurée.
-        httpx.TimeoutException: si l'API ne répond pas.
-        httpx.HTTPStatusError: si l'API retourne une erreur HTTP.
-        RuntimeError: si la réponse indique une plaque introuvable.
+        ValueError: SIV_API_KEY non configurée.
+        PlateAccessError: clé refusée, quota épuisé, provider en panne.
+        RuntimeError: plaque inconnue du provider.
+        httpx.HTTPError: transport.
     """
     api_key = settings.siv_api_key
     if not api_key:
@@ -91,20 +174,43 @@ async def lookup_by_plate(plate: str) -> list[dict]:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             settings.siv_api_url,
-            params={"key": api_key, "plaque": plate},
+            # Les deux noms de paramètre sont envoyés : la documentation
+            # du provider parle d'`immatriculation`, le code d'origine
+            # utilisait `plaque`. Un paramètre en trop est ignoré, une
+            # plaque absente ne renvoie rien — le doute coûte moins cher
+            # à couvrir qu'à trancher sans pouvoir vérifier.
+            params={"key": api_key, "immatriculation": plate, "plaque": plate},
             headers={"Accept": "application/json"},
         )
 
+    # Le provider peut signaler le refus par le statut HTTP autant que
+    # dans le corps : on regarde les deux plutôt que de parier.
+    if resp.status_code in _ACCESS_ERROR_CODES:
+        raise PlateAccessError(f"HTTP {resp.status_code}")
     resp.raise_for_status()
 
-    data = resp.json()
+    payload = resp.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("Réponse inattendue du service immatriculation")
 
-    # apiplaqueimmatriculation.com retourne {"Erreur": "1"} si plaque inconnue
-    if data.get("Erreur") == "1" or data.get("erreur") == "1":
+    code = payload.get("code_erreur")
+    if isinstance(code, (int, str)) and str(code).isdigit():
+        code_int = int(code)
+        if code_int in _ACCESS_ERROR_CODES:
+            raise PlateAccessError(
+                f"code_erreur={code_int} {payload.get('message') or ''}".strip()
+            )
+        if code_int != 200:
+            raise RuntimeError("Plaque non trouvée")
+
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+
+    # `erreur` vaut "" quand tout va bien — d'où le test sur la valeur
+    # et non sur la présence de la clé.
+    if str(data.get("erreur") or data.get("Erreur") or "").strip():
         raise RuntimeError("Plaque non trouvée")
 
-    # Vérifier qu'on a bien un véhicule (champ Marque ou équivalent)
-    if not (data.get("Marque") or data.get("marque") or data.get("make") or data.get("brand")):
+    if not (data.get("marque") or data.get("Marque")):
         raise RuntimeError("Plaque non reconnue ou réponse inattendue")
 
-    return _parse_response(data)
+    return _parse_response(payload)
