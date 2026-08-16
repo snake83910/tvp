@@ -80,13 +80,15 @@ export default function HomePage() {
                 Des milliers de références au meilleur prix, livrées chez vous
                 ou directement chez un garage partenaire pour le montage.
               </p>
+              {/* Pas de « Voir le catalogue » ici : il pointait sur
+                  /recherche, qui sans dimensions ne montre aucun
+                  catalogue — juste le formulaire déjà visible 300 px
+                  plus bas. Un bouton rouge primaire promettait donc ce
+                  que la page suivante ne tenait pas, tout en disputant
+                  le regard au « Rechercher » du module de recherche.
+                  Ce site part d'une dimension : le module EST l'action
+                  principale, il n'a pas besoin de doublure. */}
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link
-                  href="/recherche"
-                  className="rounded-full bg-signal px-6 py-3 text-sm font-bold uppercase tracking-wide text-white transition hover:bg-signal-dark"
-                >
-                  Voir le catalogue
-                </Link>
                 <a
                   href="#comment-ca-marche"
                   className="rounded-full border border-white/30 bg-white/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white transition hover:bg-white/10"
