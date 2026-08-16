@@ -15,6 +15,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # Explorateur de base, dans le navigateur. Démarrage explicite :
+  #   docker compose --profile outils up -d pgweb   ->  http://localhost:8081
+  #
+  # Le profil n'est pas une coquetterie : sans lui, ce service serait
+  # hérité par l'overlay de production, qui part du même fichier. Un
+  # explorateur de base SANS authentification y tournerait en permanence.
+  #
+  # Lié à la loopback pour la même raison en local : `8081:8081` seul
+  # publierait sur toutes les interfaces, donc sur le réseau où se
+  # trouve la machine (wifi partagé, réseau d'entreprise).
+  pgweb:
+    image: sosedoff/pgweb:latest
+    profiles: ["outils"]
+    environment:
+      PGWEB_DATABASE_URL: postgres://tvp:${POSTGRES_PASSWORD:-changeme_dev}@postgres:5432/tvp?sslmode=disable
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     image: redis:7-alpine
     ports:
