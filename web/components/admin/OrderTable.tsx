@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AdminOrderSummary } from "@/lib/admin";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { CopyButton } from "@/components/admin/CopyButton";
@@ -29,6 +29,58 @@ export function OrderTable({
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  // Position ÉCRAN du menu. Le tableau vit dans une carte
+  // `overflow-hidden` (elle arrondit ses coins) : un menu en `absolute`
+  // y est découpé, ce qui se voyait surtout sur la dernière ligne. Un
+  // positionnement `fixed` échappe au découpage — encore faut-il lui
+  // donner des coordonnées, d'où ce calcul depuis le bouton.
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+
+  //: Hauteur approchée du menu (3 entrées). Sert uniquement à décider
+  //: s'il faut l'ouvrir vers le haut : une valeur légèrement haute est
+  //: sans conséquence, elle bascule juste un peu plus tôt.
+  const MENU_H = 132;
+
+  function openMenu(orderNumber: string, target: HTMLElement) {
+    if (menuOpen === orderNumber) {
+      setMenuOpen(null);
+      return;
+    }
+    const r = target.getBoundingClientRect();
+    // Pas la place en dessous : on ouvre vers le haut plutôt que de
+    // laisser le menu sortir de l'écran.
+    const versLeHaut = r.bottom + MENU_H > window.innerHeight;
+    setMenuPos({
+      top: versLeHaut ? Math.max(8, r.top - MENU_H) : r.bottom + 4,
+      right: Math.max(8, window.innerWidth - r.right),
+    });
+    setMenuOpen(orderNumber);
+  }
+
+  // Un menu en position fixe se décrocherait de son bouton au moindre
+  // défilement : on le ferme. Idem au clic ailleurs et à Échap, que
+  // l'ancien `onMouseLeave` ne couvrait pas (clavier, tactile).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const fermer = () => setMenuOpen(null);
+    const surTouche = (e: KeyboardEvent) => {
+      if (e.key === "Escape") fermer();
+    };
+    window.addEventListener("scroll", fermer, true);
+    window.addEventListener("resize", fermer);
+    window.addEventListener("keydown", surTouche);
+    // `click` en phase de capture : le bouton lui-même arrête la
+    // propagation, sinon rouvrir reviendrait à fermer puis rouvrir.
+    document.addEventListener("click", fermer);
+    return () => {
+      window.removeEventListener("scroll", fermer, true);
+      window.removeEventListener("resize", fermer);
+      window.removeEventListener("keydown", surTouche);
+      document.removeEventListener("click", fermer);
+    };
+  }, [menuOpen]);
   const [dense, setDense] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("tvp_admin_dense") === "1";
@@ -142,18 +194,24 @@ export function OrderTable({
                 <td className={`px-4 ${rowPy} text-right font-display font-black text-ink`}>
                   {formatEuro(o.total_ttc)}
                 </td>
-                <td className={`relative px-4 ${rowPy} text-right`}>
+                <td className={`px-4 ${rowPy} text-right`}>
                   <button
-                    onClick={() => setMenuOpen(menuOpen === o.order_number ? null : o.order_number)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openMenu(o.order_number, e.currentTarget);
+                    }}
                     className="rounded p-1 text-ink-muted hover:bg-paper-dim hover:text-signal"
                     aria-label="Actions"
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen === o.order_number}
                   >
                     ⋯
                   </button>
-                  {menuOpen === o.order_number && (
+                  {menuOpen === o.order_number && menuPos && (
                     <div
-                      className="absolute right-4 top-10 z-20 w-48 rounded-lg border border-line bg-paper py-1 shadow-card"
-                      onMouseLeave={() => setMenuOpen(null)}
+                      role="menu"
+                      style={{ top: menuPos.top, right: menuPos.right }}
+                      className="fixed z-50 w-48 rounded-lg border border-line bg-paper py-1 text-left shadow-card"
                     >
                       <Link
                         href={`/admin/commandes/${o.order_number}`}
