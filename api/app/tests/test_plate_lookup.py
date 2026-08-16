@@ -48,10 +48,12 @@ DIMS = [
 ]
 VEHICULE = "CITROEN DS3 1.6 E-HDI"
 
-#: Un fournisseur rend (dimensions, libellé véhicule). Midas ne connaît
-#: que les pneus : son libellé est vide.
-REPONSE_SIV = (DIMS, VEHICULE)
-REPONSE_MIDAS = (DIMS, "")
+LOGO = "https://api.apiplaqueimmatriculation.com/public/storage/x.png"
+
+#: Un fournisseur rend (dimensions, libellé véhicule, logo de marque).
+#: Midas ne connaît que les pneus : ni libellé, ni logo.
+REPONSE_SIV = (DIMS, VEHICULE, LOGO)
+REPONSE_MIDAS = (DIMS, "", "")
 
 
 # ── Normalisation ─────────────────────────────────────────────────
@@ -98,7 +100,7 @@ async def test_siv_only_sans_cle_dit_indisponible():
 @pytest.mark.asyncio
 async def test_siv_repond_midas_pas_appele():
     siv = AsyncMock(return_value=REPONSE_SIV)
-    midas = AsyncMock(return_value=([], ""))
+    midas = AsyncMock(return_value=([], "", ""))
     with patch.object(plate, "siv_configured", lambda: True), \
          patch.object(plate, "_from_siv", siv), \
          patch.object(plate, "_from_midas", midas):
@@ -109,6 +111,7 @@ async def test_siv_repond_midas_pas_appele():
     # L'identité du véhicule traverse la chaîne : c'est elle qui permet
     # au client de confirmer que la bonne voiture a été reconnue.
     assert res.vehicle == VEHICULE
+    assert res.brand_logo == LOGO
     midas.assert_not_awaited()
 
 
@@ -176,8 +179,8 @@ async def test_inconnue_chez_l_un_connue_chez_l_autre():
 async def test_reponse_vide_vaut_non_trouvee():
     """Un fournisseur qui répond « véhicule connu, pneus inconnus » ne
     doit pas produire une liste vide côté client."""
-    siv = AsyncMock(return_value=([], ""))
-    midas = AsyncMock(return_value=([], ""))
+    siv = AsyncMock(return_value=([], "", ""))
+    midas = AsyncMock(return_value=([], "", ""))
     with patch.object(plate, "siv_configured", lambda: True), \
          patch.object(plate, "_from_siv", siv), \
          patch.object(plate, "_from_midas", midas):

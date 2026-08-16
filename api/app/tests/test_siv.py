@@ -24,6 +24,7 @@ from app.integrations.siv import (
     DEFAULT_URL,
     PlateAccessError,
     _parse_response,
+    brand_logo_url,
     resolve_url,
     vehicle_label,
 )
@@ -38,6 +39,7 @@ REPONSE_REELLE = {
         "marque": "CITROEN",
         "modele": "DS3",
         "version": "1.6 E-HDI",
+        "logo_marque": "https://api.apiplaqueimmatriculation.com/public/storage/photos_marques/21.png?v=1",
         "energieNGC": "DIESEL",
         "vin": "VF7SA9HPKCW590386",
         "poids": "1602 KG",
@@ -127,6 +129,34 @@ def test_libelle_vehicule():
     client à comprendre pourquoi."""
     assert vehicle_label(REPONSE_REELLE) == "CITROEN DS3 1.6 E-HDI"
     assert vehicle_label({"data": {}}) == ""
+
+
+def test_logo_de_marque_extrait():
+    assert brand_logo_url(REPONSE_REELLE).endswith("photos_marques/21.png?v=1")
+
+
+def test_logo_hors_domaine_attendu_refuse():
+    """La valeur vient d'une réponse tierce et finit dans un `src`
+    d'image : un provider compromis ne doit pas pouvoir faire charger
+    n'importe quoi au navigateur de nos clients, ni y glisser un
+    traceur."""
+    for suspect in (
+        "https://tracker.example.com/pixel.png",
+        "http://api.apiplaqueimmatriculation.com/logo.png",   # pas https
+        "javascript:alert(1)",
+        "//api.apiplaqueimmatriculation.com/logo.png",
+        "",
+    ):
+        assert brand_logo_url({"data": {"logo_marque": suspect}}) == ""
+
+
+def test_sous_domaine_du_provider_accepte():
+    ok = "https://cdn.apiplaqueimmatriculation.com/logo.png"
+    assert brand_logo_url({"data": {"logo_marque": ok}}) == ok
+
+
+def test_logo_absent_nest_pas_une_erreur():
+    assert brand_logo_url({"data": {"marque": "CITROEN"}}) == ""
 
 
 # ── URL effective ─────────────────────────────────────────────────
@@ -225,6 +255,7 @@ async def test_reponse_complete_de_bout_en_bout(monkeypatch):
     # L'identité accompagne les dimensions : deux montages proposés sans
     # dire de quelle voiture il s'agit laisseraient le client hésiter.
     assert res.vehicle == "CITROEN DS3 1.6 E-HDI"
+    assert res.brand_logo.endswith("photos_marques/21.png?v=1")
 
 
 def _install(monkeypatch, payload: dict, status: int = 200) -> None:

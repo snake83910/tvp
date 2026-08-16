@@ -270,6 +270,7 @@ async def search_by_plate(
 
     return PlateLookupOut(
         vehicle=found.vehicle or None,
+        brand_logo=found.brand_logo or None,
         dimensions=[VehicleDimension(**d) for d in found.dimensions],
     )
 

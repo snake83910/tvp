@@ -18,6 +18,10 @@ class PlateLookupOut(BaseModel):
     """
 
     vehicle: str | None = None
+    #: Logo de la marque, servi par le fournisseur. Facultatif : absent
+    #: du repli, et absent de certaines marques chez le fournisseur
+    #: officiel. L'affichage doit prévoir de s'en passer.
+    brand_logo: str | None = None
     dimensions: list[VehicleDimension] = []
 
 

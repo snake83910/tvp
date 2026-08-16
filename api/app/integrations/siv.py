@@ -94,6 +94,9 @@ class SivLookup:
 
     dimensions: list[dict] = field(default_factory=list)
     vehicle: str = ""
+    #: Logo de la marque, hébergé par le provider. Vide si absent ou si
+    #: l'URL ne passe pas le contrôle ci-dessous.
+    brand_logo: str = ""
 
 
 def _parse_tire_string(s: str) -> dict | None:
@@ -175,6 +178,25 @@ def _parse_response(payload: dict) -> list[dict]:
                 collect(value)
 
     return list(dims.values())
+
+
+#: Hôtes autorisés à servir le logo. La valeur vient d'une réponse
+#: tierce et finit dans un `src` d'image : la restreindre évite qu'un
+#: provider compromis ne fasse charger n'importe quoi au navigateur de
+#: nos clients — ou n'y place une URL de traçage.
+_LOGO_HOSTS = ("apiplaqueimmatriculation.com",)
+
+
+def brand_logo_url(payload: dict) -> str:
+    """URL du logo de la marque, vide si absente ou non conforme."""
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    raw = str(data.get("logo_marque") or "").strip()
+    if not raw.startswith("https://"):
+        return ""
+    host = raw.split("/", 3)[2].split(":")[0].lower()
+    if not any(host == h or host.endswith("." + h) for h in _LOGO_HOSTS):
+        return ""
+    return raw
 
 
 def vehicle_label(payload: dict) -> str:
@@ -272,5 +294,7 @@ async def lookup_by_plate(plate: str) -> SivLookup:
         raise RuntimeError("Plaque non reconnue ou réponse inattendue")
 
     return SivLookup(
-        dimensions=_parse_response(payload), vehicle=vehicle_label(payload)
+        dimensions=_parse_response(payload),
+        vehicle=vehicle_label(payload),
+        brand_logo=brand_logo_url(payload),
     )

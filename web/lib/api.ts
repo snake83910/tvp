@@ -187,6 +187,9 @@ export interface PlateLookup {
    *  identifie le véhicule, le repli ne rend que des pneus. À afficher
    *  s'il existe, sans réserver de place vide sinon. */
   vehicle: string | null;
+  /** Logo de la marque, hébergé par le fournisseur. Null si absent —
+   *  toutes les marques n'en ont pas, et le repli n'en fournit jamais. */
+  brand_logo: string | null;
   dimensions: VehicleDimension[];
 }
 

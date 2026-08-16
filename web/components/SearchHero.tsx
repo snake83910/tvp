@@ -155,6 +155,10 @@ export function SearchHero({
   // dimensions : afficher la voiture reconnue est ce qui rend
   // compréhensible qu'on en propose parfois deux.
   const [plateResult, setPlateResult] = useState<PlateLookup | null>(null);
+  // Le logo vient du CDN du fournisseur : s'il ne répond pas, on
+  // retombe sur l'icône générique plutôt que d'afficher une image
+  // cassée.
+  const [logoBroken, setLogoBroken] = useState(false);
 
   function switchCategory(next: VehicleCategory) {
     if (next === cat) return;
@@ -192,6 +196,7 @@ export function SearchHero({
     setPlateResult(null);
     setPlateLoading(true);
     try {
+      setLogoBroken(false);
       const found = await api.searchByPlate(plate.trim());
       if (found.dimensions.length === 0) {
         setPlateError("Aucune dimension trouvée pour cette plaque.");
@@ -352,10 +357,36 @@ export function SearchHero({
                     secours, qui ne rend que des pneus : pas de cadre
                     vide ni de « Véhicule : — » dans ce cas. */}
                 {plateResult.vehicle && (
-                  <div className="mb-4 flex items-start gap-3 rounded-xl border border-line bg-paper-dim px-4 py-3">
-                    <span aria-hidden className="text-lg leading-none">
-                      🚗
-                    </span>
+                  <div className="mb-4 flex items-center gap-3 rounded-xl border border-line bg-paper-dim px-4 py-3">
+                    {/* Logo servi par le fournisseur : purement
+                        décoratif (alt vide), la marque est écrite juste
+                        à côté. `onError` le retire si le CDN du
+                        fournisseur ne répond pas — une icône cassée
+                        ferait plus de mal que pas d'icône du tout.
+                        <img> et non next/image : hôte tiers non déclaré
+                        dans remotePatterns, et une vignette de 32 px ne
+                        justifie pas d'y toucher. */}
+                    {plateResult.brand_logo && !logoBroken ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={plateResult.brand_logo}
+                        alt=""
+                        width={48}
+                        height={32}
+                        loading="lazy"
+                        onError={() => setLogoBroken(true)}
+                        // Boîte plus large que haute : les logos de
+                        // marque sont majoritairement en paysage (celui
+                        // de Citroën fait 400×221) et se réduiraient à
+                        // une vignette illisible dans un carré.
+                        // object-contain préserve ceux qui sont carrés.
+                        className="h-8 w-12 shrink-0 object-contain"
+                      />
+                    ) : (
+                      <span aria-hidden className="text-lg leading-none">
+                        🚗
+                      </span>
+                    )}
                     <div className="min-w-0">
                       <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">
                         Véhicule reconnu
