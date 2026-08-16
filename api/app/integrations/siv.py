@@ -174,12 +174,11 @@ async def lookup_by_plate(plate: str) -> list[dict]:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             settings.siv_api_url,
-            # Les deux noms de paramètre sont envoyés : la documentation
-            # du provider parle d'`immatriculation`, le code d'origine
-            # utilisait `plaque`. Un paramètre en trop est ignoré, une
-            # plaque absente ne renvoie rien — le doute coûte moins cher
-            # à couvrir qu'à trancher sans pouvoir vérifier.
-            params={"key": api_key, "immatriculation": plate, "plaque": plate},
+            # Forme exacte relevée sur un appel qui fonctionne :
+            #   /plaque?vin=&immatriculation=HG066TH&token=…
+            # Le jeton s'appelle `token` (et non `key`), et `vin` est
+            # attendu même vide — le provider accepte l'un OU l'autre.
+            params={"token": api_key, "immatriculation": plate, "vin": ""},
             headers={"Accept": "application/json"},
         )
 

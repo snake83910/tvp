@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { adminApi, type PlateProviderSetting } from "@/lib/admin";
+import {
+  adminApi,
+  type PlateProviderSetting,
+  type PlateTestResult,
+} from "@/lib/admin";
 import { useToast } from "@/components/admin/Toast";
 
 /** Ce que chaque mode implique, en clair. Un choix de fournisseur n'a
@@ -42,6 +46,9 @@ export default function AdminReglages() {
   const [plate, setPlate] = useState<PlateProviderSetting | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [testPlate, setTestPlate] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [results, setResults] = useState<PlateTestResult[] | null>(null);
 
   useEffect(() => {
     adminApi
@@ -60,6 +67,21 @@ export default function AdminReglages() {
       toast(e instanceof Error ? e.message : "Erreur", "error");
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function runTest() {
+    setTesting(true);
+    setResults(null);
+    try {
+      const r = await adminApi.testPlateProvider(testPlate.trim());
+      setResults(r.results);
+      // Le test consomme du quota : le compteur affiché doit suivre.
+      setPlate(await adminApi.getPlateProvider());
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -159,6 +181,72 @@ export default function AdminReglages() {
                 cherchée deux fois dans la journée n&apos;appelle
                 qu&apos;une fois le fournisseur.
               </p>
+            </div>
+
+            {/* « Service indisponible » côté client ne dit pas pourquoi.
+                Ce test interroge les deux fournisseurs depuis le serveur
+                et rapporte leurs réponses telles quelles. */}
+            <div className="mt-6 border-t border-line pt-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+                Tester une plaque
+              </p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Interroge les deux fournisseurs, quel que soit le mode
+                actif, et ignore le cache. Consomme un appel de quota
+                par fournisseur.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <input
+                  value={testPlate}
+                  onChange={(e) => setTestPlate(e.target.value.toUpperCase())}
+                  placeholder="AA-123-AA"
+                  aria-label="Plaque à tester"
+                  className="h-10 w-48 rounded-lg border border-line bg-paper px-3 font-mono text-sm text-ink outline-none focus:border-signal"
+                />
+                <button
+                  onClick={runTest}
+                  disabled={testing || testPlate.trim().length < 4}
+                  className="rounded-lg bg-ink px-4 text-sm font-bold text-paper transition hover:bg-signal disabled:opacity-50"
+                >
+                  {testing ? "…" : "Tester"}
+                </button>
+              </div>
+
+              {results && (
+                <ul className="mt-4 space-y-2">
+                  {results.map((r) => (
+                    <li
+                      key={r.provider}
+                      className={`rounded-lg border p-3 text-xs ${
+                        r.ok
+                          ? "border-emerald-300 bg-emerald-50"
+                          : "border-line bg-paper-dim"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-ink">
+                          {r.provider}
+                        </span>
+                        <span
+                          className={
+                            r.ok ? "font-bold text-emerald-700" : "text-ink-muted"
+                          }
+                        >
+                          {r.ok ? "répond" : "échec"}
+                        </span>
+                      </div>
+                      {r.dimensions && r.dimensions.length > 0 && (
+                        <p className="mt-1 font-mono text-ink-soft">
+                          {r.dimensions.join(" · ")}
+                        </p>
+                      )}
+                      {r.error && (
+                        <p className="mt-1 text-ink-soft">{r.error}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </>
         )}

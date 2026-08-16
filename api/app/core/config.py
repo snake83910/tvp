@@ -113,9 +113,10 @@ class Settings(BaseSettings):
 
     # SIV — recherche par plaque d'immatriculation française
     # Inscription gratuite sur https://www.apiplaqueimmatriculation.com
-    # Free tier ~100 req/jour. Mettre la clé dans .env : SIV_API_KEY=xxxx
+    # Free tier ~100 req/jour. Le jeton reçu va dans .env : SIV_API_KEY=xxxx
+    # (il est transmis au provider sous le nom `token`).
     siv_api_key: str = ""
-    siv_api_url: str = "https://www.apiplaqueimmatriculation.com/GetInfosVehicule.php"
+    siv_api_url: str = "https://api.apiplaqueimmatriculation.com/plaque"
 
     # ── Mentions légales de l'émetteur (facture PDF) ──────────────
     # Obligatoires sur une facture de SAS assujettie à la TVA

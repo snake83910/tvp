@@ -183,6 +183,34 @@ def test_montages_avant_arriere_conserves():
     assert len(plate._dedupe([av, ar, dict(av)])) == 2
 
 
+# ── Diagnostic ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_diagnostic_interroge_les_deux_quel_que_soit_le_mode():
+    """« Service indisponible » ne dit pas POURQUOI. Le diagnostic doit
+    donner l'état réel des deux fournisseurs, y compris celui que le
+    mode courant n'utilise pas."""
+    siv = AsyncMock(side_effect=RuntimeError("quota"))
+    midas = AsyncMock(return_value=DIMS)
+    with patch.object(plate, "siv_configured", lambda: True),          patch.object(plate, "_from_siv", siv),          patch.object(plate, "_from_midas", midas):
+        res = await plate.diagnose("AA123AA")
+
+    assert [r["provider"] for r in res] == ["siv", "midas"]
+    assert res[0]["ok"] is False and "quota" in res[0]["error"]
+    assert res[1]["ok"] is True
+    assert res[1]["dimensions"] == ["205/55 R16 91V"]
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_nomme_la_cle_manquante():
+    """La cause la plus fréquente doit être nommée, pas déguisée en
+    panne réseau."""
+    with patch.object(plate, "siv_configured", lambda: False),          patch.object(plate, "_from_midas", AsyncMock(return_value=DIMS)):
+        res = await plate.diagnose("AA123AA")
+
+    assert "SIV_API_KEY" in res[0]["error"]
+
+
 # ── Réglage ───────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

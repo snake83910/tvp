@@ -749,6 +749,29 @@ async def set_plate_provider(
     }
 
 
+@router.get("/settings/plate-provider/test")
+async def test_plate_provider(
+    plate: str = Query(..., min_length=4, max_length=12),
+    _: User = Depends(_admin),
+):
+    """Interroge les DEUX fournisseurs et rapporte ce que chacun répond.
+
+    « Service indisponible » côté client ne dit pas pourquoi : jeton
+    refusé, quota épuisé, IP du serveur bloquée par le Cloudflare de
+    Midas… Ce test-ci le dit, depuis le serveur, sans avoir à lire les
+    logs.
+
+    Consomme un appel de quota par fournisseur : c'est délibéré, et
+    déclenché à la demande.
+    """
+    from app.modules.catalog import plate as plate_lookup
+
+    clean = plate_lookup.clean_plate(plate)
+    if clean is None:
+        raise HTTPException(status_code=422, detail="Format de plaque invalide")
+    return {"plate": clean, "results": await plate_lookup.diagnose(clean)}
+
+
 # ── Santé des jobs planifiés ───────────────────────────────────────
 
 @router.get("/cron-runs")

@@ -213,6 +213,53 @@ def _providers(mode: str) -> list[tuple[str, object]]:
     return siv + [("midas", _from_midas)]
 
 
+async def diagnose(plate: str) -> list[dict]:
+    """Interroge CHAQUE fournisseur séparément et rapporte ce qu'il dit.
+
+    Sans ça, un échec de la recherche se présente au client comme un
+    « service indisponible » sans cause visible : clé absente, jeton
+    refusé, quota épuisé, IP bloquée par le Cloudflare de Midas… autant
+    de causes qui se corrigent différemment et qu'on ne peut pas
+    distinguer depuis l'extérieur.
+
+    Contourne le cache et ignore le mode : on veut l'état réel des deux
+    fournisseurs, pas la réponse que le site donnerait.
+    """
+    out: list[dict] = []
+    for name, call in (("siv", _from_siv), ("midas", _from_midas)):
+        if name == "siv" and not siv_configured():
+            out.append({
+                "provider": name,
+                "ok": False,
+                "error": "SIV_API_KEY absente du serveur",
+            })
+            continue
+        try:
+            dims = _dedupe(await call(plate))
+        except PlateNotFoundError:
+            out.append({
+                "provider": name, "ok": False,
+                "error": "Plaque inconnue de ce fournisseur",
+            })
+        except Exception as exc:
+            out.append({
+                "provider": name, "ok": False,
+                "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+            })
+        else:
+            out.append({
+                "provider": name,
+                "ok": bool(dims),
+                "dimensions": [
+                    f"{d['width']}/{d['height']} R{d['diameter']} "
+                    f"{d['load_index']}{d['speed_rating']}".strip()
+                    for d in dims
+                ],
+                "error": None if dims else "Véhicule trouvé, aucune dimension",
+            })
+    return out
+
+
 async def lookup(db: AsyncSession, plate: str) -> tuple[list[dict], str]:
     """Dimensions du véhicule, et le fournisseur qui a répondu.
 

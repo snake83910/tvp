@@ -111,6 +111,13 @@ export interface PlateProviderSetting {
   usage_today: Record<string, number>;
 }
 
+export interface PlateTestResult {
+  provider: string;
+  ok: boolean;
+  dimensions?: string[];
+  error: string | null;
+}
+
 export interface CronRunStatus {
   job: string;
   /** ok | error | late | never_ran */
@@ -297,6 +304,13 @@ export const adminApi = {
     call<PlateProviderSetting>(`/admin/settings/plate-provider`, "PATCH", {
       mode,
     }),
+
+  /** Interroge les deux fournisseurs et rapporte ce que chacun répond.
+   *  Consomme un appel de quota par fournisseur. */
+  testPlateProvider: (plate: string) =>
+    call<{ plate: string; results: PlateTestResult[] }>(
+      `/admin/settings/plate-provider/test?plate=${encodeURIComponent(plate)}`,
+    ),
 
   bulkEmail: (order_numbers: string[], subject: string, body: string) =>
     call<{ sent: number }>(`/admin/bulk-email`, "POST", { order_numbers, subject, body }),
