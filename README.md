@@ -136,6 +136,24 @@ exterieures au depot :
 
 `/payment` reste donc accessible sans prefixe, en alias masque de la doc.
 
+### Idempotence du checkout
+
+`POST /v1/cart/checkout` et `/v1/cart/checkout/guest` acceptent un
+en-tete `Idempotency-Key`. Rejouee avec la meme cle et le meme corps, la
+requete rend la commande deja creee au lieu d'en creer une seconde —
+le cas du client qui perd le reseau en validant et recommence.
+
+| Situation | Reponse |
+|---|---|
+| Meme cle, meme corps, requete terminee | la reponse figee est rejouee |
+| Meme cle, requete encore en cours | 409 `conflict` |
+| Meme cle, corps different | 422 `validation_error` |
+| Rien cree (prix modifies, refus) | cle liberee, reprise possible |
+
+La reservation vit 1 h dans Redis et est cloisonnee par appelant (compte
+ou jeton de panier) : une cle devinee ne rend jamais la commande d'un
+tiers. Sans l'en-tete, le comportement est inchange.
+
 ## Tests de bout en bout
 
 ```bash

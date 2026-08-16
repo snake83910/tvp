@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core import idempotency
 from app.core.deps import get_current_user, get_current_user_optional
 from app.core.errors import AppError, ErrorCode
 from app.core.rate_limit import rate_limit
@@ -270,6 +271,7 @@ async def validate_promo_code(
 @router.post("/checkout", response_model=CheckoutResult)
 async def checkout(
     data: CheckoutIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -298,6 +300,14 @@ async def checkout(
             code=ErrorCode.TERMS_NOT_ACCEPTED,
             message="Vous devez accepter les conditions générales de vente",
         )
+    # Reprise après coupure réseau : si le client rejoue la même clé, on
+    # lui rend la commande déjà créée au lieu d'en créer une seconde.
+    idem = await idempotency.begin(
+        request, scope=f"checkout:{user.id}", body=data.model_dump(mode="json")
+    )
+    if idem.replay is not None:
+        return CheckoutResult(**idem.replay)
+
     try:
         order, changes = await service.checkout(
             db, user, data.address_id, data.delivery_mode,
@@ -307,10 +317,14 @@ async def checkout(
             mounting_at=data.mounting_at,
         )
     except ValueError as e:
+        # Rien créé : la clé doit rester utilisable pour une reprise.
+        await idem.release()
         raise _checkout_error(e) from e
- 
+
     if order is None:
-        # Prix modifiés : commande non créée, on renvoie les écarts
+        # Prix modifiés : commande non créée. Figer ce refus condamnerait
+        # le client à le revoir pendant une heure — on libère la clé.
+        await idem.release()
         return CheckoutResult(
             price_changes=[
                 {
@@ -322,11 +336,13 @@ async def checkout(
                 for c in changes
             ]
         )
-    return CheckoutResult(
+    result = CheckoutResult(
         order_number=order.order_number,
         status=order.status.value,
         total_ttc=order.total_ttc_cents / 100,
     )
+    await idem.store(result.model_dump(mode="json"))
+    return result
 
 
 def _price_changes_payload(changes) -> list[dict]:
@@ -372,6 +388,16 @@ async def checkout_guest(
     # réelles si de vrais clients tapent la limite.
     await rate_limit(request, "guest_checkout", max_attempts=15, window_seconds=600)
 
+    # Reprise après coupure. Portée par le jeton de panier : c'est la
+    # seule identité dont dispose un invité avant que son compte existe.
+    idem = await idempotency.begin(
+        request,
+        scope=f"checkout-guest:{x_cart_session or 'sans-panier'}",
+        body=data.model_dump(mode="json"),
+    )
+    if idem.replay is not None:
+        return GuestCheckoutResult(**idem.replay)
+
     if not data.accept_terms:
         raise AppError(
             status_code=400,
@@ -407,13 +433,16 @@ async def checkout_guest(
             mounting_at=data.mounting_at,
         )
     except ValueError as e:
+        await idem.release()
         raise _checkout_error(e) from e
 
     if order is None:
         # Prix modifiés : commande non créée. On rend quand même les jetons,
         # sinon le client — dont le compte et le panier existent désormais —
         # se retrouverait déconnecté devant l'écran de confirmation des
-        # écarts, sans moyen de valider.
+        # écarts, sans moyen de valider. La clé est libérée : la reprise
+        # doit pouvoir aboutir une fois les écarts acceptés.
+        await idem.release()
         tokens = await auth_service.issue_token_pair(db, user, request)
         return GuestCheckoutResult(
             price_changes=_price_changes_payload(changes),
@@ -422,10 +451,15 @@ async def checkout_guest(
         )
 
     tokens = await auth_service.issue_token_pair(db, user, request)
-    return GuestCheckoutResult(
+    result = GuestCheckoutResult(
         order_number=order.order_number,
         status=order.status.value,
         total_ttc=order.total_ttc_cents / 100,
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],
     )
+    # La réponse figée contient les jetons de session de l'invité : c'est
+    # ce qui rend le rejeu utile (sans eux il ne pourrait pas payer), et
+    # ce qui justifie le TTL court de la réservation.
+    await idem.store(result.model_dump(mode="json"))
+    return result

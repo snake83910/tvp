@@ -97,6 +97,7 @@ async function call<T>(
   path: string,
   method: string,
   body?: unknown,
+  idempotencyKey?: string,
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -104,6 +105,9 @@ async function call<T>(
   const token = getToken();
   const session = getCartSession();
   if (session) headers["X-Cart-Session"] = session;
+  // Reprise après coupure : rejouée avec la même clé, la requête rend la
+  // commande déjà créée au lieu d'en créer une seconde.
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
   // authFetch ajoute l'Authorization et rafraîchit la session sur 401
   const res = await authFetch(path, {
@@ -178,6 +182,7 @@ export const cartApi = {
     garageId?: string | null,
     // Créneau de montage choisi (ISO local), si le garage prend des RDV
     mountingAt?: string | null,
+    idempotencyKey?: string,
   ) =>
     call<{
       order_number: string | null;
@@ -197,7 +202,7 @@ export const cartApi = {
       mounting_at: mountingAt || null,
       accept_terms: acceptTerms,
       promo_code: promoCode || null,
-    }),
+    }, idempotencyKey),
 
   /** Commande sans compte préalable. Le backend crée le compte support et
    *  rend une paire de jetons : le tunnel de paiement exige un utilisateur
@@ -215,7 +220,7 @@ export const cartApi = {
     mounting_at?: string | null;
     accept_terms: boolean;
     promo_code?: string | null;
-  }) =>
+  }, idempotencyKey?: string) =>
     call<{
       order_number: string | null;
       status: string | null;
@@ -236,7 +241,7 @@ export const cartApi = {
       garage_id: payload.garage_id || null,
       mounting_at: payload.mounting_at || null,
       promo_code: payload.promo_code || null,
-    }),
+    }, idempotencyKey),
 };
 
 export interface AddressPayload {

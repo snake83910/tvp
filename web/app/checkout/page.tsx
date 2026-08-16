@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { CheckoutSteps } from "@/components/CheckoutSteps";
 import { useCart } from "@/components/CartProvider";
@@ -13,7 +13,7 @@ import { Input, Section } from "@/components/checkout/fields";
 import type { PriceChange } from "@/components/checkout/types";
 import { cartApi, type AddressPayload } from "@/lib/cart";
 import type { GarageNearby } from "@/lib/api";
-import { ErrorCode, errorCode, errorMessage } from "@/lib/errors";
+import { ApiError, ErrorCode, errorCode, errorMessage } from "@/lib/errors";
 import {
   accountApi,
   saveTokens,
@@ -86,6 +86,17 @@ export default function CheckoutPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([]);
+
+  /** Clé d'idempotence de la tentative en cours.
+   *
+   *  Elle ne survit QU'À une coupure réseau — le seul cas où le client
+   *  ignore si sa commande est passée. Dès que le serveur a répondu
+   *  (succès, prix modifiés, refus métier), il a agi de façon
+   *  déterministe : la tentative suivante repart d'une clé neuve, sinon
+   *  un client qui corrige son adresse après un refus se verrait opposer
+   *  « clé déjà utilisée pour une requête différente ». */
+  const idemKey = useRef<string | null>(null);
+  const takeKey = () => (idemKey.current ??= crypto.randomUUID());
 
   // Code promo : aperçu validé par l'API, re-vérifié au checkout —
   // avec ou sans compte.
@@ -216,7 +227,8 @@ export default function CheckoutPage() {
           mounting_at: slot,
           promo_code: promo?.code ?? null,
           accept_terms: true,
-        });
+        }, takeKey());
+        idemKey.current = null;
         // Les jetons AVANT toute navigation : la page de paiement appelle
         // /payment/init, qui exige une session. Sans cet enregistrement,
         // le client arriverait sur un écran qui le rejette alors que sa
@@ -232,6 +244,9 @@ export default function CheckoutPage() {
         }
         if (res.order_number) router.push(`/paiement/${res.order_number}`);
       } catch (err) {
+        // Le serveur a répondu : sa décision est acquise, on repart d'une
+        // clé neuve. Une panne réseau (pas d'ApiError) conserve la clé.
+        if (err instanceof ApiError) idemKey.current = null;
         setError(errorMessage(err, "Commande impossible"));
         // Email déjà enregistré : on ouvre le chemin de la connexion
         // plutôt que de laisser le client dans une impasse.
@@ -279,8 +294,9 @@ export default function CheckoutPage() {
 
       const res = await cartApi.checkout(
         addressId, true, deliveryMode, promo?.code ?? null, billingAddressId,
-        garageId, slot,
+        garageId, slot, takeKey(),
       );
+      idemKey.current = null;
       if (res.price_changes.length > 0) {
         // Prix fournisseur modifiés : tableau avant/après explicite
         setPriceChanges(res.price_changes);
@@ -291,6 +307,7 @@ export default function CheckoutPage() {
       // Commande créée -> page de paiement
       router.push(`/paiement/${res.order_number}`);
     } catch (e) {
+      if (e instanceof ApiError) idemKey.current = null;
       setError(errorMessage(e, "Erreur lors de la commande"));
       setBusy(false);
     }
