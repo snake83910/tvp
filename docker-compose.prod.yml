@@ -50,5 +50,29 @@ services:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
+  # Consultation de la base de production, à distance. Ne démarre jamais
+  # avec la pile (profil « outils ») : il faut le nommer explicitement.
+  #
+  #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  #     --profile outils up -d pgweb
+  #
+  # Puis, depuis son poste :  ssh -L 8081:127.0.0.1:8081 user@serveur
+  # et ouvrir http://localhost:8081. Le service n'écoute que sur la
+  # loopback du serveur : le tunnel SSH est le SEUL chemin, et il est
+  # déjà protégé par la clé SSH. D'où l'absence d'authentification HTTP
+  # ici — elle n'ajouterait rien contre quelqu'un qui a déjà un shell,
+  # et ferait un secret de plus à gérer.
+  #
+  # `--readonly` : sur la production, une écriture faite ici ne passerait
+  # ni par la machine à états des commandes, ni par l'audit, ni par les
+  # emails. Un statut passé à « remboursée » à la main marquerait la
+  # commande réglée sans qu'un centime ne bouge. On consulte, on ne
+  # modifie pas.
+  #
+  # Pas de `restart` : il meurt au redémarrage du serveur, et c'est très
+  # bien. On le rallume pour une session de diagnostic, pas à demeure.
+  pgweb:
+    command: ["--readonly", "--lock-session"]
+
 volumes:
   uploads:
