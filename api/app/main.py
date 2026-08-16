@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import select, text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.cache import get_redis
@@ -177,6 +177,62 @@ async def health(response: Response):
     if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {"status": "ok" if healthy else "degraded", "env": settings.environment, "checks": checks}
+
+
+@app.get("/health/jobs", tags=["system"])
+async def health_jobs(response: Response):
+    """Les jobs planifiés tournent-ils encore ?
+
+    Endpoint SÉPARÉ de /health, volontairement. Un job en retard ne veut
+    pas dire que le site est tombé : mélanger les deux ferait crier
+    « site indisponible » pour une relance email en retard, et cette
+    alerte-là finirait par être ignorée. Deux sondes, deux significations.
+
+    Retourne 503 dès qu'un job n'a pas tourné depuis plus de DEUX fois
+    sa période — assez tolérant pour absorber un passage manqué, assez
+    strict pour voir un crontab perdu au redéploiement.
+
+    Endpoint PUBLIC, comme /health : une sonde externe doit pouvoir
+    l'appeler. Il ne rend donc que l'état et l'horodatage — jamais les
+    compteurs métier du job (commandes relancées, avis envoyés), qui
+    renseigneraient un tiers sur le volume d'activité. Le détail est
+    servi par `/v1/admin/cron-runs`, derrière authentification.
+    """
+    from app.models.cron import CronRun
+    from app.modules.cron.router import JOB_PERIOD_MINUTES
+
+    now = datetime.now(UTC)
+    jobs: dict[str, dict] = {}
+    healthy = True
+
+    try:
+        async with SessionLocal() as db:
+            rows = {r.job: r for r in (await db.scalars(select(CronRun))).all()}
+    except Exception as exc:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "degraded", "error": f"{exc.__class__.__name__}"}
+
+    for job, period in JOB_PERIOD_MINUTES.items():
+        run = rows.get(job)
+        if run is None or run.finished_at is None:
+            # Jamais vu tourner. Sur une base neuve c'est normal une
+            # heure ou deux ; passé ce délai, la ligne crontab manque.
+            jobs[job] = {"state": "never_ran"}
+            healthy = False
+            continue
+        age = (now - run.finished_at).total_seconds() / 60
+        late = age > 2 * period
+        jobs[job] = {
+            "state": "late" if late else run.status,
+            "last_run": run.finished_at.isoformat(),
+            "minutes_ago": int(age),
+        }
+        if late or run.status != "ok":
+            healthy = False
+
+    if not healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"status": "ok" if healthy else "degraded", "jobs": jobs}
 
 
 # Version de l'API dans le chemin. Posée AVANT qu'un tiers ne consomme

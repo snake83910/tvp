@@ -16,7 +16,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.modules.cron.router import REVIEW_DELAY_DAYS, reviews
+# Le CORPS du job, pas l'endpoint : celui-ci le sous-traite à
+# `_tracked`, qui écrit sa propre trace et commite une seconde fois.
+# Ce test-ci porte sur la sollicitation d'avis, pas sur le suivi
+# d'exécution (voir test_cron_tracking.py).
+from app.modules.cron.router import REVIEW_DELAY_DAYS, _run_reviews
 
 NOW = datetime(2026, 8, 16, 10, 0, tzinfo=UTC)
 
@@ -60,7 +64,7 @@ async def test_demande_envoyee_et_horodatee():
     with patch(
         "app.modules.mailer.service.send_review_request"
     ) as envoi:
-        res = await reviews(db=db, _=None)
+        res = await _run_reviews(db)
 
     assert res == {"checked": 1, "sent": 1}
     envoi.assert_called_once_with(order, user, garage.slug)
@@ -79,7 +83,7 @@ async def test_client_ayant_deja_note_ce_garage_non_sollicite():
     with patch(
         "app.modules.mailer.service.send_review_request"
     ) as envoi:
-        res = await reviews(db=db, _=None)
+        res = await _run_reviews(db)
 
     assert res == {"checked": 1, "sent": 0}
     envoi.assert_not_called()
@@ -92,7 +96,7 @@ async def test_aucune_commande_eligible():
     db = _db([])
 
     with patch("app.modules.mailer.service.send_review_request") as envoi:
-        res = await reviews(db=db, _=None)
+        res = await _run_reviews(db)
 
     assert res == {"checked": 0, "sent": 0}
     envoi.assert_not_called()
@@ -112,7 +116,7 @@ async def test_plusieurs_commandes_une_seule_deja_notee():
     db.scalar = AsyncMock(side_effect=[None, uuid.uuid4(), None])
 
     with patch("app.modules.mailer.service.send_review_request") as envoi:
-        res = await reviews(db=db, _=None)
+        res = await _run_reviews(db)
 
     assert res == {"checked": 3, "sent": 2}
     assert envoi.call_count == 2

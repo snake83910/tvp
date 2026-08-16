@@ -125,8 +125,24 @@ crontab -e
 Effets :
 
 `/cron/dunning` — toutes les heures
+- **Demande d'abord à la banque** ce qu'elle a encaissé, pour les commandes
+  en attente depuis plus de 15 min. Un IPN perdu (nginx qui redémarre,
+  coupure réseau) laisse une commande payée en `pending_payment` : cette
+  passe la rattrape et envoie la confirmation au client.
 - Relance les commandes `pending_payment` créées il y a plus d'1h
-- Au bout de 7 jours sans paiement, la commande est annulée automatiquement
+- Au bout de 7 jours sans paiement, la commande est annulée — **uniquement
+  si la banque a confirmé n'avoir rien encaissé**. Sinon la commande reste
+  en attente et remonte dans « paiements à vérifier » sur le tableau de
+  bord admin. Ne jamais annuler dans le doute : le client est peut-être
+  débité.
+
+> **Prérequis Sogecommerce** : la vérification utilise l'API `Order/Get`
+> (droit `WS_REST_GET`). Si elle n'est pas activée sur la boutique, chaque
+> contrôle rend `unavailable` et **plus aucune commande n'est annulée
+> automatiquement** — elles s'empilent dans l'écran « à vérifier ». Vérifier
+> dans le Back Office → Paramétrage → Boutique → Clés d'API REST. Le
+> comportement est volontairement conservateur, mais il suppose un tri
+> manuel tant que ce droit manque.
 
 `/cron/appointments` — toutes les heures
 - Rappel la veille du montage (le no-show est le premier coût d'un planning en ligne)
@@ -147,6 +163,22 @@ Effets :
    - Interval : 5 min
    - Alert contacts : ton email + (optionnel) webhook Slack/Discord
 3. UptimeRobot interprète le code HTTP : `200 OK` → up, `503` → down (donc si DB ou Redis tombent, alerte automatique)
+4. Ajouter un **second monitor** sur `https://tousvospneus.com/api/health/jobs`
+
+`/health/jobs` répond 503 dès qu'une tâche planifiée n'a pas tourné depuis
+plus de deux fois sa période. C'est le seul moyen de voir un crontab perdu
+au redéploiement ou un `CRON_TOKEN` régénéré sans mise à jour de la ligne
+cron : sans lui, les relances de paiement, les rappels de rendez-vous et
+les demandes d'avis s'arrêtent tous les trois en silence.
+
+Deux sondes séparées, volontairement : un job en retard ne veut pas dire
+que le site est tombé. Les mélanger ferait crier « site indisponible »
+pour une relance email en retard, et cette alerte-là finirait ignorée.
+Nommer le monitor « Jobs planifiés » pour que l'alerte se lise seule.
+
+L'état détaillé (compte rendu du dernier passage, message d'erreur) est
+sur le tableau de bord admin — l'endpoint public ne rend délibérément
+aucun compteur métier.
 
 ## Logs
 

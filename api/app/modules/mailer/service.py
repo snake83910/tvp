@@ -310,6 +310,34 @@ def send_order_delivered(order: Order, user: User) -> None:
     )
 
 
+def send_order_refunded(
+    order: Order, user: User, amount_cents: int, reason: str | None = None
+) -> None:
+    """Confirme au client le remboursement de sa commande.
+
+    Le client était le seul à ne pas être prévenu : la commande passait
+    en « remboursée » sans qu'aucun email ne parte. Or c'est lui qui
+    attend l'argent, et c'est lui qui doit pouvoir vérifier le montant
+    sur son relevé — d'où le montant explicite dans le corps du mail.
+    """
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject=f"Remboursement de votre commande {order.order_number}",
+            template="order_refunded.html",
+            civilite=_civilite(user),
+            order_number=order.order_number,
+            amount=f"{amount_cents / 100:.2f} €".replace(".", ","),
+            partial=amount_cents < order.total_ttc_cents,
+            total=f"{order.total_ttc_cents / 100:.2f} €".replace(".", ","),
+            reason=(reason or "").strip() or None,
+            order_url=f"{_site_url()}/commandes/{order.order_number}",
+            site_url=_site_url(),
+        )
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 # Annulation
 # ─────────────────────────────────────────────────────────────────

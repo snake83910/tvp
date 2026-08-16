@@ -82,6 +82,25 @@ export interface AdminOrderDetail extends OrderDetail {
   customer_email: string;
   customer_name: string | null;
   allowed_transitions: string[];
+  /** Montant réellement remboursé (euros), et sa date. Le remboursement
+   *  se fait au back office de la banque : c'est cette valeur, pas le
+   *  statut, qui permet de vérifier après coup ce qui a été rendu. */
+  refunded: number | null;
+  refunded_at: string | null;
+  /** Dernière réponse de la banque sur le paiement. Explique pourquoi
+   *  une commande en attente n'a pas été annulée automatiquement. */
+  payment_check_result: string | null;
+  payment_checked_at: string | null;
+}
+
+export interface CronRunStatus {
+  job: string;
+  /** ok | error | late | never_ran */
+  state: string;
+  period_minutes: number;
+  last_run?: string;
+  duration_ms?: number | null;
+  detail?: Record<string, unknown>;
 }
 
 export interface Garage {
@@ -211,6 +230,8 @@ export const adminApi = {
       carrier?: string;
       tracking_url?: string;
       cancel_reason?: string;
+      /** Obligatoire pour passer en « remboursée ». En centimes. */
+      refund_cents?: number;
     }
   ) => call<AdminOrderDetail>(`/admin/orders/${orderNumber}/status`, "PATCH", data),
 
@@ -226,7 +247,14 @@ export const adminApi = {
     call<{
       to_ship: AdminOrderSummary[];
       late: AdminOrderSummary[];
+      payment_stuck: AdminOrderSummary[];
     }>(`/admin/orders-attention`),
+
+  /** Dernier passage de chaque job planifié. Un job « late » ou
+   *  « never_ran » signale une ligne de crontab perdue — les relances
+   *  de paiement et les rappels de rendez-vous s'arrêtent alors sans
+   *  autre signal. */
+  getCronRuns: () => call<CronRunStatus[]>(`/admin/cron-runs`),
 
   bulkEmail: (order_numbers: string[], subject: string, body: string) =>
     call<{ sent: number }>(`/admin/bulk-email`, "POST", { order_numbers, subject, body }),

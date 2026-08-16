@@ -313,6 +313,14 @@ class AdminOrderDetail(OrderDetail):
     customer_name: str | None = None
     allowed_transitions: list[str]
     admin_note: str | None = None
+    # Remboursement effectivement enregistré (euros), et sa date.
+    refunded: float | None = None
+    refunded_at: datetime | None = None
+    # Dernière réponse de la banque sur le paiement, pour les commandes
+    # bloquées en attente : c'est ce qui explique pourquoi la relance ne
+    # les a pas annulées.
+    payment_check_result: str | None = None
+    payment_checked_at: datetime | None = None
 
 
 class StatusUpdateIn(BaseModel):
@@ -321,6 +329,11 @@ class StatusUpdateIn(BaseModel):
     carrier: str | None = None
     tracking_url: str | None = None
     cancel_reason: str | None = None
+    # Montant réellement remboursé, en centimes. OBLIGATOIRE pour passer
+    # une commande en « remboursée » : le remboursement se fait au back
+    # office de la banque, et sans ce montant rien ne permet de vérifier
+    # après coup qu'il a bien eu lieu, ni de combien.
+    refund_cents: int | None = None
 
 
 class AdminStats(BaseModel):

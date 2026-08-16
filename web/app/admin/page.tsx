@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { adminApi, type AdminOrderSummary, type AdminStats } from "@/lib/admin";
+import {
+  adminApi,
+  type AdminOrderSummary,
+  type AdminStats,
+  type CronRunStatus,
+} from "@/lib/admin";
 import { OrderTable } from "@/components/admin/OrderTable";
 import { Sparkline } from "@/components/admin/Sparkline";
 import { SkeletonList } from "@/components/Skeleton";
@@ -19,6 +24,11 @@ interface Spark {
 interface Attention {
   to_ship: AdminOrderSummary[];
   late: AdminOrderSummary[];
+  /** Commandes que la relance a REFUSÉ d'annuler : la banque n'a pas
+   *  confirmé qu'elle n'avait rien encaissé. Elles resteraient en
+   *  attente indéfiniment sans intervention humaine — c'est le prix à
+   *  payer pour ne jamais annuler la commande d'un client débité. */
+  payment_stuck: AdminOrderSummary[];
 }
 
 export default function AdminDashboard() {
@@ -26,6 +36,7 @@ export default function AdminDashboard() {
   const [recent, setRecent] = useState<AdminOrderSummary[]>([]);
   const [spark, setSpark] = useState<Spark | null>(null);
   const [attention, setAttention] = useState<Attention | null>(null);
+  const [jobs, setJobs] = useState<CronRunStatus[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Période visualisée pour les sparklines
   const [sparkPeriod, setSparkPeriod] = useState<7 | 30 | 90>(30);
@@ -38,9 +49,11 @@ export default function AdminDashboard() {
       adminApi.listOrders({ per_page: 5 } as Parameters<typeof adminApi.listOrders>[0]),
       adminApi.getSparkline().catch(() => null),
       adminApi.getAttention().catch(() => null),
+      adminApi.getCronRuns().catch(() => null),
     ])
-      .then(([s, o, sp, att]) => {
+      .then(([s, o, sp, att, cron]) => {
         setStats(s); setRecent(o); setSpark(sp as Spark | null); setAttention(att as Attention | null);
+        setJobs(cron as CronRunStatus[] | null);
         // Indicateur "nouvelles depuis dernière visite"
         if (typeof window !== "undefined") {
           const lastSeen = localStorage.getItem("tvp_admin_last_seen_paid_id");
@@ -128,8 +141,17 @@ export default function AdminDashboard() {
       </div>
 
       {/* Widgets attention */}
-      {attention && (attention.to_ship.length > 0 || attention.late.length > 0) && (
+      {attention && (attention.to_ship.length > 0 || attention.late.length > 0
+        || (attention.payment_stuck?.length ?? 0) > 0) && (
         <div className="mt-8 grid gap-4 lg:grid-cols-2">
+          {(attention.payment_stuck?.length ?? 0) > 0 && (
+            <AttentionCard
+              tone="alert"
+              title={`${attention.payment_stuck.length} paiement${attention.payment_stuck.length > 1 ? "s" : ""} à vérifier`}
+              hint="La banque n'a pas confirmé. Ces commandes ne seront pas annulées automatiquement : vérifiez au back office avant de trancher."
+              orders={attention.payment_stuck}
+            />
+          )}
           {attention.to_ship.length > 0 && (
             <div onClick={markAttentionSeen}>
               <AttentionCard
@@ -149,6 +171,37 @@ export default function AdminDashboard() {
               orders={attention.late}
             />
           )}
+        </div>
+      )}
+
+      {/* Jobs planifiés. N'apparaît QUE si quelque chose ne va pas : un
+          bandeau vert permanent finit par ne plus être lu, et le seul
+          message utile ici est « une relance ne tourne plus ». */}
+      {jobs && jobs.some((j) => j.state !== "ok") && (
+        <div className="mt-8 rounded-2xl border border-red-300 bg-red-50 p-5">
+          <p className="font-display text-lg font-black text-red-800">
+            Tâches planifiées à l&apos;arrêt
+          </p>
+          <p className="mt-1 text-xs text-red-800 opacity-80">
+            Relances de paiement, rappels de rendez-vous et demandes
+            d&apos;avis en dépendent. Vérifiez le crontab du serveur.
+          </p>
+          <ul className="mt-4 space-y-1.5 text-sm">
+            {jobs
+              .filter((j) => j.state !== "ok")
+              .map((j) => (
+                <li key={j.job} className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-red-800">{j.job}</span>
+                  <span className="text-xs text-red-800 opacity-80">
+                    {j.state === "never_ran"
+                      ? "jamais exécutée"
+                      : j.state === "late"
+                        ? `dernière exécution ${new Date(j.last_run!).toLocaleString("fr-FR")}`
+                        : `en erreur · ${String(j.detail?.error ?? "").slice(0, 80)}`}
+                  </span>
+                </li>
+              ))}
+          </ul>
         </div>
       )}
 
@@ -244,10 +297,17 @@ function Kpi({
 
 function AttentionCard({
   tone, title, hint, orders, badge,
-}: { tone: "info" | "warn"; title: string; hint: string; orders: AdminOrderSummary[]; badge?: number }) {
-  const border = tone === "warn" ? "border-amber-300" : "border-blue-200";
-  const bg = tone === "warn" ? "bg-amber-50" : "bg-blue-50";
-  const text = tone === "warn" ? "text-amber-800" : "text-blue-800";
+}: { tone: "info" | "warn" | "alert"; title: string; hint: string; orders: AdminOrderSummary[]; badge?: number }) {
+  const border =
+    tone === "alert" ? "border-red-300"
+    : tone === "warn" ? "border-amber-300"
+    : "border-blue-200";
+  const bg =
+    tone === "alert" ? "bg-red-50" : tone === "warn" ? "bg-amber-50" : "bg-blue-50";
+  const text =
+    tone === "alert" ? "text-red-800"
+    : tone === "warn" ? "text-amber-800"
+    : "text-blue-800";
   return (
     <div className={`rounded-2xl border ${border} ${bg} p-5`}>
       <div className="flex items-center gap-2">

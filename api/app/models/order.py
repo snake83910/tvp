@@ -215,6 +215,23 @@ class Order(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # Dernière vérification du paiement AUPRÈS DE LA BANQUE (pas de l'IPN).
+    # Une commande n'est annulée pour non-paiement que si la banque a
+    # confirmé qu'elle n'a rien encaissé : un IPN perdu ne doit pas
+    # annuler la commande d'un client déjà débité.
+    payment_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # not_paid | paid | unavailable | amount_mismatch | skipped
+    payment_check_result: Mapped[str | None] = mapped_column(String(20))
+    # Remboursement : montant réellement rendu, en centimes. Le statut
+    # « remboursée » seul ne prouve rien — l'opération se fait au back
+    # office de la banque, et sans ce montant personne ne peut vérifier
+    # après coup que le client a bien été remboursé, ni de combien.
+    refunded_cents: Mapped[int | None] = mapped_column(Integer)
+    refunded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     # Demande d'avis envoyée — une seule par commande, jamais de relance.
     review_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)

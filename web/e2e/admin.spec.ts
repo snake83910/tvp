@@ -163,6 +163,48 @@ test("machine à états : l'admin non plus ne peut pas sauter d'étape", async (
 });
 
 
+test("un remboursement sans montant est refusé", async ({ request }) => {
+  // Le site ne rembourse pas par API : « remboursée » est une
+  // DÉCLARATION. Sans montant elle n'est pas vérifiable — six mois plus
+  // tard, face à un client qui affirme n'avoir rien reçu, un statut seul
+  // ne prouve rien.
+  const admin = await loginAdmin(request);
+  const { orderNumber } = await seedPaidOrder(request);
+
+  const sansMontant = await patchStatus(request, admin, orderNumber, "refunded");
+  expect(sansMontant.status()).toBe(422);
+
+  const trop = await request.patch(
+    `${API}/admin/orders/${orderNumber}/status`,
+    {
+      headers: { Authorization: `Bearer ${admin.access}` },
+      data: { status: "refunded", refund_cents: 99_999_999 },
+    },
+  );
+  expect(trop.status(), "au-delà du total commande").toBe(422);
+
+  // Après deux refus, la commande n'a pas bougé.
+  const avant = await request.get(`${API}/admin/orders/${orderNumber}`, {
+    headers: { Authorization: `Bearer ${admin.access}` },
+  });
+  const detail = await avant.json();
+  expect(detail.status).toBe("paid");
+  expect(detail.refunded).toBeNull();
+
+  // Avec un montant valide : accepté, et le montant est conservé.
+  const cents = Math.round(detail.total_ttc * 100);
+  const ok = await request.patch(`${API}/admin/orders/${orderNumber}/status`, {
+    headers: { Authorization: `Bearer ${admin.access}` },
+    data: { status: "refunded", refund_cents: cents, cancel_reason: "Test e2e" },
+  });
+  expect(ok.ok(), `remboursement : ${ok.status()}`).toBeTruthy();
+  const apres = await ok.json();
+  expect(apres.status).toBe("refunded");
+  expect(apres.refunded).toBeCloseTo(detail.total_ttc, 2);
+  expect(apres.refunded_at).toBeTruthy();
+});
+
+
 test("l'espace admin est fermé aux clients", async ({ page, request }) => {
   const client = await login(request);
 

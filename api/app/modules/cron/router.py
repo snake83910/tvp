@@ -14,18 +14,31 @@ Exemple crontab sur le VPS :
     30 10 * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
         https://tousvospneus.com/api/cron/reviews >/dev/null
 """
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.cron import CronRun
 from app.models.order import Order, OrderStatus
 from app.models.user import User
 
 router = APIRouter(prefix="/cron", tags=["cron"])
+
+
+#: Période attendue de chaque job, en minutes. Sert à `/health` : un job
+#: dont la dernière exécution remonte à plus de deux fois sa période est
+#: considéré en panne. Toute entrée ajoutée ici devient surveillée.
+JOB_PERIOD_MINUTES: dict[str, int] = {
+    "dunning": 60,
+    "appointments": 60,
+    "reviews": 24 * 60,
+}
 
 
 def _require_cron_token(x_cron_token: str | None = Header(default=None)) -> None:
@@ -43,25 +56,107 @@ def _require_cron_token(x_cron_token: str | None = Header(default=None)) -> None
         )
 
 
+async def _tracked(
+    db: AsyncSession, job: str, work: Callable[[], Awaitable[dict]]
+) -> dict:
+    """Exécute un job en laissant une trace de son passage.
+
+    Sans cette trace, un crontab perdu au redéploiement ou un
+    `CRON_TOKEN` régénéré arrête les relances en silence : le premier
+    signal serait un client qui se plaint. Une ligne par job, écrasée à
+    chaque passage — on veut savoir si le job est vivant, pas conserver
+    un journal.
+
+    L'échec est enregistré AUSSI : un job qui lève chaque heure doit se
+    voir autrement que par « dernière exécution il y a trois jours ».
+    """
+    started = datetime.now(UTC)
+    try:
+        detail = await work()
+    except Exception as exc:
+        # La session est probablement cassée : on repart propre avant
+        # d'écrire la trace, sinon on perdrait l'information de l'échec
+        # en plus de l'échec lui-même.
+        await db.rollback()
+        await _record_run(db, job, started, "error", {"error": str(exc)[:500]})
+        raise
+    await _record_run(db, job, started, "ok", detail)
+    return detail
+
+
+async def _record_run(
+    db: AsyncSession, job: str, started: datetime, outcome: str, detail: dict
+) -> None:
+    finished = datetime.now(UTC)
+    values = {
+        "job": job,
+        "started_at": started,
+        "finished_at": finished,
+        "status": outcome,
+        "duration_ms": int((finished - started).total_seconds() * 1000),
+        "detail": detail,
+    }
+    stmt = pg_insert(CronRun).values(**values)
+    await db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[CronRun.job],
+            set_={k: v for k, v in values.items() if k != "job"},
+        )
+    )
+    await db.commit()
+
+
 @router.post("/dunning")
 async def dunning(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_require_cron_token),
 ):
+    return await _tracked(db, "dunning", lambda: _run_dunning(db))
+
+
+async def _run_dunning(db: AsyncSession) -> dict:
     """Relance les commandes en attente de paiement.
 
-    - 1ère relance : commandes créées il y a 1h et toujours pending_payment
-    - Abandon : commandes > 7j en pending_payment passent en cancelled
+    Trois passes, dans cet ordre — l'ordre EST la garantie :
+
+    0. **Réconciliation bancaire.** On demande à la banque ce qu'elle a
+       encaissé. Un IPN perdu (nginx qui redémarre, coupure réseau)
+       laisse une commande payée en `pending_payment` : sans cette
+       passe, la suite la relancerait puis l'annulerait, alors que le
+       client est débité.
+    1. **Abandon.** Au-delà de 7 jours, annulation — mais UNIQUEMENT si
+       la banque a confirmé n'avoir rien encaissé. Une banque muette
+       n'autorise rien : la commande reste en attente et remonte dans
+       l'écran « à traiter » de l'admin.
+    2. **Relance.** Email au bout d'1 h, puis une fois par 24 h.
     """
     from app.modules.mailer import get_mailer
     from app.modules.mailer.base import fire_and_forget
     from app.modules.mailer.service import send_order_cancelled
+    from app.modules.orders import reconcile
 
     now = datetime.now(UTC)
     threshold_relance = now - timedelta(hours=1)
     threshold_abandon = now - timedelta(days=7)
+    # Quinze minutes : au-delà, un paiement abouti dont l'IPN n'est pas
+    # arrivé est une anomalie, pas un client encore sur la page bancaire.
+    threshold_check = now - timedelta(minutes=15)
 
-    # Jointure User directe : évite un SELECT par commande (N+1)
+    # ── Passe 0 : ce que la banque, elle, a vu ──────────────────────
+    to_check = (await db.scalars(
+        select(Order).where(
+            Order.status == OrderStatus.pending_payment,
+            Order.created_at <= threshold_check,
+        )
+    )).all()
+    recovered = 0
+    for order in to_check:
+        if await reconcile.reconcile_order(db, order) == reconcile.PAID:
+            recovered += 1
+
+    # Jointure User directe : évite un SELECT par commande (N+1). La
+    # requête est REJOUÉE après la passe 0, qui a pu sortir des
+    # commandes de `pending_payment`.
     pending = (await db.execute(
         select(Order, User)
         .join(User, User.id == Order.user_id)
@@ -73,10 +168,17 @@ async def dunning(
 
     relanced = 0
     abandoned = 0
+    # Commandes qu'on refuse d'annuler faute de réponse de la banque.
+    blocked = 0
     mailer = get_mailer()
     for order, user in pending:
 
         if order.created_at <= threshold_abandon:
+            if order.payment_check_result not in reconcile.SAFE_TO_CANCEL:
+                # On ne sait pas si le client a payé. Annuler serait
+                # parier son argent contre une ligne de statut.
+                blocked += 1
+                continue
             # Plus de 7 jours sans paiement -> annulation
             try:
                 order.transition_to(OrderStatus.cancelled)
@@ -103,8 +205,11 @@ async def dunning(
     await db.commit()
     return {
         "checked": len(pending),
+        "bank_checked": len(to_check),
+        "recovered": recovered,
         "relanced": relanced,
         "abandoned": abandoned,
+        "blocked": blocked,
     }
 
 
@@ -113,6 +218,10 @@ async def appointments(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_require_cron_token),
 ):
+    return await _tracked(db, "appointments", lambda: _run_appointments(db))
+
+
+async def _run_appointments(db: AsyncSession) -> dict:
     """Relances liées aux rendez-vous de montage.
 
     Deux passes, à lancer une fois par heure :
@@ -204,6 +313,10 @@ async def reviews(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_require_cron_token),
 ):
+    return await _tracked(db, "reviews", lambda: _run_reviews(db))
+
+
+async def _run_reviews(db: AsyncSession) -> dict:
     """Sollicite un avis sur le garage après une livraison.
 
     À lancer une fois par jour. Ne concerne que les commandes livrées

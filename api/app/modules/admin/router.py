@@ -26,6 +26,7 @@ from app.modules.garage.booking import PARIS
 from app.modules.mailer.service import (
     send_order_cancelled,
     send_order_delivered,
+    send_order_refunded,
     send_order_shipped,
 )
 from app.schemas.order import (
@@ -106,6 +107,12 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
         customer_name=full_name,
         allowed_transitions=allowed,
         admin_note=order.admin_note,
+        refunded=(
+            order.refunded_cents / 100 if order.refunded_cents is not None else None
+        ),
+        refunded_at=order.refunded_at,
+        payment_check_result=order.payment_check_result,
+        payment_checked_at=order.payment_checked_at,
     )
 
 
@@ -417,6 +424,32 @@ async def update_status(
 
     previous_status = order.status.value
 
+    # Le remboursement s'exécute au back office de la banque — le site
+    # n'a pas de contrat de remboursement par API. « Remboursée » n'est
+    # donc qu'une DÉCLARATION, et une déclaration sans montant ni date
+    # n'est pas vérifiable : six mois plus tard, personne ne peut dire
+    # si le client a été remboursé ni de combien. Le montant est donc
+    # exigé, borné au total de la commande, et tracé.
+    refund_cents: int | None = None
+    if target == OrderStatus.refunded:
+        refund_cents = data.refund_cents
+        if refund_cents is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Indiquez le montant réellement remboursé au back "
+                    "office de la banque."
+                ),
+            )
+        if refund_cents <= 0 or refund_cents > order.total_ttc_cents:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Montant remboursé invalide : attendu entre 0,01 € et "
+                    f"{order.total_ttc_cents / 100:.2f} €."
+                ),
+            )
+
     try:
         order.transition_to(target)
     except Exception as exc:
@@ -434,6 +467,12 @@ async def update_status(
         send_order_delivered(order, user)
     elif target == OrderStatus.cancelled:
         send_order_cancelled(order, user, data.cancel_reason)
+    elif target == OrderStatus.refunded:
+        order.refunded_cents = refund_cents
+        order.refunded_at = datetime.now(UTC)
+        # Le client était jusqu'ici le seul à ne pas être prévenu de son
+        # propre remboursement.
+        send_order_refunded(order, user, refund_cents, data.cancel_reason)
 
     await audit(
         db, user=admin,
@@ -443,6 +482,7 @@ async def update_status(
             "from": previous_status, "to": target.value,
             "tracking_number": data.tracking_number,
             "cancel_reason": data.cancel_reason,
+            "refund_cents": refund_cents,
         },
         request=request,
     )
@@ -545,6 +585,24 @@ async def orders_attention(
         .limit(10)
     )).all()
 
+    # Paiement incertain : la relance a REFUSÉ d'annuler ces commandes
+    # parce que la banque n'a pas confirmé qu'elle n'avait rien encaissé.
+    # Elles resteraient en attente indéfiniment sans un humain — c'est le
+    # prix à payer pour ne jamais annuler la commande d'un client débité.
+    from app.modules.orders import reconcile
+    stuck_rows = (await db.execute(
+        select(Order, User)
+        .join(User, User.id == Order.user_id)
+        .options(selectinload(Order.items))
+        .where(
+            Order.status == OrderStatus.pending_payment,
+            Order.payment_check_result.is_not(None),
+            Order.payment_check_result.not_in(list(reconcile.SAFE_TO_CANCEL)),
+        )
+        .order_by(Order.created_at.asc())
+        .limit(10)
+    )).all()
+
     def serialize(rows):
         return [
             {
@@ -555,6 +613,7 @@ async def orders_attention(
                 "item_count": sum(i.quantity for i in o.items),
                 "customer_email": u.email,
                 "customer_name": " ".join(filter(None, [u.first_name, u.last_name])) or None,
+                "payment_check_result": o.payment_check_result,
             }
             for o, u in rows
         ]
@@ -562,7 +621,48 @@ async def orders_attention(
     return {
         "to_ship": serialize(to_ship_rows),
         "late": serialize(late_rows),
+        "payment_stuck": serialize(stuck_rows),
     }
+
+
+# ── Santé des jobs planifiés ───────────────────────────────────────
+
+@router.get("/cron-runs")
+async def cron_runs(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Dernier passage de chaque job planifié, avec son compte rendu.
+
+    `/health/jobs` sert la même information à une sonde externe, mais
+    sans les compteurs métier — ils n'ont rien à faire sur un endpoint
+    public. Ici l'appelant est authentifié : on donne tout, y compris
+    le message d'erreur du dernier échec.
+    """
+    from datetime import timedelta
+
+    from app.models.cron import CronRun
+    from app.modules.cron.router import JOB_PERIOD_MINUTES
+
+    now = datetime.now(UTC)
+    rows = {r.job: r for r in (await db.scalars(select(CronRun))).all()}
+
+    out = []
+    for job, period in JOB_PERIOD_MINUTES.items():
+        run = rows.get(job)
+        if run is None or run.finished_at is None:
+            out.append({"job": job, "state": "never_ran", "period_minutes": period})
+            continue
+        late = now - run.finished_at > timedelta(minutes=2 * period)
+        out.append({
+            "job": job,
+            "state": "late" if late else run.status,
+            "period_minutes": period,
+            "last_run": run.finished_at.isoformat(),
+            "duration_ms": run.duration_ms,
+            "detail": run.detail,
+        })
+    return out
 
 
 # ── Sparkline 30 jours ─────────────────────────────────────────────

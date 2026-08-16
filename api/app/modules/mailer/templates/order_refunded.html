@@ -1,0 +1,52 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, votre remboursement est parti
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Nous avons remboursé votre commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>.
+  </p>
+
+  <div style="margin:20px 0;padding:16px;background:#f6f6f4;border-radius:8px;">
+    <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7a7a72;margin-bottom:6px;">
+      Montant remboursé
+    </div>
+    <div style="font-size:24px;font-weight:900;color:#17181a;">
+      {{ amount }}
+    </div>
+    {% if partial %}
+      <div style="margin-top:8px;font-size:13px;color:#7a7a72;">
+        Remboursement partiel — le total de la commande était de {{ total }}.
+      </div>
+    {% endif %}
+    {% if reason %}
+      <div style="margin-top:10px;color:#17181a;">
+        Motif : {{ reason }}
+      </div>
+    {% endif %}
+  </div>
+
+  <p style="margin:0 0 20px 0;">
+    Le montant réapparaît sur le compte qui a servi au paiement. Le délai
+    dépend de votre banque : comptez généralement 3 à 5 jours ouvrés
+    entre notre remboursement et son affichage sur votre relevé.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ order_url }}"
+       style="display:inline-block;padding:12px 22px;background:#17181a;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:800;">
+      Voir ma commande
+    </a>
+  </p>
+
+  <p style="margin:0 0 8px 0;color:#7a7a72;font-size:13px;">
+    Passé une semaine sans rien voir arriver, répondez à cet email avec
+    le numéro de commande : nous vérifierons avec notre banque.
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    L&rsquo;équipe Tous Vos Pneus
+  </p>
+{% endblock %}

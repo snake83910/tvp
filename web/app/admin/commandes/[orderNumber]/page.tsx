@@ -40,6 +40,10 @@ export default function AdminOrderDetail() {
   const [carrier, setCarrier] = useState("");
   const [trackingUrl, setTrackingUrl] = useState("");
   const [cancelReason, setCancelReason] = useState("");
+  // Montant remboursé, saisi en euros. Le site ne rembourse pas par API :
+  // l'opération se fait au back office de la banque, et ce champ est ce
+  // qui rend la déclaration vérifiable plus tard.
+  const [refundAmount, setRefundAmount] = useState("");
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -103,10 +107,13 @@ export default function AdminOrderDetail() {
         carrier: carrier || undefined,
         tracking_url: trackingUrl || undefined,
         cancel_reason: cancelReason || undefined,
+        refund_cents:
+          targetStatus === "refunded" ? euroToCents(refundAmount) : undefined,
       });
       setOrder(updated);
       setTargetStatus("");
       setTracking(""); setCarrier(""); setTrackingUrl(""); setCancelReason("");
+      setRefundAmount("");
       toast("Statut mis à jour", "success");
       adminApi.listAudit(orderNumber).then(setAuditEntries).catch(() => {});
     } catch (e) {
@@ -120,6 +127,19 @@ export default function AdminOrderDetail() {
   function submitStatus(e: React.FormEvent) {
     e.preventDefault();
     if (!targetStatus || !order) return;
+    if (targetStatus === "refunded") {
+      // Arrêté côté client AUSSI, pour dire quoi corriger avant l'appel
+      // plutôt que d'afficher un 422 dans une modale de confirmation.
+      const cents = euroToCents(refundAmount);
+      const max = Math.round(order.total_ttc * 100);
+      if (cents === undefined || cents <= 0 || cents > max) {
+        setUpdateError(
+          `Saisissez le montant remboursé, entre 0,01 € et ${order.total_ttc.toFixed(2)} €.`,
+        );
+        return;
+      }
+      setUpdateError(null);
+    }
     if (targetStatus === "cancelled" || targetStatus === "refunded") {
       // Confirmation pour actions destructives
       setConfirmDestructive(() => doUpdateStatus);
@@ -176,6 +196,48 @@ export default function AdminOrderDetail() {
           </button>
         </div>
       </div>
+
+      {/* Remboursement déclaré : le statut seul ne dit ni combien ni
+          quand, et c'est précisément ce qu'on doit pouvoir retrouver six
+          mois plus tard face à un client qui conteste. */}
+      {order.refunded != null && (
+        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p className="text-sm font-bold text-amber-900">
+            {order.refunded.toFixed(2)} € remboursés
+            {order.refunded < order.total_ttc && " (partiel)"}
+          </p>
+          <p className="mt-0.5 text-xs text-amber-800">
+            Déclaré le{" "}
+            {order.refunded_at
+              ? new Date(order.refunded_at).toLocaleString("fr-FR")
+              : "—"}{" "}
+            · opération effectuée au back office bancaire
+          </p>
+        </div>
+      )}
+
+      {/* Paiement incertain : la relance a refusé d'annuler cette
+          commande faute de réponse de la banque. Sans cette mention,
+          elle resterait en attente sans explication. */}
+      {order.status === "pending_payment" &&
+        order.payment_check_result &&
+        !["not_paid", "skipped"].includes(order.payment_check_result) && (
+          <div className="mb-6 rounded-xl border border-signal bg-signal-light p-4">
+            <p className="text-sm font-bold text-signal-dark">
+              {order.payment_check_result === "amount_mismatch"
+                ? "La banque a encaissé un montant différent du total"
+                : "Paiement non vérifiable auprès de la banque"}
+            </p>
+            <p className="mt-0.5 text-xs text-signal-dark">
+              Cette commande ne sera PAS annulée automatiquement : le
+              client a peut-être payé. Vérifiez au back office
+              Sogecommerce avant de trancher. Dernier contrôle :{" "}
+              {order.payment_checked_at
+                ? new Date(order.payment_checked_at).toLocaleString("fr-FR")
+                : "—"}
+            </p>
+          </div>
+        )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Colonne principale */}
@@ -281,6 +343,41 @@ export default function AdminOrderDetail() {
                   </>
                 )}
 
+                {targetStatus === "refunded" && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                    <p className="text-xs font-semibold text-amber-900">
+                      Le remboursement n&apos;est pas exécuté par le site.
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      Effectuez-le au back office Sogecommerce, puis
+                      saisissez ici le montant réellement rendu. Il est
+                      enregistré sur la commande, tracé dans l&apos;audit,
+                      et envoyé au client par email.
+                    </p>
+                    <label
+                      htmlFor="refund-amount"
+                      className="mt-3 mb-1 block text-xs font-bold uppercase tracking-wider text-amber-900"
+                    >
+                      Montant remboursé (€)
+                    </label>
+                    <input
+                      id="refund-amount"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={order.total_ttc}
+                      required
+                      placeholder={order.total_ttc.toFixed(2)}
+                      value={refundAmount}
+                      onChange={(e) => setRefundAmount(e.target.value)}
+                      className="h-10 w-full rounded-lg border border-amber-300 bg-paper px-3 text-sm text-ink outline-none focus:border-signal"
+                    />
+                    <p className="mt-1 text-xs text-amber-800">
+                      Total de la commande : {order.total_ttc.toFixed(2)} €
+                    </p>
+                  </div>
+                )}
+
                 {(targetStatus === "cancelled" || targetStatus === "refunded") && (
                   <textarea
                     placeholder="Motif (optionnel)"
@@ -368,15 +465,31 @@ export default function AdminOrderDetail() {
         message={
           targetStatus === "cancelled"
             ? "Cette action déclenche un email d'annulation au client et ne peut pas être annulée."
-            : "Cette action déclenche un email au client. Assurez-vous d'avoir traité le remboursement bancaire."
+            : `Le client recevra un email annonçant un remboursement de ` +
+              `${refundAmount || "0"} €. Ne validez que si l'opération est ` +
+              `déjà faite au back office Sogecommerce : le site ne rembourse pas lui-même.`
         }
-        confirmLabel={targetStatus === "cancelled" ? "Annuler la commande" : "Rembourser"}
+        confirmLabel={
+          targetStatus === "cancelled"
+            ? "Annuler la commande"
+            : `Déclarer ${refundAmount || "0"} € remboursés`
+        }
         danger
         onClose={() => setConfirmDestructive(null)}
         onConfirm={() => { confirmDestructive?.(); setConfirmDestructive(null); }}
       />
     </div>
   );
+}
+
+/** Euros saisis → centimes. `undefined` si la saisie n'est pas un
+ *  nombre : de l'argent ne se devine pas, mieux vaut refuser que
+ *  d'envoyer un NaN au serveur. L'arrondi évite les 4999,999… du
+ *  flottant. */
+function euroToCents(value: string): number | undefined {
+  const n = Number(value.replace(",", "."));
+  if (!Number.isFinite(n)) return undefined;
+  return Math.round(n * 100);
 }
 
 function labelizeAction(action: string): string {

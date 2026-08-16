@@ -30,6 +30,7 @@ from app.modules.mailer.service import (
     send_garage_order_notification,
     send_order_confirmation,
 )
+from app.modules.orders import reconcile
 from app.schemas.order import PaymentInitOut
 
 router = APIRouter(prefix="/payment", tags=["payment"])
@@ -236,9 +237,13 @@ async def sync_payment(
     user: User = Depends(get_current_user),
 ):
     """
-    Synchronise le statut d'une commande avec Sogecommerce via l'API Order/Get.
-    Utile en développement local quand l'IPN ne peut pas être reçu (pas de ngrok).
-    Sécurisé : vérifie le statut côté banque, n'accepte jamais la parole du navigateur.
+    Demande à Sogecommerce ce qu'il sait du paiement de cette commande.
+
+    Utile quand l'IPN n'est pas arrivé : en développement local (pas de
+    ngrok) mais aussi en production, où un webhook peut se perdre. La
+    logique vit dans `reconcile.py` — elle est partagée avec le job de
+    relance, qui s'en sert pour ne jamais annuler une commande déjà
+    payée. Le statut vient toujours de la banque, jamais du navigateur.
     """
     if settings.payment_provider != "sogecommerce":
         raise HTTPException(
@@ -252,71 +257,26 @@ async def sync_payment(
     if order is None or order.user_id != user.id:
         raise HTTPException(status_code=404, detail="Commande introuvable")
 
-    if order.status != OrderStatus.pending_payment:
-        return {"status": "already_processed", "order_status": order.status.value}
+    verdict = await reconcile.reconcile_order(db, order)
 
-    payment = await db.scalar(
-        select(Payment).where(Payment.order_id == order.id)
-    )
-    if payment is None:
-        raise HTTPException(status_code=400, detail="Aucun paiement initialisé")
-
-    from app.integrations.payment import SogecommercePayment
-    soge = SogecommercePayment()
-    try:
-        answer = await soge.get_order_status(payment.provider_ref)
-    except Exception as exc:
-        # Order/Get API not enabled on this shop (PSP_100) — sync indisponible.
-        # L'IPN serveur mettra à jour le statut ; on retourne 200 pour ne pas bloquer le frontend.
-        return {"status": "unavailable", "detail": str(exc), "order_status": order.status.value}
-
-    order_status_soge = answer.get("orderStatus", "UNPAID")
-    if order_status_soge != "PAID":
-        return {
-            "status": "not_paid_yet",
-            "sogecommerce_status": order_status_soge,
-            "order_status": order.status.value,
-        }
-
-    # Même règle que l'IPN : montant payé == total commande, sinon refus.
-    transactions = answer.get("transactions") or [{}]
-    paid_amount = int(transactions[0].get("amount") or 0)
-    if paid_amount != order.total_ttc_cents:
+    if verdict == reconcile.AMOUNT_MISMATCH:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Montant payé ({paid_amount}) différent du total "
-                f"commande ({order.total_ttc_cents})"
+                "Montant payé différent du total de la commande. "
+                "Notre équipe a été alertée."
             ),
         )
 
-    # Re-lit le statut : l'IPN a pu passer la commande à paid pendant
-    # l'appel Sogecommerce ci-dessus (sinon on re-consommerait un
-    # numéro de facture et re-enverrait l'email de confirmation).
-    await db.refresh(order)
-    if order.status != OrderStatus.pending_payment:
-        return {"status": "already_processed", "order_status": order.status.value}
-
-    payment.status = "captured"
-    payment.ipn_signature_ok = True
-    payment.ipn_payload = answer
-    order.transition_to(OrderStatus.paid)
-    order.paid_at = datetime.now(UTC)
-    order.invoice_number = (
-        await db.execute(text("SELECT nextval('invoice_number_seq')"))
-    ).scalar()
-    await db.commit()
-
-    order_full = await db.scalar(
-        select(Order).where(Order.id == order.id).options(selectinload(Order.items))
-    )
-    if order_full:
-        send_order_confirmation(order_full, user)
-        if order_full.garage_id:
-            send_garage_order_notification(order_full, user)
-            send_appointment_confirmed(order_full, user)
-
-    return {"status": "synced", "order_status": OrderStatus.paid.value}
+    # Vocabulaire de réponse inchangé : la page de paiement le lit déjà.
+    label = {
+        reconcile.PAID: "synced",
+        reconcile.NOT_PAID: "not_paid_yet",
+        reconcile.UNAVAILABLE: "unavailable",
+        reconcile.SKIPPED: "not_paid_yet",
+        reconcile.ALREADY_PROCESSED: "already_processed",
+    }[verdict]
+    return {"status": label, "order_status": order.status.value}
 
 
 @router.post("/verify-kr-answer/{order_number}")
