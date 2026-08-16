@@ -29,10 +29,17 @@ Trois principes, dans cet ordre :
    Refuser tout remboursement faute de lecture serait le pire des deux
    mondes : on saurait rembourser, mais on s'en priverait au motif qu'on
    ne sait pas relire.
+
+État du contrat au 16/08/2026 : la boutique 62343537 n'a **ni**
+`WS_REST_GET` **ni** `WS_REST_CANCEL`. Le remboursement par API est donc
+inopérant tant que Société Générale n'ouvre pas ces options — ce code
+reste en place, testé, et se réactive tout seul le jour où elles le
+seront. En attendant, le premier refus bascule l'écran sur la
+déclaration manuelle plutôt que de faire échouer un clic à chaque fois.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,13 +56,56 @@ class RefundError(RuntimeError):
     """Le remboursement n'a pas eu lieu. La commande n'a pas bougé."""
 
 
+#: Message rendu quand l'option n'est pas ouverte sur le contrat. Il dit
+#: quoi faire maintenant ET comment supprimer le problème — un admin ne
+#: doit pas avoir à traduire un code PSP.
+OPTION_ABSENTE = (
+    "Le remboursement par API n'est pas activé sur votre contrat "
+    "Sogecommerce (option WS_REST_CANCEL). Remboursez au Back Office, "
+    "puis cochez « J'ai déjà remboursé » pour l'enregistrer ici."
+)
+
+#: Durée pendant laquelle on cesse de proposer le remboursement
+#: automatique après un refus d'option. Assez long pour ne pas relancer
+#: la banque à chaque affichage, assez court pour que l'activation de
+#: l'option soit prise en compte sans redéploiement.
+_DISABLED_HOURS = 6
+
+#: Mémoire de processus, volontairement pas Redis : `api_available()`
+#: est appelée depuis du code synchrone (sérialisation d'une commande),
+#: et l'information n'a pas besoin d'être partagée — chaque worker
+#: l'apprend au premier refus, et l'oublie au redémarrage.
+_disabled_until: datetime | None = None
+
+
+def note_api_disabled() -> None:
+    """La banque vient de répondre « option non activée ». Inutile de
+    proposer le bouton pendant quelques heures."""
+    global _disabled_until
+    _disabled_until = datetime.now(UTC) + timedelta(hours=_DISABLED_HOURS)
+
+
+def is_option_error(message: str) -> bool:
+    """Reconnaît un refus d'OPTION, à distinguer d'un refus métier.
+
+    `PSP_100` signifie « ce web service n'est pas ouvert sur la
+    boutique » — aucune insistance ne le fera marcher, et le message
+    doit orienter vers le Back Office plutôt que vers un réessai.
+    """
+    haystack = (message or "").upper()
+    return "PSP_100" in haystack or "WS_REST_CANCEL" in haystack
+
+
 def api_available() -> bool:
     """Le remboursement automatique est-il possible sur cette instance ?
 
-    Faux en paiement simulé (aucune banque) ou si les clés REST
-    manquent. L'admin retombe alors sur la déclaration manuelle, qui
+    Faux en paiement simulé (aucune banque), si les clés REST manquent,
+    ou si la banque a récemment répondu que l'option n'est pas ouverte.
+    Dans tous ces cas l'admin bascule sur la déclaration manuelle, qui
     reste explicitement présentée comme telle.
     """
+    if _disabled_until and datetime.now(UTC) < _disabled_until:
+        return False
     return bool(
         settings.payment_provider == "sogecommerce"
         and settings.sogecommerce_shop_id
@@ -189,6 +239,12 @@ async def refund_order(
             comment=comment or f"Remboursement commande {order.order_number}",
         )
     except Exception as exc:
+        if is_option_error(str(exc)):
+            # Option absente du contrat : ce n'est pas un incident, c'est
+            # une fonctionnalité fermée. On arrête de la proposer, et on
+            # dit à l'admin quoi faire à la place.
+            note_api_disabled()
+            raise RefundError(OPTION_ABSENTE) from exc
         raise RefundError(str(exc)) from exc
 
     # La banque a répondu SUCCESS. On archive sa réponse : c'est la

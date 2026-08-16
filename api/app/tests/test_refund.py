@@ -32,6 +32,15 @@ from app.schemas.order import StatusUpdateIn
 TOTAL = 11976  # 119,76 €
 
 
+@pytest.fixture(autouse=True)
+def _reset_disponibilite():
+    """`api_available()` garde en mémoire un refus d'option. Sans remise
+    à zéro, un test qui déclenche ce refus contaminerait les suivants."""
+    refund._disabled_until = None
+    yield
+    refund._disabled_until = None
+
+
 def _order():
     o = SimpleNamespace(
         id=uuid.uuid4(),
@@ -455,6 +464,69 @@ def test_choix_de_la_transaction_a_rembourser():
     assert refund.pick_debit_transaction([credit, refuse, DEBIT])["uuid"] == "txn-debit-1"
     assert refund.pick_debit_transaction([credit, refuse]) is None
     assert refund.pick_debit_transaction([]) is None
+
+
+# ── Option absente du contrat (PSP_100) ───────────────────────────
+
+PSP_100_CANCEL = (
+    "CancelOrRefund refusé : PSP_100 rest API option not enabled "
+    "Feature not available on this shop [shopId=62343537, "
+    "function=WS_REST_CANCEL]"
+)
+
+
+def test_refus_d_option_reconnu():
+    """Un PSP_100 n'est pas un incident : aucune insistance ne le fera
+    marcher, le message doit orienter vers le Back Office."""
+    assert refund.is_option_error(PSP_100_CANCEL)
+    assert refund.is_option_error("psp_100 lowercase")
+    # Un refus métier reste un refus métier.
+    assert not refund.is_option_error("PSP_050 transaction non remboursable")
+    assert not refund.is_option_error("")
+
+
+@pytest.mark.asyncio
+async def test_option_absente_message_actionnable_et_bascule():
+    """Le premier refus doit suffire : ensuite l'écran propose la
+    déclaration manuelle au lieu de refaire échouer un clic."""
+    order = _order()
+    payment = _payment(ipn={"transactions": [{
+        "uuid": "txn-ipn-1", "detailedStatus": "AUTHORISED", "amount": TOTAL,
+    }]})
+    db = _service_db(order, payment)
+    factory, _ = _soge(get_boom="PSP_100 WS_REST_GET",
+                       refund_boom=PSP_100_CANCEL)
+
+    with patch.object(refund.settings, "payment_provider", "sogecommerce"),          patch.object(refund.settings, "sogecommerce_shop_id", "62343537"),          patch.object(refund.settings, "sogecommerce_api_password", "x"),          patch("app.integrations.payment.SogecommercePayment", factory):
+        assert refund.api_available() is True
+        with pytest.raises(refund.RefundError) as exc:
+            await refund.refund_order(db, order, TOTAL)
+
+        # Message pour un humain, pas un code PSP.
+        assert "WS_REST_CANCEL" in str(exc.value)
+        assert "déjà remboursé" in str(exc.value)
+        # Et l'écran ne proposera plus le bouton pendant quelques heures.
+        assert refund.api_available() is False
+
+    # Rien n'a bougé sur la commande.
+    assert order.refunded_cents is None
+    assert order.status == OrderStatus.paid
+
+
+@pytest.mark.asyncio
+async def test_refus_metier_ne_desactive_pas_l_option():
+    """Une transaction non remboursable est un cas particulier : elle ne
+    doit pas priver les autres commandes du remboursement automatique."""
+    order, payment = _order(), _payment()
+    db = _service_db(order, payment)
+    factory, _ = _soge({"transactions": [DEBIT]},
+                       refund_boom="PSP_050 transaction déjà remboursée")
+
+    with patch.object(refund, "api_available", lambda: True),          patch("app.integrations.payment.SogecommercePayment", factory):
+        with pytest.raises(refund.RefundError, match="PSP_050"):
+            await refund.refund_order(db, order, TOTAL)
+
+    assert refund._disabled_until is None
 
 
 def test_libelle_distingue_annulation_et_remboursement():

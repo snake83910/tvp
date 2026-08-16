@@ -192,6 +192,17 @@ tronquées aux longueurs du schéma V4, et le pays est ramené au code ISO
 
 ## Remboursements
 
+> **⚠️ Inopérant en l'état.** La boutique 62343537 n'a ni `WS_REST_GET`
+> ni `WS_REST_CANCEL` : `Transaction/CancelOrRefund` répond
+> `PSP_100 rest API option not enabled`. **Les deux options sont à
+> demander à Société Générale** — c'est un paramétrage de contrat, pas
+> un développement.
+>
+> En attendant, l'écran bascule tout seul sur la déclaration manuelle
+> dès le premier refus (et pour six heures), au lieu de faire échouer un
+> clic à chaque tentative. Le code ci-dessous reste en place et testé :
+> il se réactive sans redéploiement le jour où les options sont ouvertes.
+
 Depuis l'écran commande de l'admin, le site appelle lui-même
 `Transaction/CancelOrRefund` (API REST V4). La banque choisit seule entre
 les deux opérations, et c'est voulu :

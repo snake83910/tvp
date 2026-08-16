@@ -370,7 +370,7 @@ export default function AdminOrderDetail() {
                         <p className="text-xs font-semibold text-amber-900">
                           {order.refund_api_available
                             ? "Déclaration d'un remboursement déjà effectué."
-                            : "Remboursement automatique indisponible."}
+                            : "Remboursement automatique indisponible — option Sogecommerce non activée."}
                         </p>
                         <p className="mt-1 text-xs text-amber-800">
                           Rien ne part d&apos;ici : effectuez
