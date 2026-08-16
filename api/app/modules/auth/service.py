@@ -194,9 +194,13 @@ async def create_guest_user(
         last_name=last_name.strip(),
         phone=(phone or None),
         is_active=True,
-        # L'email n'est pas prouvé à cet instant : il le sera par le lien
-        # de confirmation de commande ou par un reset de mot de passe.
+        # L'email n'est pas prouvé à cet instant : il le sera par le code
+        # exigé avant le paiement, ou par un reset de mot de passe.
         email_verified=False,
+        # Née d'une commande, pas d'une inscription. C'est ce drapeau qui
+        # déclenche la vérification par code : un client inscrit, lui, a
+        # déjà eu l'occasion de confirmer son adresse.
+        is_guest=True,
     )
     db.add(user)
     await db.flush()

@@ -57,7 +57,14 @@ export interface AdminCustomer {
   account_type: string;
   role: string;
   company_name: string | null;
+  /** Raison sociale du garage pour un compte partenaire — il n'a ni
+   *  prénom ni nom, `name` y est toujours nul. */
+  garage_name: string | null;
   email_verified: boolean;
+  /** Compte né d'une commande sans inscription. Rend « non vérifié »
+   *  interprétable : c'est la norme chez un invité qui n'a pas encore
+   *  saisi son code, c'est un signal chez un inscrit. */
+  is_guest: boolean;
   created_at: string;
   // Agrégats sur les commandes encaissées uniquement ; last_order_at
   // couvre tous les statuts (une commande en attente reste un signal).
@@ -315,16 +322,24 @@ export const adminApi = {
   },
 
   listCustomers: (params?: {
-    q?: string; account_type?: string; sort?: string; page?: number;
+    q?: string; account_type?: string; role?: string;
+    sort?: string; page?: number;
   }) => {
     const p = new URLSearchParams();
     if (params?.q) p.set("q", params.q);
     if (params?.account_type) p.set("account_type", params.account_type);
+    if (params?.role) p.set("role", params.role);
     if (params?.sort) p.set("sort", params.sort);
     if (params?.page) p.set("page", String(params.page));
     const qs = p.toString();
     return call<AdminCustomer[]>(`/admin/customers${qs ? `?${qs}` : ""}`);
   },
+
+  /** Confirme l'adresse d'un client à la place du code : porte de sortie
+   *  quand le mail n'arrive pas et que la vente est bloquée. Journalisé
+   *  nominativement côté serveur. */
+  verifyCustomerEmail: (userId: string) =>
+    call<void>(`/admin/customers/${userId}/verify-email`, "POST"),
 
   getOrder: (orderNumber: string) =>
     call<AdminOrderDetail>(`/admin/orders/${orderNumber}`),

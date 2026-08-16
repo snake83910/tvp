@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminApi, type AdminCustomer } from "@/lib/admin";
+import { errorMessage } from "@/lib/errors";
 import { formatEuro } from "@/lib/money";
 
 const PER_PAGE = 25;
@@ -28,9 +29,11 @@ export default function AdminCustomers() {
   const [rows, setRows] = useState<AdminCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [accountType, setAccountType] = useState("");
+  const [role, setRole] = useState("");
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,11 +46,12 @@ export default function AdminCustomers() {
   // évite le flash. Le squelette ne sert qu'au premier chargement
   // (`loading` démarre à true).
   const load = useCallback(
-    (q: string, type: string, s: string, p: number) =>
+    (q: string, type: string, r: string, s: string, p: number) =>
       adminApi
         .listCustomers({
           q: q || undefined,
           account_type: type || undefined,
+          role: r || undefined,
           sort: s,
           page: p,
         })
@@ -63,17 +67,48 @@ export default function AdminCustomers() {
   );
 
   useEffect(() => {
-    load(search, accountType, sort, page);
+    load(search, accountType, role, sort, page);
     // Le champ de recherche a son propre debounce, d'où son absence ici.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountType, sort, page, load]);
+  }, [accountType, role, sort, page, load]);
+
+  /** Confirmation manuelle d'une adresse.
+   *
+   *  Confirmation explicite demandée : c'est un contournement d'un
+   *  contrôle anti-fraude, journalisé au nom de l'admin qui clique. Un
+   *  clic par mégarde sur une pastille ne doit pas suffire.
+   *
+   *  Mise à jour locale de la ligne plutôt que rechargement : la liste
+   *  est filtrée et paginée, la recharger ferait sauter la position. */
+  async function confirmEmail(c: AdminCustomer) {
+    const quoi = c.name ?? c.garage_name ?? c.email;
+    if (
+      !window.confirm(
+        `Confirmer l'adresse ${c.email} de ${quoi} sans passer par le code ?\n\n` +
+          "À ne faire qu'après avoir vérifié l'adresse avec le client. " +
+          "L'action est journalisée à votre nom.",
+      )
+    )
+      return;
+    setConfirming(c.id);
+    try {
+      await adminApi.verifyCustomerEmail(c.id);
+      setRows((prev) =>
+        prev.map((r) => (r.id === c.id ? { ...r, email_verified: true } : r)),
+      );
+    } catch (e) {
+      setError(errorMessage(e, "Confirmation impossible"));
+    } finally {
+      setConfirming(null);
+    }
+  }
 
   function onSearch(val: string) {
     setSearch(val);
     setPage(1);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(
-      () => load(val, accountType, sort, 1),
+      () => load(val, accountType, role, sort, 1),
       350,
     );
   }
@@ -109,6 +144,23 @@ export default function AdminCustomers() {
           <option value="">Tous les types</option>
           <option value="particulier">Particuliers</option>
           <option value="pro">Professionnels</option>
+        </select>
+        {/* La liste mélange clients, garages partenaires et admins :
+            sans ce filtre, isoler les partenaires demandait de parcourir
+            les pages à l'œil. */}
+        <select
+          value={role}
+          onChange={(e) => {
+            setRole(e.target.value);
+            setPage(1);
+          }}
+          aria-label="Rôle du compte"
+          className="h-10 rounded-lg border border-line bg-paper px-3 text-sm text-ink outline-none transition focus:border-signal"
+        >
+          <option value="">Tous les rôles</option>
+          <option value="client">Clients</option>
+          <option value="garage">Partenaires</option>
+          <option value="admin">Administrateurs</option>
         </select>
         <select
           value={sort}
@@ -166,16 +218,36 @@ export default function AdminCustomers() {
                   className="border-b border-line last:border-0 transition hover:bg-paper-dim"
                 >
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-ink">
-                        {c.name ?? "—"}
+                        {c.name ?? c.garage_name ?? "—"}
                       </span>
                       {!c.email_verified && (
-                        <span
-                          title="Adresse email non vérifiée"
-                          className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800"
+                        <button
+                          type="button"
+                          onClick={() => confirmEmail(c)}
+                          disabled={confirming === c.id}
+                          title={
+                            c.is_guest
+                              ? "Adresse jamais confirmée. Un compte invité doit saisir son code avant de payer — cliquez pour débloquer après contact téléphonique."
+                              : "Adresse email jamais confirmée. Cliquez pour la confirmer manuellement."
+                          }
+                          className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 transition hover:bg-amber-200 disabled:opacity-50"
                         >
-                          non vérifié
+                          {confirming === c.id ? "…" : "non vérifié"}
+                        </button>
+                      )}
+                      {c.is_guest && (
+                        <span
+                          title="Compte créé par une commande sans inscription"
+                          className="rounded-full bg-paper-dim px-2 py-0.5 text-[10px] font-bold text-ink-muted"
+                        >
+                          invité
+                        </span>
+                      )}
+                      {c.role === "garage" && (
+                        <span className="rounded-full bg-ok/15 px-2 py-0.5 text-[10px] font-bold text-ok">
+                          partenaire
                         </span>
                       )}
                       {c.role === "admin" && (

@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import audit
 from app.core.deps import get_db, require_role
+from app.models.garage import Garage
 from app.models.order import ALLOWED_TRANSITIONS, Order, OrderStatus
 from app.models.promo import PromoCode
 from app.models.user import AccountType, Address, ProProfile, User, UserRole
@@ -1214,6 +1215,7 @@ async def _default_addresses(
 async def list_customers(
     q: str | None = Query(None, description="Recherche : email, nom, société"),
     account_type: str | None = Query(None, description="particulier | pro"),
+    role: str | None = Query(None, description="client | garage | admin"),
     sort: str = Query("recent", description=" | ".join(_CUSTOMER_SORTS)),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
@@ -1240,6 +1242,7 @@ async def list_customers(
         select(
             User,
             ProProfile.company_name,
+            Garage.name,
             orders_count,
             revenue,
             func.max(Order.created_at).label("last_order_at"),
@@ -1248,8 +1251,11 @@ async def list_customers(
         # compteurs à zéro. Un inner join les ferait disparaître.
         .outerjoin(Order, Order.user_id == User.id)
         .outerjoin(ProProfile, ProProfile.user_id == User.id)
+        # Un compte partenaire n'a ni prénom ni nom : sans la raison
+        # sociale de son garage, sa ligne n'affiche rien d'identifiable.
+        .outerjoin(Garage, Garage.owner_user_id == User.id)
         .where(User.email.notlike("deleted-%@anonymized.%"))
-        .group_by(User.id, ProProfile.company_name)
+        .group_by(User.id, ProProfile.company_name, Garage.name)
         .order_by(_CUSTOMER_SORTS[sort])
     )
 
@@ -1260,6 +1266,7 @@ async def list_customers(
             | User.first_name.ilike(pattern)
             | User.last_name.ilike(pattern)
             | ProProfile.company_name.ilike(pattern)
+            | Garage.name.ilike(pattern)
         )
     if account_type:
         try:
@@ -1268,6 +1275,11 @@ async def list_customers(
             raise HTTPException(
                 422, f"Type de compte inconnu : {account_type}"
             ) from None
+    if role:
+        try:
+            stmt = stmt.where(User.role == UserRole(role))
+        except ValueError:
+            raise HTTPException(422, f"Rôle inconnu : {role}") from None
 
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
     rows = (await db.execute(stmt)).all()
@@ -1286,7 +1298,9 @@ async def list_customers(
             account_type=u.account_type.value,
             role=u.role.value,
             company_name=company,
+            garage_name=garage,
             email_verified=u.email_verified,
+            is_guest=u.is_guest,
             created_at=u.created_at,
             orders_count=count or 0,
             revenue_ttc=(rev or 0) / 100,
@@ -1294,8 +1308,42 @@ async def list_customers(
             address=addresses.get(u.id, (None, 0))[0],
             addresses_count=addresses.get(u.id, (None, 0))[1],
         )
-        for u, company, count, rev, last in rows
+        for u, company, garage, count, rev, last in rows
     ]
+
+
+@router.post("/customers/{user_id}/verify-email", status_code=204)
+async def force_verify_email(
+    user_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Confirme l'adresse d'un client à la place du code.
+
+    Porte de sortie opérationnelle. Un client invité dont l'adresse n'est
+    pas confirmée ne peut pas payer : si le code n'arrive pas — filtre
+    anti-spam de son employeur, boîte pleine, adresse en `.local` —, le
+    service client doit pouvoir débloquer la vente après l'avoir eu au
+    téléphone. Sans cette porte, la seule réponse serait « réessayez
+    plus tard », et la commande serait perdue.
+
+    Contrepartie : c'est un contournement d'un contrôle anti-fraude, donc
+    il est journalisé nominativement. Qui a débloqué quel compte, et
+    quand, reste lisible dans l'audit.
+    """
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "Client introuvable")
+    if not user.email_verified:
+        user.email_verified = True
+        await audit(
+            db, user=admin, action="customer.email_verified",
+            target_type="user", target_id=str(user.id),
+            payload={"email": user.email}, request=request,
+        )
+        await db.commit()
+    return None
 
 
 # ── Codes promo ────────────────────────────────────────────────────

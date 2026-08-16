@@ -60,18 +60,21 @@ def send_welcome(user: User) -> None:
     )
 
 
-def send_verify_email(user: User, token: str) -> None:
-    """Email de vérification après inscription."""
+def send_verify_email(user: User, code: str) -> None:
+    """Code de vérification de l'adresse email.
+
+    Le sujet porte le code : sur mobile, la notification suffit souvent
+    à le lire sans même ouvrir le message.
+    """
     mailer = get_mailer()
-    verify_url = f"{_site_url()}/verifier-email?token={token}"
     fire_and_forget(
         mailer.send_template(
             to=user.email,
-            subject="Vérifiez votre adresse email",
+            subject=f"{code} — votre code de vérification",
             template="verify_email.html",
             civilite=_civilite(user),
             site_url=_site_url(),
-            verify_url=verify_url,
+            code=code,
         )
     )
 

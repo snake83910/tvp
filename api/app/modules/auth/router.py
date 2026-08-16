@@ -5,11 +5,12 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import otp
 from app.core.cache import get_redis
 from app.core.deps import get_current_user
+from app.core.errors import AppError, ErrorCode
 from app.core.rate_limit import rate_limit
 from app.core.security import (
-    create_email_verify_token,
     create_password_reset_token,
     create_pre_2fa_token,
     decode_token,
@@ -36,6 +37,8 @@ from app.schemas.auth import (
     AdminLoginOut,
     EmailChangeConfirmIn,
     EmailChangeRequestIn,
+    EmailOtpRequestIn,
+    EmailOtpVerifyIn,
     ForgotPasswordIn,
     LoginIn,
     ReauthIn,
@@ -45,7 +48,6 @@ from app.schemas.auth import (
     TokenPair,
     UserOut,
     Verify2faIn,
-    VerifyEmailIn,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -61,9 +63,9 @@ async def register(
     await rate_limit(request, "register", max_attempts=3, window_seconds=3600)
     user = await register_user(db, data)
     send_welcome(user)
-    # Token de vérification email envoyé en parallèle
-    token = create_email_verify_token(str(user.id))
-    send_verify_email(user, token)
+    code = await otp.issue(otp.EMAIL_VERIFY, user.email)
+    if code:
+        send_verify_email(user, code)
     return user
 
 
@@ -164,27 +166,72 @@ async def reset_password(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien déjà utilisé")
 
     user.password_hash = hash_password(data.new_password)
+    # Le lien a été envoyé à cette adresse et quelqu'un vient de le
+    # cliquer : la boîte est prouvée, aussi sûrement que par un code.
+    # Ne pas en tirer parti obligeait le client à confirmer deux fois la
+    # même chose — et laissait « non vérifié » sur des comptes dont on
+    # savait pertinemment que l'adresse fonctionnait.
+    user.email_verified = True
     await revoke_all_refresh_tokens(db, user.id)
     await db.commit()
     return None
 
 
-@router.post("/verify-email", status_code=204)
-async def verify_email(
-    data: VerifyEmailIn,
+@router.post("/email-otp", status_code=204)
+async def send_email_otp(
+    data: EmailOtpRequestIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Marque l'email comme vérifié si le token est valide."""
-    try:
-        payload = decode_token(data.token)
-    except JWTError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien expiré ou invalide") from None
-    if payload.get("type") != "email_verify":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien invalide")
+    """Envoie (ou renvoie) le code de vérification d'adresse.
 
-    user = await db.get(User, uuid.UUID(payload["sub"]))
+    SÉCURITÉ : 204 dans tous les cas, y compris pour une adresse
+    inconnue. Distinguer les réponses ferait de cet endpoint un oracle
+    d'existence de comptes — précisément ce que /forgot-password évite
+    déjà avec le même soin.
+
+    Le cooldown vit dans le module OTP, pas ici : la limite par IP
+    ci-dessous protège le serveur, celle par adresse protège la boîte
+    mail d'un tiers qu'on chercherait à inonder.
+    """
+    await rate_limit(request, "email_otp", max_attempts=5, window_seconds=600)
+    user = await db.scalar(select(User).where(User.email == data.email))
+    if user is not None and user.is_active and not user.email_verified:
+        code = await otp.issue(otp.EMAIL_VERIFY, user.email)
+        if code:
+            send_verify_email(user, code)
+    return None
+
+
+@router.post("/email-otp/verify", status_code=204)
+async def verify_email_otp(
+    data: EmailOtpVerifyIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Vérifie le code et marque l'adresse comme confirmée."""
+    await rate_limit(
+        request, "email_otp_verify", max_attempts=10, window_seconds=600
+    )
+    if not await otp.check(otp.EMAIL_VERIFY, data.email, data.code):
+        raise AppError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code=ErrorCode.OTP_INVALID,
+            message=(
+                "Code incorrect ou expiré. Demandez-en un nouveau si "
+                "besoin."
+            ),
+        )
+
+    user = await db.scalar(select(User).where(User.email == data.email))
     if user is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Compte introuvable")
+        # Le code était valide : il n'a pu être émis que pour un compte
+        # existant. Un compte supprimé entre-temps est le seul chemin ici.
+        raise AppError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code=ErrorCode.OTP_INVALID,
+            message="Code incorrect ou expiré.",
+        )
 
     if not user.email_verified:
         user.email_verified = True

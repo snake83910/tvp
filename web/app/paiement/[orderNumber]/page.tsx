@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, use } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { CheckoutSteps } from "@/components/CheckoutSteps";
+import { EmailOtpForm } from "@/components/EmailOtpForm";
 import {
   accountApi,
   authFetch,
@@ -48,6 +49,17 @@ export default function PaymentPage(
   const [formReady, setFormReady] = useState(false);
   const krRef = useRef<any>(null);
 
+  /** Adresse confirmée pendant cette visite. Le /auth/me chargé au
+   *  montage porte encore `email_verified: false` — le relire coûterait
+   *  un aller-retour pour une information qu'on vient d'établir. */
+  const [justVerified, setJustVerified] = useState(false);
+
+  /** Le compte est né du tunnel invité et son adresse n'a rien prouvé :
+   *  /payment/init la réclamera. On présente le code AVANT de l'appeler,
+   *  plutôt que de laisser le client buter sur un refus. */
+  const needsOtp =
+    !!user && user.is_guest && !user.email_verified && !justVerified;
+
   useEffect(() => {
     if (!loading && !user)
       router.push(`/connexion?next=/paiement/${params.orderNumber}`);
@@ -75,7 +87,7 @@ export default function PaymentPage(
 
   // 1. Initialise le paiement côté serveur → récupère formToken + publicKey
   useEffect(() => {
-    if (!user) return;
+    if (!user || needsOtp) return;
     authFetch(`/payment/init/${params.orderNumber}`, { method: "POST" })
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json()).detail ?? "Erreur");
@@ -83,7 +95,7 @@ export default function PaymentPage(
       })
       .then(setInit)
       .catch((e) => setError(e.message));
-  }, [user, params.orderNumber]);
+  }, [user, needsOtp, params.orderNumber]);
 
   // Clé publique absente : erreur de CONFIGURATION, connue dès que `init`
   // arrive — dérivée au rendu plutôt que poussée par setState depuis
@@ -372,7 +384,25 @@ export default function PaymentPage(
               </div>
             </div>
 
-            {!init && !error && !configError && (
+            {needsOtp && (
+              <div className="rounded-xl border border-line bg-paper-dim p-5">
+                <h3 className="font-display text-base font-bold text-ink">
+                  Confirmez votre adresse email
+                </h3>
+                <p className="mb-4 mt-1 text-sm text-ink-soft">
+                  Votre facture, votre suivi de livraison et, le cas échéant,
+                  votre remboursement partiront à cette adresse. Une dernière
+                  étape avant de payer.
+                </p>
+                <EmailOtpForm
+                  email={user.email}
+                  alreadySent
+                  onVerified={() => setJustVerified(true)}
+                />
+              </div>
+            )}
+
+            {!needsOtp && !init && !error && !configError && (
               <PaymentSkeleton label="Initialisation du paiement…" />
             )}
 

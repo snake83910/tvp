@@ -91,6 +91,30 @@ async function seedPaidOrder(request: APIRequestContext): Promise<SeededOrder> {
 
   const auth = { Authorization: `Bearer ${order.access_token}` };
 
+  // Un compte invité doit confirmer son adresse avant de payer, par un
+  // code à 6 chiffres reçu par email. Un test n'a pas accès à cette
+  // boîte : il emprunte la porte prévue pour le service client, celle
+  // qui débloque un client dont le code n'arrive pas. Le chemin normal
+  // — saisie du code — est couvert côté API par test_otp.py, et le refus
+  // lui-même par test_payment_email_gate.py.
+  const admin = await loginAdmin(request);
+  const adminAuth = { Authorization: `Bearer ${admin.access}` };
+  const fiche = await request.get(
+    `${API}/admin/customers?q=${encodeURIComponent(email)}`,
+    { headers: adminAuth },
+  );
+  expect(fiche.ok(), `fiche client : ${fiche.status()}`).toBeTruthy();
+  const [client] = await fiche.json();
+  expect(client?.id, "client introuvable après checkout invité").toBeTruthy();
+  const deblocage = await request.post(
+    `${API}/admin/customers/${client.id}/verify-email`,
+    { headers: adminAuth },
+  );
+  expect(
+    deblocage.ok(),
+    `déblocage de l'adresse invité : ${deblocage.status()}`,
+  ).toBeTruthy();
+
   // Le paiement doit d'abord être INITIÉ : la simulation capture une
   // transaction existante, elle n'en invente pas.
   const init = await request.post(

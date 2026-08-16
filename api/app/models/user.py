@@ -55,6 +55,11 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(30))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Compte né d'une commande sans inscription. Le distingue d'un compte
+    # créé volontairement : lui n'a jamais choisi de mot de passe, et son
+    # adresse email n'a rien prouvé au moment de la commande — d'où la
+    # vérification par code exigée avant le paiement.
+    is_guest: Mapped[bool] = mapped_column(Boolean, default=False)
     # 2FA TOTP (Google Authenticator / Authy) — utilisé pour les comptes admin
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

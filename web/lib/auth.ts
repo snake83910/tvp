@@ -296,6 +296,10 @@ export interface UserMe {
   role: string;
   first_name: string | null;
   last_name: string | null;
+  email_verified: boolean;
+  /** Compte créé par une commande sans inscription. Conditionne la
+   *  demande de code avant paiement. */
+  is_guest: boolean;
 }
 
 export const auth = {
@@ -328,6 +332,15 @@ export const auth = {
   },
 
   me: () => call<UserMe>("/auth/me", "GET", undefined, true),
+
+  /** Demande (ou redemande) le code de vérification d'adresse.
+   *  Répond 204 même pour une adresse inconnue : l'API refuse de servir
+   *  d'annuaire des comptes existants. */
+  sendEmailOtp: (email: string) =>
+    call<void>("/auth/email-otp", "POST", { email }),
+
+  verifyEmailOtp: (email: string, code: string) =>
+    call<void>("/auth/email-otp/verify", "POST", { email, code }),
 };
 
 export function useCurrentUser() {

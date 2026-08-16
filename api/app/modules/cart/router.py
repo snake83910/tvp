@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core import idempotency
+from app.core import idempotency, otp
 from app.core.deps import get_current_user, get_current_user_optional
 from app.core.errors import AppError, ErrorCode
 from app.core.rate_limit import rate_limit
@@ -18,6 +18,7 @@ from app.models.order import Cart
 from app.models.user import Address, User, UserRole
 from app.modules.auth import service as auth_service
 from app.modules.cart import service
+from app.modules.mailer.service import send_verify_email
 from app.schemas.order import (
     AddItemIn,
     CartItemOut,
@@ -449,6 +450,15 @@ async def checkout_guest(
             access_token=tokens["access_token"],
             refresh_token=tokens["refresh_token"],
         )
+
+    # Code de vérification envoyé MAINTENANT, pas après le paiement : le
+    # client va lire cet email pendant qu'il sort sa carte, et /payment/init
+    # le lui réclamera. L'envoyer plus tard le ferait attendre devant un
+    # écran bloqué. Échec d'envoi non bloquant : la commande existe, le
+    # client peut demander un renvoi depuis la page de paiement.
+    code = await otp.issue(otp.EMAIL_VERIFY, user.email)
+    if code:
+        send_verify_email(user, code)
 
     tokens = await auth_service.issue_token_pair(db, user, request)
     result = GuestCheckoutResult(

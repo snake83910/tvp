@@ -59,6 +59,10 @@ async def test_email_inconnu_cree_un_compte_client():
     # L'adresse n'est pas prouvée à cet instant : la marquer vérifiée
     # ferait passer pour confirmée une adresse simplement saisie.
     assert user.email_verified is False
+    # C'est ce drapeau qui déclenchera la demande de code avant paiement.
+    # Sans lui, le compte serait traité comme une inscription volontaire
+    # et la commande partirait vers une adresse jamais confirmée.
+    assert user.is_guest is True
     db.flush.assert_awaited()
 
 

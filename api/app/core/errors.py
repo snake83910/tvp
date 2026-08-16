@@ -51,6 +51,8 @@ class ErrorCode:
     # Comptes
     EMAIL_TAKEN = "email_taken"
     INVALID_CREDENTIALS = "invalid_credentials"
+    OTP_INVALID = "otp_invalid"
+    EMAIL_NOT_VERIFIED = "email_not_verified"
 
     # Panier / commande
     CART_EMPTY = "cart_empty"

@@ -21,6 +21,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.deps import get_current_user
+from app.core.errors import AppError, ErrorCode
 from app.db.session import get_db
 from app.integrations.payment import BuyerInfo, get_payment_provider
 from app.models.order import Order, OrderStatus, Payment
@@ -80,6 +81,29 @@ async def init_payment(
         raise HTTPException(
             status_code=400,
             detail=f"Commande non payable (statut {order.status.value})",
+        )
+
+    # Compte né du tunnel invité : son adresse email n'a rien prouvé. Or
+    # tout part par là — confirmation, facture, suivi, et le remboursement
+    # s'il y a litige. Une faute de frappe suffit à livrer une commande
+    # dont le client ne recevra jamais la moindre trace, et à nous laisser
+    # sans moyen de le joindre.
+    #
+    # La porte est ICI et pas seulement dans le navigateur : la page de
+    # paiement présente le code, mais rien n'empêche d'appeler cet endpoint
+    # directement.
+    #
+    # Un compte inscrit passe sans être inquiété : il a eu son code à
+    # l'inscription, et le bloquer devant sa carte coûterait une vente
+    # sans rien prouver de plus.
+    if user.is_guest and not user.email_verified:
+        raise AppError(
+            status_code=403,
+            code=ErrorCode.EMAIL_NOT_VERIFIED,
+            message=(
+                "Confirmez votre adresse email pour payer : saisissez le "
+                "code à 6 chiffres que nous venons de vous envoyer."
+            ),
         )
 
     # Raison sociale d'un compte pro, chargée explicitement : la relation

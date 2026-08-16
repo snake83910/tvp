@@ -1,26 +1,29 @@
 {% extends "_layout.html" %}
 {% block content %}
   <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
-    {{ civilite }}, vérifiez votre email
+    {{ civilite }}, voici votre code
   </h1>
 
-  <p style="margin:0 0 16px 0;">
-    Pour activer pleinement votre compte sur Tous Vos Pneus, merci de
-    confirmer votre adresse email en cliquant sur le bouton ci-dessous.
+  <p style="margin:0 0 20px 0;">
+    Saisissez ce code sur la page où vous vous trouvez pour confirmer
+    votre adresse email :
   </p>
 
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0;">
     <tr>
-      <td style="background:#D8232A;border-radius:999px;">
-        <a href="{{ verify_url }}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase;">
-          Vérifier mon email
-        </a>
+      <td style="background:#f5f4f0;border:2px solid #17181a;border-radius:12px;padding:18px 28px;">
+        <span style="font-family:'Courier New',Courier,monospace;font-size:34px;font-weight:900;letter-spacing:10px;color:#17181a;">{{ code }}</span>
       </td>
     </tr>
   </table>
 
+  <p style="margin:0 0 16px 0;color:#7a7a72;font-size:13px;">
+    Le code expire dans 10&nbsp;minutes.
+  </p>
+
   <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
-    Le lien expire dans 24 heures. Si vous n'êtes pas à l'origine de cette
-    inscription, vous pouvez ignorer cet email.
+    Vous n'avez rien demandé ? Ignorez cet email : sans ce code, personne
+    ne peut confirmer votre adresse. Ne le communiquez à personne, notre
+    équipe ne vous le demandera jamais.
   </p>
 {% endblock %}

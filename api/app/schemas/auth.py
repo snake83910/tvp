@@ -129,10 +129,6 @@ class ResetPasswordIn(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
-class VerifyEmailIn(BaseModel):
-    token: str
-
-
 class AdminLoginOut(BaseModel):
     """Réponse au login admin.
 
@@ -168,6 +164,26 @@ class EmailChangeConfirmIn(BaseModel):
     token: str
 
 
+class EmailOtpRequestIn(BaseModel):
+    """Demande d'envoi (ou de renvoi) du code de vérification."""
+
+    email: NormalizedEmail
+
+
+class EmailOtpVerifyIn(BaseModel):
+    """Le code est saisi à la main : on accepte les espaces et les tirets
+    que produit un copier-coller depuis l'application mail, et on retire
+    tout ce qui n'est pas un chiffre avant de comparer."""
+
+    email: NormalizedEmail
+    code: str = Field(min_length=1, max_length=20)
+
+    @field_validator("code")
+    @classmethod
+    def only_digits(cls, v: str) -> str:
+        return "".join(c for c in v if c.isdigit())
+
+
 # ---------- Sorties ----------
 
 class UserOut(BaseModel):
@@ -181,6 +197,9 @@ class UserOut(BaseModel):
     last_name: str | None
     phone: str | None
     email_verified: bool
+    # Le tunnel de paiement en a besoin : c'est lui qui décide s'il faut
+    # réclamer le code avant de laisser le client payer.
+    is_guest: bool = False
     created_at: datetime
 
 

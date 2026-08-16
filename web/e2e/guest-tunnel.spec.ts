@@ -103,6 +103,15 @@ test("tunnel invité : panier anonyme → commande sans compte → paiement", as
   await expect(page.getByText(orderNumber)).toBeVisible();
   await expect(page.getByText(/Total TTC/i)).toBeVisible();
 
+  // Un invité ne paie pas avant d'avoir confirmé son adresse : tout ce
+  // qui suit la commande — facture, suivi, remboursement — part par là.
+  // Le récapitulatif reste affiché ; c'est le formulaire bancaire qui
+  // cède la place à la saisie du code.
+  await expect(
+    page.getByRole("heading", { name: /confirmez votre adresse email/i }),
+  ).toBeVisible();
+  await expect(page.getByLabel(/code de vérification/i)).toBeVisible();
+
   // ── SÉCURITÉ : le même email ne doit plus passer ─────────────────────
   // Il vient d'être enregistré par la commande ci-dessus. Le rejouer
   // simule quelqu'un qui saisit l'adresse d'un tiers pour obtenir une

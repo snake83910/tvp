@@ -81,14 +81,6 @@ def create_password_reset_token(user_id: str) -> str:
     )
 
 
-def create_email_verify_token(user_id: str) -> str:
-    """Token de vérification email (24h)."""
-    return _create_token(
-        sub=user_id, claims={}, expires=timedelta(hours=24),
-        token_type="email_verify",
-    )
-
-
 def create_pre_2fa_token(user_id: str) -> str:
     """Token court (5 min) après vérification email/password.
     Doit être échangé contre un access token via /auth/admin/verify-2fa

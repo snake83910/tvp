@@ -414,7 +414,14 @@ class AdminCustomer(BaseModel):
     account_type: str
     role: str
     company_name: str | None = None
+    # Raison sociale du garage pour un compte partenaire. Sans elle, la
+    # ligne s'affichait « — » : un partenaire n'a ni prénom ni nom.
+    garage_name: str | None = None
     email_verified: bool
+    # Compte créé par une commande sans inscription. Rend « non vérifié »
+    # interprétable : sur un invité, c'est la norme tant qu'il n'a pas
+    # saisi son code ; sur un inscrit, c'est un signal.
+    is_guest: bool = False
     created_at: datetime
     orders_count: int = 0
     revenue_ttc: float = 0.0

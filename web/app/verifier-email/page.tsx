@@ -1,4 +1,4 @@
-import { TokenActionPage } from "@/components/TokenActionPage";
+import { VerifyEmailClient } from "./VerifyEmailClient";
 
 export const metadata = {
   title: "Vérification de votre email — tousvospneus.com",
@@ -6,13 +6,5 @@ export const metadata = {
 };
 
 export default function VerifyEmailPage() {
-  return (
-    <TokenActionPage
-      endpoint="/auth/verify-email"
-      pendingLabel="Vérification de votre email…"
-      successTitle="Email vérifié ✓"
-      successText="Votre adresse a bien été confirmée."
-      errorTitle="Vérification impossible"
-    />
-  );
+  return <VerifyEmailClient />;
 }

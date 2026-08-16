@@ -173,6 +173,7 @@ _SAMPLES: dict[str, object] = {
     "headline": "Un rendez-vous vient d'être déplacé",
     "tracking_number": "6A12345678901",
     "carrier": "Colissimo",
+    "code": "482913",
     # Montants NUMÉRIQUES : plusieurs templates les passent à
     # `format("%.2f")`, qui refuse une chaîne. Un marqueur textuel y
     # ferait échouer l'aperçu — et le test qui rend tous les templates
