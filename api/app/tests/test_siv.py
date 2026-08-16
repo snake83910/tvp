@@ -218,8 +218,13 @@ async def test_reponse_complete_de_bout_en_bout(monkeypatch):
     _install(monkeypatch, REPONSE_REELLE)
 
     from app.integrations.siv import lookup_by_plate
-    dims = await lookup_by_plate("HG066TH")
-    assert [(d["width"], d["diameter"]) for d in dims] == [(205, 17), (195, 16)]
+    res = await lookup_by_plate("HG066TH")
+    assert [(d["width"], d["diameter"]) for d in res.dimensions] == [
+        (205, 17), (195, 16)
+    ]
+    # L'identité accompagne les dimensions : deux montages proposés sans
+    # dire de quelle voiture il s'agit laisseraient le client hésiter.
+    assert res.vehicle == "CITROEN DS3 1.6 E-HDI"
 
 
 def _install(monkeypatch, payload: dict, status: int = 200) -> None:

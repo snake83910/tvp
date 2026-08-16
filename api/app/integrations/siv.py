@@ -34,6 +34,7 @@ R17 et 195/55 R16) : on les rend TOUS, c'est au client de reconnaître le
 sien.
 """
 import re
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -80,6 +81,19 @@ def resolve_url() -> str:
     if not configured or configured.lower().rstrip("/") in _LEGACY_URLS:
         return DEFAULT_URL
     return configured
+
+
+@dataclass
+class SivLookup:
+    """Ce que le provider sait du véhicule.
+
+    Les dimensions sont l'essentiel, mais l'identité l'accompagne : quand
+    deux montages homologués sortent, savoir QUEL véhicule a été reconnu
+    est ce qui permet au client de trancher.
+    """
+
+    dimensions: list[dict] = field(default_factory=list)
+    vehicle: str = ""
 
 
 def _parse_tire_string(s: str) -> dict | None:
@@ -166,25 +180,25 @@ def _parse_response(payload: dict) -> list[dict]:
 def vehicle_label(payload: dict) -> str:
     """Libellé lisible du véhicule identifié (« CITROEN DS3 1.6 E-HDI »).
 
-    Pas utilisé par la recherche elle-même, mais c'est ce qui permet de
-    confirmer au client QUEL véhicule a été reconnu — utile quand deux
-    montages différents sont proposés.
+    Affiché au client au-dessus des dimensions : c'est ce qui lui
+    confirme que la bonne voiture a été reconnue, et ce qui rend
+    compréhensible qu'on lui propose parfois deux montages.
     """
     data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
     parts = [data.get("marque"), data.get("modele"), data.get("version")]
     return " ".join(str(p).strip() for p in parts if p) or ""
 
 
-async def lookup_by_plate(plate: str) -> list[dict]:
-    """Retourne les dimensions pneus (liste : plusieurs montages possibles).
+async def lookup_by_plate(plate: str) -> SivLookup:
+    """Dimensions pneus et identité du véhicule.
 
     Args:
         plate: Plaque nettoyée (ex. "HG066TH"), sans tirets ni espaces.
 
     Returns:
-        Liste de dicts {"width", "height", "diameter", "load_index",
-        "speed_rating"}. Liste vide si le véhicule est connu mais sans
-        dimensions pneus.
+        `SivLookup` : `dimensions` (liste de dicts width/height/diameter/
+        load_index/speed_rating, vide si le véhicule est connu sans
+        dimensions) et `vehicle` (libellé lisible, éventuellement vide).
 
     Raises:
         ValueError: SIV_API_KEY non configurée.
@@ -257,4 +271,6 @@ async def lookup_by_plate(plate: str) -> list[dict]:
     if not (data.get("marque") or data.get("Marque")):
         raise RuntimeError("Plaque non reconnue ou réponse inattendue")
 
-    return _parse_response(payload)
+    return SivLookup(
+        dimensions=_parse_response(payload), vehicle=vehicle_label(payload)
+    )

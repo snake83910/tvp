@@ -9,6 +9,18 @@ class VehicleDimension(BaseModel):
     speed_rating: str
 
 
+class PlateLookupOut(BaseModel):
+    """Résultat d'une recherche par plaque.
+
+    `vehicle` est facultatif : seul le fournisseur officiel donne
+    l'identité du véhicule, le repli ne rend que des pneus. Le front
+    doit donc l'afficher s'il existe, sans réserver de place vide.
+    """
+
+    vehicle: str | None = None
+    dimensions: list[VehicleDimension] = []
+
+
 class MarketPrice(BaseModel):
     """Relevé de prix chez un site concurrent (comparateur)."""
 

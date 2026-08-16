@@ -6,6 +6,7 @@ import { useLocalValue, writeLocal } from "@/lib/localStore";
 import {
   api,
   VEHICLE_CATEGORIES,
+  type PlateLookup,
   type VehicleCategory,
   type VehicleDimension,
 } from "@/lib/api";
@@ -150,7 +151,10 @@ export function SearchHero({
   const [plate, setPlate] = useState("");
   const [plateLoading, setPlateLoading] = useState(false);
   const [plateError, setPlateError] = useState<string | null>(null);
-  const [plateDims, setPlateDims] = useState<VehicleDimension[] | null>(null);
+  // Résultat complet (véhicule + dimensions) plutôt que les seules
+  // dimensions : afficher la voiture reconnue est ce qui rend
+  // compréhensible qu'on en propose parfois deux.
+  const [plateResult, setPlateResult] = useState<PlateLookup | null>(null);
 
   function switchCategory(next: VehicleCategory) {
     if (next === cat) return;
@@ -185,14 +189,14 @@ export function SearchHero({
   async function submitPlate(e: React.FormEvent) {
     e.preventDefault();
     setPlateError(null);
-    setPlateDims(null);
+    setPlateResult(null);
     setPlateLoading(true);
     try {
-      const dims = await api.searchByPlate(plate.trim());
-      if (dims.length === 0) {
+      const found = await api.searchByPlate(plate.trim());
+      if (found.dimensions.length === 0) {
         setPlateError("Aucune dimension trouvée pour cette plaque.");
       } else {
-        setPlateDims(dims);
+        setPlateResult(found);
       }
     } catch (err) {
       // Service d'immatriculation en panne : on renvoie vers la saisie
@@ -314,7 +318,7 @@ export function SearchHero({
                     required
                     value={plate}
                     onChange={(e) => {
-                      setPlateDims(null);
+                      setPlateResult(null);
                       setPlateError(null);
                       setPlate(e.target.value.toUpperCase());
                     }}
@@ -339,13 +343,52 @@ export function SearchHero({
               </p>
             )}
 
-            {plateDims && (
-              <div className="mt-5">
-                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-muted">
-                  Dimensions trouvées — choisissez la vôtre&nbsp;:
+            {plateResult && (
+              // role="status" : le bloc apparaît après un appel réseau.
+              // Sans annonce, un lecteur d'écran laisse l'utilisateur
+              // devant un formulaire qui n'a visiblement rien fait.
+              <div className="mt-5" role="status">
+                {/* Véhicule reconnu. Absent avec le fournisseur de
+                    secours, qui ne rend que des pneus : pas de cadre
+                    vide ni de « Véhicule : — » dans ce cas. */}
+                {plateResult.vehicle && (
+                  <div className="mb-4 flex items-start gap-3 rounded-xl border border-line bg-paper-dim px-4 py-3">
+                    <span aria-hidden className="text-lg leading-none">
+                      🚗
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+                        Véhicule reconnu
+                      </p>
+                      <p className="font-display text-base font-bold text-ink">
+                        {plateResult.vehicle}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Une seule dimension : rien à arbitrer. Plusieurs : le
+                    client doit savoir POURQUOI, sinon il choisit au
+                    hasard et se trompe de monte. */}
+                <p className="mb-3 text-sm text-ink-soft">
+                  {plateResult.dimensions.length > 1 ? (
+                    <>
+                      <strong className="text-ink">
+                        Plusieurs montages d&apos;origine
+                      </strong>{" "}
+                      pour ce véhicule. Choisissez celui inscrit sur le
+                      flanc de vos pneus actuels.
+                    </>
+                  ) : (
+                    <>
+                      <strong className="text-ink">Dimension trouvée.</strong>{" "}
+                      Vérifiez qu&apos;elle correspond au flanc de vos pneus.
+                    </>
+                  )}
                 </p>
+
                 <div className="flex flex-wrap gap-3">
-                  {plateDims.map((dim) => {
+                  {plateResult.dimensions.map((dim) => {
                     const label = `${dim.width}/${dim.height} R${dim.diameter} ${dim.load_index}${dim.speed_rating}`;
                     return (
                       <button

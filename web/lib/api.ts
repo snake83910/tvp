@@ -182,6 +182,14 @@ export interface VehicleDimension {
   speed_rating: string;
 }
 
+export interface PlateLookup {
+  /** « CITROEN DS3 1.6 E-HDI », ou null : seul le fournisseur officiel
+   *  identifie le véhicule, le repli ne rend que des pneus. À afficher
+   *  s'il existe, sans réserver de place vide sinon. */
+  vehicle: string | null;
+  dimensions: VehicleDimension[];
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -223,7 +231,7 @@ export const api = {
 
   searchByPlate: (plate: string) => {
     const q = new URLSearchParams({ plate });
-    return request<VehicleDimension[]>(`/search/by-plate?${q.toString()}`);
+    return request<PlateLookup>(`/search/by-plate?${q.toString()}`);
   },
 
   // `location` : ville ou code postal (saisie unique).

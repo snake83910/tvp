@@ -46,6 +46,12 @@ DIMS = [
         "load_index": "91", "speed_rating": "V",
     }
 ]
+VEHICULE = "CITROEN DS3 1.6 E-HDI"
+
+#: Un fournisseur rend (dimensions, libellé véhicule). Midas ne connaît
+#: que les pneus : son libellé est vide.
+REPONSE_SIV = (DIMS, VEHICULE)
+REPONSE_MIDAS = (DIMS, "")
 
 
 # ── Normalisation ─────────────────────────────────────────────────
@@ -91,15 +97,18 @@ async def test_siv_only_sans_cle_dit_indisponible():
 
 @pytest.mark.asyncio
 async def test_siv_repond_midas_pas_appele():
-    siv = AsyncMock(return_value=DIMS)
-    midas = AsyncMock(return_value=[])
+    siv = AsyncMock(return_value=REPONSE_SIV)
+    midas = AsyncMock(return_value=([], ""))
     with patch.object(plate, "siv_configured", lambda: True), \
          patch.object(plate, "_from_siv", siv), \
          patch.object(plate, "_from_midas", midas):
-        dims, provider = await plate.lookup(_db("siv"), "AA123AA")
+        res = await plate.lookup(_db("siv"), "AA123AA")
 
-    assert provider == "siv"
-    assert dims == DIMS
+    assert res.provider == "siv"
+    assert res.dimensions == DIMS
+    # L'identité du véhicule traverse la chaîne : c'est elle qui permet
+    # au client de confirmer que la bonne voiture a été reconnue.
+    assert res.vehicle == VEHICULE
     midas.assert_not_awaited()
 
 
@@ -108,14 +117,17 @@ async def test_siv_en_panne_midas_prend_le_relais():
     """LE cas qui justifie la chaîne : quota atteint ou API muette ne
     doivent pas laisser le client sans réponse."""
     siv = AsyncMock(side_effect=RuntimeError("quota dépassé"))
-    midas = AsyncMock(return_value=DIMS)
+    midas = AsyncMock(return_value=REPONSE_MIDAS)
     with patch.object(plate, "siv_configured", lambda: True), \
          patch.object(plate, "_from_siv", siv), \
          patch.object(plate, "_from_midas", midas):
-        dims, provider = await plate.lookup(_db("siv"), "AA123AA")
+        res = await plate.lookup(_db("siv"), "AA123AA")
 
-    assert provider == "midas"
-    assert dims == DIMS
+    assert res.provider == "midas"
+    assert res.dimensions == DIMS
+    # Midas ne dit pas de quelle voiture il s'agit : pas de libellé
+    # inventé, l'affichage doit savoir s'en passer.
+    assert res.vehicle == ""
 
 
 @pytest.mark.asyncio
@@ -123,7 +135,7 @@ async def test_siv_only_ne_touche_jamais_a_midas():
     """Le mode existe pour cette garantie : aucun appel au concurrent,
     même en panne."""
     siv = AsyncMock(side_effect=RuntimeError("panne"))
-    midas = AsyncMock(return_value=DIMS)
+    midas = AsyncMock(return_value=REPONSE_MIDAS)
     with patch.object(plate, "siv_configured", lambda: True), \
          patch.object(plate, "_from_siv", siv), \
          patch.object(plate, "_from_midas", midas):
@@ -151,21 +163,21 @@ async def test_plaque_inconnue_des_deux():
 @pytest.mark.asyncio
 async def test_inconnue_chez_l_un_connue_chez_l_autre():
     siv = AsyncMock(side_effect=plate.PlateNotFoundError())
-    midas = AsyncMock(return_value=DIMS)
+    midas = AsyncMock(return_value=REPONSE_MIDAS)
     with patch.object(plate, "siv_configured", lambda: True), \
          patch.object(plate, "_from_siv", siv), \
          patch.object(plate, "_from_midas", midas):
-        dims, provider = await plate.lookup(_db("siv"), "AA123AA")
+        res = await plate.lookup(_db("siv"), "AA123AA")
 
-    assert (dims, provider) == (DIMS, "midas")
+    assert (res.dimensions, res.provider) == (DIMS, "midas")
 
 
 @pytest.mark.asyncio
 async def test_reponse_vide_vaut_non_trouvee():
     """Un fournisseur qui répond « véhicule connu, pneus inconnus » ne
     doit pas produire une liste vide côté client."""
-    siv = AsyncMock(return_value=[])
-    midas = AsyncMock(return_value=[])
+    siv = AsyncMock(return_value=([], ""))
+    midas = AsyncMock(return_value=([], ""))
     with patch.object(plate, "siv_configured", lambda: True), \
          patch.object(plate, "_from_siv", siv), \
          patch.object(plate, "_from_midas", midas):
@@ -191,7 +203,7 @@ async def test_diagnostic_interroge_les_deux_quel_que_soit_le_mode():
     donner l'état réel des deux fournisseurs, y compris celui que le
     mode courant n'utilise pas."""
     siv = AsyncMock(side_effect=RuntimeError("quota"))
-    midas = AsyncMock(return_value=DIMS)
+    midas = AsyncMock(return_value=REPONSE_MIDAS)
     with patch.object(plate, "siv_configured", lambda: True),          patch.object(plate, "_from_siv", siv),          patch.object(plate, "_from_midas", midas):
         res = await plate.diagnose("AA123AA")
 
@@ -199,13 +211,14 @@ async def test_diagnostic_interroge_les_deux_quel_que_soit_le_mode():
     assert res[0]["ok"] is False and "quota" in res[0]["error"]
     assert res[1]["ok"] is True
     assert res[1]["dimensions"] == ["205/55 R16 91V"]
+    assert res[1]["vehicle"] == ""
 
 
 @pytest.mark.asyncio
 async def test_diagnostic_nomme_la_cle_manquante():
     """La cause la plus fréquente doit être nommée, pas déguisée en
     panne réseau."""
-    with patch.object(plate, "siv_configured", lambda: False),          patch.object(plate, "_from_midas", AsyncMock(return_value=DIMS)):
+    with patch.object(plate, "siv_configured", lambda: False),          patch.object(plate, "_from_midas", AsyncMock(return_value=REPONSE_MIDAS)):
         res = await plate.diagnose("AA123AA")
 
     assert "SIV_API_KEY" in res[0]["error"]

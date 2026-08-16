@@ -31,6 +31,7 @@ from app.modules.catalog.service import (
 )
 from app.modules.pricing.engine import compute_price_sync, load_active_rules
 from app.schemas.catalog import (
+    PlateLookupOut,
     SearchFacets,
     SearchResponse,
     TyreResult,
@@ -231,7 +232,7 @@ async def search_by_dimensions(
     )
 
 
-@router.get("/by-plate", response_model=list[VehicleDimension])
+@router.get("/by-plate", response_model=PlateLookupOut)
 async def search_by_plate(
     plate: str = Query(..., min_length=4, max_length=12, examples=["AA-123-AA"]),
     db: AsyncSession = Depends(get_db),
@@ -248,7 +249,7 @@ async def search_by_plate(
         raise HTTPException(status_code=422, detail="Format de plaque invalide")
 
     try:
-        dims, _provider = await plate_lookup.lookup(db, clean)
+        found = await plate_lookup.lookup(db, clean)
     except plate_lookup.PlateNotFoundError:
         raise HTTPException(
             status_code=404, detail="Aucune dimension trouvée pour cette plaque"
@@ -267,7 +268,10 @@ async def search_by_plate(
             details={"reason": str(exc)[:200]},
         ) from exc
 
-    return [VehicleDimension(**d) for d in dims]
+    return PlateLookupOut(
+        vehicle=found.vehicle or None,
+        dimensions=[VehicleDimension(**d) for d in found.dimensions],
+    )
 
 
 @router.get("/product/{ref}", response_model=TyreResult)

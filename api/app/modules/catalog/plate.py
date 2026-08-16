@@ -23,6 +23,7 @@ Trois modes :
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -50,6 +51,21 @@ _MIDAS_HEADERS = {
     "referer": "https://www.midas.fr/",
     "origin": "https://www.midas.fr",
 }
+
+
+@dataclass
+class PlateResult:
+    """Ce qu'on rend à l'appelant : les dimensions, leur provenance, et
+    l'identité du véhicule quand le fournisseur la donne.
+
+    `vehicle` peut être vide : Midas ne renvoie que des pneus, sans dire
+    de quelle voiture il s'agit. L'affichage doit donc le traiter comme
+    facultatif, pas réserver une place vide.
+    """
+
+    dimensions: list[dict] = field(default_factory=list)
+    provider: str = ""
+    vehicle: str = ""
 
 
 class PlateNotFoundError(Exception):
@@ -128,7 +144,7 @@ async def usage_today() -> dict[str, int]:
 
 # ── Fournisseurs ──────────────────────────────────────────────────
 
-async def _from_siv(plate: str) -> list[dict]:
+async def _from_siv(plate: str) -> tuple[list[dict], str]:
     from app.integrations.siv import PlateAccessError, lookup_by_plate
 
     await _bump("siv")
@@ -156,11 +172,11 @@ async def _from_siv(plate: str) -> list[dict]:
             "load_index": str(d.get("load_index") or ""),
             "speed_rating": str(d.get("speed_rating") or ""),
         }
-        for d in dims
-    ]
+        for d in dims.dimensions
+    ], dims.vehicle
 
 
-async def _from_midas(plate: str) -> list[dict]:
+async def _from_midas(plate: str) -> tuple[list[dict], str]:
     from curl_cffi.requests import AsyncSession as CurlSession
 
     await _bump("midas")
@@ -176,6 +192,7 @@ async def _from_midas(plate: str) -> list[dict]:
     raw = resp.json()
     if not isinstance(raw, list):
         raise PlateNotFoundError()
+    # Midas ne dit pas de quelle voiture il s'agit : libellé vide.
     return [
         {
             "width": int(t["width"]),
@@ -186,7 +203,7 @@ async def _from_midas(plate: str) -> list[dict]:
         }
         for t in raw
         if "width" in t
-    ]
+    ], ""
 
 
 def _dedupe(dims: list[dict]) -> list[dict]:
@@ -235,7 +252,8 @@ async def diagnose(plate: str) -> list[dict]:
             })
             continue
         try:
-            dims = _dedupe(await call(plate))
+            raw, vehicle = await call(plate)
+            dims = _dedupe(raw)
         except PlateNotFoundError:
             out.append({
                 "provider": name, "ok": False,
@@ -250,6 +268,7 @@ async def diagnose(plate: str) -> list[dict]:
             out.append({
                 "provider": name,
                 "ok": bool(dims),
+                "vehicle": vehicle,
                 "dimensions": [
                     f"{d['width']}/{d['height']} R{d['diameter']} "
                     f"{d['load_index']}{d['speed_rating']}".strip()
@@ -260,19 +279,26 @@ async def diagnose(plate: str) -> list[dict]:
     return out
 
 
-async def lookup(db: AsyncSession, plate: str) -> tuple[list[dict], str]:
-    """Dimensions du véhicule, et le fournisseur qui a répondu.
+async def lookup(db: AsyncSession, plate: str) -> PlateResult:
+    """Dimensions du véhicule, sa provenance et son identité.
 
     Lève `PlateNotFoundError` si un fournisseur affirme ne pas connaître la
     plaque, `PlateUnavailableError` si aucun n'a pu répondre. La nuance
     compte pour le message affiché au client.
     """
-    cache_key = f"plate:{plate}"
+    # `v2` : la valeur mise en cache est passée d'une liste à un objet
+    # porteur du libellé véhicule. Changer la clé plutôt que de coder la
+    # lecture des deux formes — les entrées d'hier expirent seules.
+    cache_key = f"plate:v2:{plate}"
     cached = await cache_get(cache_key)
     if cached is not None:
-        if not cached:
+        if not cached.get("dimensions"):
             raise PlateNotFoundError()
-        return cached, "cache"
+        return PlateResult(
+            dimensions=cached["dimensions"],
+            provider="cache",
+            vehicle=cached.get("vehicle") or "",
+        )
 
     mode = await get_mode(db)
     chain = _providers(mode)
@@ -285,7 +311,8 @@ async def lookup(db: AsyncSession, plate: str) -> tuple[list[dict], str]:
     last_error: Exception | None = None
     for name, call in chain:
         try:
-            dims = _dedupe(await call(plate))
+            raw, vehicle = await call(plate)
+            dims = _dedupe(raw)
         except PlateNotFoundError:
             # Le fournisseur a répondu et ne connaît pas cette plaque.
             # Le suivant peut la connaître : les bases diffèrent.
@@ -295,14 +322,15 @@ async def lookup(db: AsyncSession, plate: str) -> tuple[list[dict], str]:
             last_error = exc
             continue
         if dims:
-            await cache_set(cache_key, dims, CACHE_TTL)
-            return dims, name
+            payload = {"dimensions": dims, "vehicle": vehicle}
+            await cache_set(cache_key, payload, CACHE_TTL)
+            return PlateResult(dimensions=dims, provider=name, vehicle=vehicle)
         last_error = PlateNotFoundError()
 
     if isinstance(last_error, PlateNotFoundError):
         # Mémorisé aussi : une plaque introuvable le restera demain, et
         # rien ne justifie de rappeler les deux fournisseurs à chaque
         # nouvelle tentative du client.
-        await cache_set(cache_key, [], CACHE_TTL)
+        await cache_set(cache_key, {"dimensions": [], "vehicle": ""}, CACHE_TTL)
         raise PlateNotFoundError()
     raise PlateUnavailableError(str(last_error) if last_error else "inconnu")
