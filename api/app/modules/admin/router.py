@@ -36,6 +36,8 @@ from app.schemas.order import (
     AdminOrderDetail,
     AdminOrderSummary,
     AdminStats,
+    EmailPreviewIn,
+    EmailTemplateIn,
     OrderItemDetail,
     PlateProviderIn,
     PromoCodeIn,
@@ -772,7 +774,196 @@ async def test_plate_provider(
     return {"plate": clean, "results": await plate_lookup.diagnose(clean)}
 
 
+# ── Templates d'email : consultation et modification ───────────────
+#
+# Le fichier versionné reste la valeur par défaut ; la base ne porte que
+# les surcharges. Toute modification est auditée : le texte qui part aux
+# clients engage l'entreprise, savoir qui l'a changé et quand n'est pas
+# un luxe.
+
+@router.get("/email-templates")
+async def list_email_templates(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Liste des templates, avec l'état de leur surcharge éventuelle."""
+    from app.models.email_template import EmailTemplate
+    from app.modules.mailer import templates_admin as tpl
+
+    rows = {
+        r.name: r
+        for r in (await db.scalars(select(EmailTemplate))).all()
+    }
+    return [
+        {
+            "name": name,
+            "modified": name in rows,
+            "locked": name in tpl.LOCKED,
+            "updated_at": rows[name].updated_at if name in rows else None,
+            "updated_by": rows[name].updated_by if name in rows else None,
+        }
+        for name in tpl.list_names()
+    ]
+
+
+@router.get("/email-templates/{name}")
+async def get_email_template(
+    name: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Source actuelle et source d'origine, pour pouvoir comparer."""
+    from app.modules.mailer import templates_admin as tpl
+
+    try:
+        default = tpl.default_source(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Template inconnu") from None
+
+    override = await tpl.get_override(db, name)
+    return {
+        "name": name,
+        "html": override or default,
+        "default_html": default,
+        "modified": override is not None,
+        "locked": name in tpl.LOCKED,
+    }
+
+
+@router.post("/email-templates/{name}/preview", response_class=Response)
+async def preview_email_template(
+    name: str,
+    data: EmailPreviewIn,
+    _: User = Depends(_admin),
+):
+    """Rend un template avec un jeu de données d'exemple.
+
+    Prend la source ENVOYÉE, pas celle enregistrée : on veut voir ce que
+    donnera une modification avant de la sauver. Le rendu passe par le
+    même chemin bridé que l'envoi réel.
+    """
+    from app.modules.mailer import templates_admin as tpl
+
+    try:
+        tpl.default_source(name)  # valide le nom
+        html = tpl.render_preview(data.html)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Template inconnu") from None
+    except Exception as exc:
+        # L'erreur Jinja est LE retour utile : elle donne la ligne.
+        raise HTTPException(
+            status_code=422,
+            detail=f"{type(exc).__name__} : {str(exc)[:300]}",
+        ) from exc
+
+    # text/plain : l'aperçu est affiché dans une iframe cloisonnée côté
+    # admin, il n'a jamais à être interprété par cette réponse-ci.
+    return Response(content=html, media_type="text/plain; charset=utf-8")
+
+
+@router.put("/email-templates/{name}")
+async def save_email_template(
+    name: str,
+    data: EmailTemplateIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Enregistre une surcharge, après l'avoir rendue sans erreur."""
+    from app.modules.mailer import templates_admin as tpl
+
+    try:
+        await tpl.save_override(db, name, data.html, admin.email)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Template inconnu") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Template invalide — {type(exc).__name__} : {str(exc)[:300]}",
+        ) from exc
+
+    await audit(
+        db, user=admin,
+        action="email_template.update",
+        target_type="email_template", target_id=name,
+        payload={"length": len(data.html)},
+        request=request,
+    )
+    await db.commit()
+    return {"name": name, "modified": True}
+
+
+@router.delete("/email-templates/{name}")
+async def reset_email_template(
+    name: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Revient au fichier versionné en supprimant la surcharge."""
+    from app.modules.mailer import templates_admin as tpl
+
+    removed = await tpl.drop_override(db, name)
+    if removed:
+        await audit(
+            db, user=admin,
+            action="email_template.reset",
+            target_type="email_template", target_id=name,
+            payload={},
+            request=request,
+        )
+    await db.commit()
+    return {"name": name, "modified": False, "was_modified": removed}
+
+
 # ── Santé des jobs planifiés ───────────────────────────────────────
+
+@router.post("/cron-runs/{job}/run")
+async def run_cron_job(
+    job: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Déclenche un job planifié à la main.
+
+    Utile pour vérifier un correctif sans attendre l'heure suivante, ou
+    rattraper une nuit sautée. L'exécution est identique à celle du
+    crontab, trace comprise : un lancement manuel se voit ensuite comme
+    les autres dans « dernière exécution ».
+
+    Ces jobs ne sont PAS anodins — `dunning` peut annuler des commandes
+    et envoyer des emails clients — d'où l'audit systématique. L'écran
+    d'administration demande confirmation avant d'appeler.
+    """
+    from app.modules.cron.router import job_runners, run_job
+
+    if job not in job_runners():
+        raise HTTPException(status_code=404, detail=f"Job inconnu : {job}")
+
+    await audit(
+        db, user=admin,
+        action="cron.manual_run",
+        target_type="cron_job", target_id=job,
+        payload={},
+        request=request,
+    )
+    await db.commit()
+
+    try:
+        result = await run_job(db, job)
+    except Exception as exc:
+        # `run_job` a déjà enregistré l'échec dans la trace ; on le rend
+        # lisible plutôt que de laisser une 500 nue à l'écran.
+        raise HTTPException(
+            status_code=500,
+            detail=f"Le job a échoué : {type(exc).__name__} {str(exc)[:200]}",
+        ) from exc
+    return {"job": job, "result": result}
+
+
 
 @router.get("/cron-runs")
 async def cron_runs(

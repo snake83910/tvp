@@ -1,5 +1,6 @@
 from app.models.catalog import PricingRule, Supplier  # noqa: F401
 from app.models.cron import CronRun  # noqa: F401
+from app.models.email_template import EmailTemplate  # noqa: F401
 from app.models.garage import Garage, GarageReview  # noqa: F401
 from app.models.order import (  # noqa: F401
     Cart,
@@ -16,5 +17,5 @@ from app.models.user import Address, ProProfile, User  # noqa: F401
 __all__ = [
     "User", "ProProfile", "Address", "Supplier", "PricingRule",
     "Cart", "CartItem", "Order", "OrderItem", "OrderStatus", "Payment",
-    "PromoCode", "Garage", "GarageReview", "CronRun", "AppSetting",
+    "PromoCode", "Garage", "GarageReview", "CronRun", "AppSetting", "EmailTemplate",
 ]

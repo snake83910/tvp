@@ -356,6 +356,16 @@ class PlateProviderIn(BaseModel):
     mode: str
 
 
+class EmailTemplateIn(BaseModel):
+    """Contenu d'un template d'email saisi depuis l'administration."""
+    html: str
+
+
+class EmailPreviewIn(BaseModel):
+    """Source à prévisualiser, avant même d'être enregistrée."""
+    html: str
+
+
 class AdminStats(BaseModel):
     orders_by_status: dict[str, int]
     revenue_total_ttc: float

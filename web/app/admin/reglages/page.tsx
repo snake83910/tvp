@@ -3,10 +3,43 @@
 import { useEffect, useState } from "react";
 import {
   adminApi,
+  type CronRunStatus,
   type PlateProviderSetting,
   type PlateTestResult,
 } from "@/lib/admin";
 import { useToast } from "@/components/admin/Toast";
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
+
+/** Ce que fait chaque job, et ce qu'il déclenche. Lancer « dunning » à
+ *  la main peut annuler des commandes et envoyer des emails : l'écran
+ *  doit le dire avant, pas après. */
+const JOB_INFO: Record<string, { label: string; effet: string }> = {
+  dunning: {
+    label: "Relances de paiement",
+    effet:
+      "Vérifie les paiements auprès de la banque, relance par email les " +
+      "commandes en attente, et annule celles de plus de 7 jours dont la " +
+      "banque confirme qu'elles n'ont rien encaissé.",
+  },
+  appointments: {
+    label: "Rappels de rendez-vous",
+    effet:
+      "Envoie les rappels de montage de la veille et les alertes « pneus " +
+      "pas encore expédiés ».",
+  },
+  reviews: {
+    label: "Demandes d'avis",
+    effet:
+      "Envoie une demande d'avis aux clients livrés en garage il y a plus " +
+      "de deux jours.",
+  },
+  purge: {
+    label: "Purge des données périmées",
+    effet:
+      "Supprime les journaux de connexion, jetons de session et paniers " +
+      "anonymes hors délai de conservation. Irréversible.",
+  },
+};
 
 /** Ce que chaque mode implique, en clair. Un choix de fournisseur n'a
  *  rien d'évident : l'un a un quota, l'autre un problème de légitimité,
@@ -49,13 +82,37 @@ export default function AdminReglages() {
   const [testPlate, setTestPlate] = useState("");
   const [testing, setTesting] = useState(false);
   const [results, setResults] = useState<PlateTestResult[] | null>(null);
+  const [jobs, setJobs] = useState<CronRunStatus[] | null>(null);
+  const [running, setRunning] = useState<string | null>(null);
+  const [confirmJob, setConfirmJob] = useState<string | null>(null);
 
   useEffect(() => {
     adminApi
       .getPlateProvider()
       .then(setPlate)
       .catch((e) => setError(e instanceof Error ? e.message : "Erreur"));
+    adminApi.getCronRuns().then(setJobs).catch(() => setJobs([]));
   }, []);
+
+  async function launch(job: string) {
+    setRunning(job);
+    try {
+      const { result } = await adminApi.runCronJob(job);
+      // Le compte rendu du job EST le retour utile : « 3 relancées »
+      // vaut mieux qu'un « terminé » qui ne dit rien.
+      toast(
+        `${JOB_INFO[job]?.label ?? job} : ${Object.entries(result)
+          .map(([k, v]) => `${k} ${v}`)
+          .join(", ")}`,
+        "success",
+      );
+      setJobs(await adminApi.getCronRuns());
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setRunning(null);
+    }
+  }
 
   async function choose(mode: string) {
     if (!plate || mode === plate.mode) return;
@@ -251,6 +308,88 @@ export default function AdminReglages() {
           </>
         )}
       </section>
+
+      {/* Tâches planifiées : le crontab du serveur les lance seul, mais
+          pouvoir en déclencher une à la main évite d'attendre l'heure
+          suivante pour vérifier un correctif, ou de perdre une nuit
+          sautée. */}
+      <section className="mt-8 rounded-2xl border border-line bg-paper p-6 shadow-card">
+        <h2 className="font-display text-lg font-black text-ink">
+          Tâches planifiées
+        </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Lancées automatiquement par le serveur. Une exécution manuelle
+          fait exactement la même chose, et se voit ensuite dans
+          « dernière exécution ».
+        </p>
+
+        {!jobs ? (
+          <p className="mt-4 text-sm text-ink-muted">Chargement…</p>
+        ) : (
+          <ul className="mt-5 space-y-3">
+            {jobs.map((j) => {
+              const info = JOB_INFO[j.job];
+              const ko = j.state !== "ok";
+              return (
+                <li
+                  key={j.job}
+                  className={`rounded-xl border p-4 ${
+                    ko ? "border-red-300 bg-red-50" : "border-line"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-ink">
+                        {info?.label ?? j.job}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink-soft">
+                        {info?.effet}
+                      </p>
+                      <p
+                        className={`mt-1 text-xs ${
+                          ko ? "font-semibold text-red-800" : "text-ink-muted"
+                        }`}
+                      >
+                        {j.state === "never_ran"
+                          ? "jamais exécutée"
+                          : j.state === "late"
+                            ? `en retard — dernière exécution ${new Date(j.last_run!).toLocaleString("fr-FR")}`
+                            : j.state === "error"
+                              ? `en erreur — ${String(j.detail?.error ?? "").slice(0, 120)}`
+                              : `dernière exécution ${new Date(j.last_run!).toLocaleString("fr-FR")}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setConfirmJob(j.job)}
+                      disabled={running !== null}
+                      className="shrink-0 rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
+                    >
+                      {running === j.job ? "En cours…" : "Exécuter"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <ConfirmDialog
+        open={confirmJob !== null}
+        title={`Exécuter « ${JOB_INFO[confirmJob ?? ""]?.label ?? confirmJob} » ?`}
+        message={
+          (JOB_INFO[confirmJob ?? ""]?.effet ?? "") +
+          " L'exécution est immédiate et ne peut pas être interrompue."
+        }
+        confirmLabel="Exécuter maintenant"
+        danger
+        onClose={() => setConfirmJob(null)}
+        onConfirm={() => {
+          const job = confirmJob;
+          setConfirmJob(null);
+          if (job) launch(job);
+        }}
+      />
     </div>
   );
 }

@@ -118,6 +118,27 @@ export interface PlateTestResult {
   error: string | null;
 }
 
+export interface EmailTemplateSummary {
+  name: string;
+  /** Une surcharge est enregistrée : le fichier versionné n'est plus
+   *  ce qui part aux clients. */
+  modified: boolean;
+  /** `_layout.html` : squelette commun, consultable mais non éditable. */
+  locked: boolean;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export interface EmailTemplateDetail {
+  name: string;
+  /** Source actuellement utilisée (surcharge si elle existe). */
+  html: string;
+  /** Source du fichier versionné, pour comparer et revenir en arrière. */
+  default_html: string;
+  modified: boolean;
+  locked: boolean;
+}
+
 export interface CronRunStatus {
   job: string;
   /** ok | error | late | never_ran */
@@ -225,6 +246,23 @@ export async function downloadAdminCreditNote(
   saveBlob(await res.blob(), `avoir-${ref}.pdf`);
 }
 
+/** Aperçu d'un template : la réponse est du HTML brut, pas du JSON.
+ *
+ *  Il est rendu dans une iframe cloisonnée côté admin — jamais injecté
+ *  dans la page elle-même, qui porte une session administrateur. */
+export async function previewEmailTemplate(
+  name: string,
+  html: string,
+): Promise<string> {
+  const res = await authFetch(`/admin/email-templates/${name}/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html }),
+  });
+  if (!res.ok) throw await apiError(res);
+  return res.text();
+}
+
 export const adminApi = {
   getStats: () => call<AdminStats>("/admin/stats"),
 
@@ -304,6 +342,33 @@ export const adminApi = {
     call<PlateProviderSetting>(`/admin/settings/plate-provider`, "PATCH", {
       mode,
     }),
+
+  /** Déclenche un job planifié à la main. Il peut envoyer des emails
+   *  et annuler des commandes : l'écran demande confirmation. */
+  runCronJob: (job: string) =>
+    call<{ job: string; result: Record<string, unknown> }>(
+      `/admin/cron-runs/${job}/run`,
+      "POST",
+    ),
+
+  listEmailTemplates: () =>
+    call<EmailTemplateSummary[]>(`/admin/email-templates`),
+
+  getEmailTemplate: (name: string) =>
+    call<EmailTemplateDetail>(`/admin/email-templates/${name}`),
+
+  saveEmailTemplate: (name: string, html: string) =>
+    call<{ name: string; modified: boolean }>(
+      `/admin/email-templates/${name}`,
+      "PUT",
+      { html },
+    ),
+
+  resetEmailTemplate: (name: string) =>
+    call<{ name: string; modified: boolean; was_modified: boolean }>(
+      `/admin/email-templates/${name}`,
+      "DELETE",
+    ),
 
   /** Interroge les deux fournisseurs et rapporte ce que chacun répond.
    *  Consomme un appel de quota par fournisseur. */

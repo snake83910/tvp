@@ -45,6 +45,26 @@ JOB_PERIOD_MINUTES: dict[str, int] = {
 }
 
 
+#: Corps des jobs, indexés par nom. Permet de les déclencher ailleurs
+#: que depuis le crontab — l'administration en propose l'exécution
+#: manuelle, utile pour vérifier un correctif sans attendre l'heure
+#: suivante, ou pour rattraper une nuit sautée. Le suivi d'exécution est
+#: le même : un lancement manuel se voit comme les autres.
+def job_runners() -> dict:
+    return {
+        "dunning": _run_dunning,
+        "appointments": _run_appointments,
+        "reviews": _run_reviews,
+        "purge": _run_purge,
+    }
+
+
+async def run_job(db: AsyncSession, job: str) -> dict:
+    """Exécute un job par son nom, avec sa trace. Lève KeyError si inconnu."""
+    runner = job_runners()[job]
+    return await _tracked(db, job, lambda: runner(db))
+
+
 def _require_cron_token(x_cron_token: str | None = Header(default=None)) -> None:
     if not settings.cron_token:
         raise HTTPException(

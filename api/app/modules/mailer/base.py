@@ -68,9 +68,14 @@ class Mailer(ABC):
         template: str,
         **context: Any,
     ) -> bool:
-        """Helper de haut niveau : rend le template + envoie en background."""
+        """Helper de haut niveau : rend le template + envoie en background.
+
+        Une surcharge saisie depuis l'administration prime sur le
+        fichier. Elle est rendue dans le bac à sable, comme à l'aperçu :
+        ce que l'admin a vu est ce que le client reçoit.
+        """
         try:
-            html = self.render(template, **context)
+            html = await self._render_with_override(template, context)
         except Exception:
             # Template manquant ou rendu KO = bug applicatif, à corriger
             log.exception(
@@ -78,6 +83,25 @@ class Mailer(ABC):
             )
             return False
         return await self.send(EmailMessage(to=to, subject=subject, html=html))
+
+    async def _render_with_override(self, template: str, context: dict) -> str:
+        from app.modules.mailer.templates_admin import (
+            cached_override,
+            render_preview,
+        )
+
+        try:
+            override = await cached_override(template)
+        except Exception:
+            # Base ou cache indisponible : le fichier reste la valeur
+            # sûre. Un email doit partir même si la personnalisation
+            # n'est pas joignable.
+            log.warning("Surcharge %s illisible, repli sur le fichier", template)
+            override = None
+
+        if override:
+            return render_preview(override, context)
+        return self.render(template, **context)
 
 
 #: Tâches d'envoi en cours. Cet ensemble n'est PAS décoratif : la boucle

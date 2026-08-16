@@ -178,6 +178,39 @@ Effets :
   garage.
 - Décalé à 10h30 : un email d'avis n'a aucune raison de partir la nuit.
 
+### Exécution manuelle
+
+Admin → Réglages → Tâches planifiées : chaque job peut être déclenché à
+la main, avec confirmation. Utile pour vérifier un correctif sans
+attendre l'heure suivante, ou rattraper une nuit sautée. L'exécution est
+identique à celle du crontab, trace comprise, et l'action est auditée —
+`dunning` peut annuler des commandes et envoyer des emails.
+
+## Textes des emails
+
+Admin → Emails : les 21 templates sont consultables et modifiables, avec
+aperçu en direct sur des données d'exemple.
+
+Le fichier versionné reste la valeur par défaut ; la base ne porte que
+les surcharges, et « Revenir à l'origine » supprime la sienne. Une
+correction livrée dans le code reprend donc effet sur tout template non
+personnalisé — ce qui ne serait pas le cas si la base contenait une
+copie de chaque texte.
+
+Garde-fous :
+
+- Un template qui ne compile pas ou qui échoue au rendu **n'est jamais
+  enregistré** : sans ça une accolade oubliée casserait silencieusement
+  les confirmations de commande.
+- Rendu dans un bac à sable Jinja. Un administrateur est digne de
+  confiance, sa session volée ne l'est pas : sans bridage, un template
+  permet d'atteindre les objets Python et donc d'exécuter du code.
+- `_layout.html` (en-tête et pied commun) est consultable mais non
+  éditable : une erreur dedans casserait les vingt autres d'un coup.
+- L'aperçu s'affiche dans une iframe cloisonnée, jamais injecté dans la
+  page d'administration.
+- Toute modification est auditée (qui, quand).
+
 ## Plafonds sur les endpoints publics
 
 Les trois endpoints ouverts du catalogue sont limités par IP (compteur

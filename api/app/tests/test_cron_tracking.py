@@ -86,6 +86,15 @@ async def test_message_d_erreur_borne():
     assert len(_recorded(db)["detail"]["error"]) <= 500
 
 
+def test_execution_manuelle_couvre_les_memes_jobs():
+    """L'administration propose de lancer les jobs à la main. Un job
+    absent de cette table ne serait pas déclenchable — et un job en trop
+    renverrait une KeyError au clic."""
+    from app.modules.cron.router import job_runners
+
+    assert set(job_runners()) == set(JOB_PERIOD_MINUTES)
+
+
 def test_tous_les_jobs_sont_surveilles():
     """Garde-fou : un job ajouté sans période reste invisible pour
     /health/jobs, donc aussi silencieux qu'avant."""
