@@ -120,6 +120,7 @@ crontab -e
 0 * * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/dunning >/dev/null 2>&1
 15 * * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/appointments >/dev/null 2>&1
 30 10 * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/reviews >/dev/null 2>&1
+45 4 * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/purge >/dev/null 2>&1
 ```
 
 Effets :
@@ -157,11 +158,43 @@ Effets :
 - Alerte « pneus pas encore expédiés » quand le rendez-vous approche, avec un
   lien pour le décaler
 
+`/cron/purge` — une fois par jour, en heure creuse
+- Supprime les journaux de connexion de plus de **180 jours**, les jetons
+  de session expirés ou révoqués depuis plus de 30 jours, et les paniers
+  ANONYMES inactifs depuis 90 jours. Les paniers rattachés à un compte
+  sont épargnés.
+- Les durées sont des constantes nommées en tête de `modules/cron/router.py`.
+  Celle des journaux de connexion mérite une validation : ils contiennent
+  des **adresses IP**, et les conserver sans limite de durée contrevient au
+  principe de minimisation (la CNIL attend une durée définie, six mois à un
+  an selon l'usage).
+- Chaque passage est borné à 20 000 lignes par table : la première
+  exécution après des mois d'accumulation ne doit pas immobiliser une
+  table de production. Le retard se résorbe en quelques jours.
+
 `/cron/reviews` — une fois par jour
 - Deux jours après une livraison en garage partenaire, demande un avis sur le
   garage. Une seule demande par commande ; rien si le client a déjà noté ce
   garage.
 - Décalé à 10h30 : un email d'avis n'a aucune raison de partir la nuit.
+
+## Plafonds sur les endpoints publics
+
+Les trois endpoints ouverts du catalogue sont limités par IP (compteur
+Redis, `core/rate_limit.py`) : ce sont les seuls points du site où un
+inconnu déclenche un appel **payant** chez un tiers.
+
+| Endpoint | Plafond | Ce qu'il protège |
+|---|---|---|
+| `/search/by-plate` | 10 / min | Le quota SIV (~100 appels/jour) |
+| `/search/dimensions` | 60 / min | Le quota Maxityre, et le catalogue tarifé |
+| `/search/product/{ref}` | 120 / min | Idem, en consultation de fiches |
+
+Les seuils sont larges à dessein : un client qui compare change de
+dimension quelques fois par minute, pas soixante. Ils ne visent que le
+parcours automatisé. Sans eux, une boucle sur des plaques distinctes
+épuise le quota SIV de la journée en moins d'une minute — le cache ne
+couvre que les répétitions.
 
 ## Recherche par plaque d'immatriculation
 

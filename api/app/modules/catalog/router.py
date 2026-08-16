@@ -12,12 +12,13 @@ Recherche catalogue.
 """
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user_optional
 from app.core.errors import AppError, ErrorCode
+from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.integrations.supplier_base import VEHICLE_CATEGORIES
 from app.models.catalog import PricingRule
@@ -149,10 +150,21 @@ async def search_by_dimensions(
     sort: str = Query("price_asc"),
     page: int = Query(1, ge=1),
     per_page: int = Query(24, ge=1, le=96),
+    request: Request = None,  # type: ignore
     response: Response = None,  # type: ignore
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ):
+    # Chaque dimension inconnue déclenche un appel Maxityre : sans
+    # plafond, un aspirateur à prix parcourt tout le catalogue tarifé du
+    # site — et consomme notre quota fournisseur au passage. Le seuil est
+    # large : un client qui compare change de dimension quelques fois par
+    # minute, pas soixante.
+    if request is not None:
+        await rate_limit(
+            request, "search_dim", max_attempts=60, window_seconds=60
+        )
+
     # Cache navigateur : private (varie selon l'utilisateur connecté), 5 min.
     # Permet à un visiteur qui revient sur la même recherche d'éviter un appel.
     if response is not None:
@@ -235,6 +247,7 @@ async def search_by_dimensions(
 @router.get("/by-plate", response_model=PlateLookupOut)
 async def search_by_plate(
     plate: str = Query(..., min_length=4, max_length=12, examples=["AA-123-AA"]),
+    request: Request = None,  # type: ignore
     db: AsyncSession = Depends(get_db),
 ):
     """Dimensions pneus d'un véhicule, par plaque française.
@@ -244,6 +257,17 @@ async def search_by_plate(
     dimensions d'un véhicule ne changent pas, et le quota du
     fournisseur principal se compte à la journée.
     """
+    # LE point sensible : chaque plaque distincte consomme un appel du
+    # quota SIV (~100 par jour). Le cache ne couvre que les répétitions ;
+    # une boucle sur des plaques aléatoires épuiserait la journée en
+    # moins d'une minute et couperait la fonction pour tout le monde.
+    # Saisir sa plaque est un geste rare : dix par minute est déjà
+    # confortable pour un humain, et sans intérêt pour un script.
+    if request is not None:
+        await rate_limit(
+            request, "search_plate", max_attempts=10, window_seconds=60
+        )
+
     clean = plate_lookup.clean_plate(plate)
     if clean is None:
         raise HTTPException(status_code=422, detail="Format de plaque invalide")
@@ -282,6 +306,7 @@ async def get_product(
     ratio: int = Query(..., ge=8, le=110),
     diameter: float = Query(..., ge=8, le=60),
     category: str = Query("auto"),
+    request: Request = None,  # type: ignore
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ):
@@ -294,6 +319,14 @@ async def get_product(
     Si le cache est vide, on remplit en un seul appel (qui paginera
     Maxityre une bonne fois et servira ensuite toutes les requêtes).
     """
+    # Une fiche produit se consulte en rafale quand on compare : le
+    # plafond est haut. Il ne vise que le parcours automatisé de toutes
+    # les références d'une dimension.
+    if request is not None:
+        await rate_limit(
+            request, "search_product", max_attempts=120, window_seconds=60
+        )
+
     _check_category(category)
     raw_items = await _load_dimension_catalog(width, ratio, diameter, category)
     match = next(

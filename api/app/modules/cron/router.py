@@ -13,12 +13,15 @@ Exemple crontab sur le VPS :
     # Sollicitation d'avis, une fois par jour
     30 10 * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
         https://tousvospneus.com/api/cron/reviews >/dev/null
+    # Purge des données périmées, une fois par jour en heure creuse
+    45 4 * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
+        https://tousvospneus.com/api/cron/purge >/dev/null
 """
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +41,7 @@ JOB_PERIOD_MINUTES: dict[str, int] = {
     "dunning": 60,
     "appointments": 60,
     "reviews": 24 * 60,
+    "purge": 24 * 60,
 }
 
 
@@ -368,3 +372,110 @@ async def _run_reviews(db: AsyncSession) -> dict:
 
     await db.commit()
     return {"checked": len(rows), "sent": sent}
+
+
+# ── Purge des données périmées ─────────────────────────────────────
+#
+# Trois tables grossissaient sans fin : une ligne de `login_logs` par
+# tentative de connexion, un `refresh_tokens` par session, un panier par
+# visiteur anonyme. Sur une base de développement, `login_logs` était
+# déjà la plus grosse table du site — devant les commandes.
+#
+# Le sujet dépasse l'hygiène : `login_logs` conserve des ADRESSES IP, et
+# les garder sans limite de durée contrevient au principe de
+# minimisation. La CNIL attend une durée définie sur les journaux de
+# connexion. Six mois est une valeur défendable pour un site marchand ;
+# c'est une décision à faire valider, d'où la constante isolée et
+# nommée plutôt qu'un littéral perdu dans une requête.
+
+#: Journaux de connexion (IP, user-agent). Durée à valider juridiquement.
+LOGIN_LOG_RETENTION_DAYS = 180
+
+#: Jetons expirés ou révoqués. Le délai de grâce laisse de quoi enquêter
+#: sur un incident récent avant que la trace ne disparaisse.
+REFRESH_TOKEN_GRACE_DAYS = 30
+
+#: Paniers ANONYMES sans activité. Les paniers rattachés à un compte
+#: sont épargnés : ils sont bornés par le nombre de clients, et en
+#: supprimer un se verrait côté client.
+ANONYMOUS_CART_DAYS = 90
+
+#: Plafond par table et par passage. La première exécution après des
+#: mois d'accumulation pourrait supprimer des centaines de milliers de
+#: lignes d'un coup et bloquer la table le temps de la transaction. Le
+#: job tourne tous les jours : le retard se résorbe en quelques
+#: passages, sans jamais immobiliser la base.
+PURGE_BATCH = 20_000
+
+
+@router.post("/purge")
+async def purge(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_require_cron_token),
+):
+    return await _tracked(db, "purge", lambda: _run_purge(db))
+
+
+async def _run_purge(db: AsyncSession) -> dict:
+    """Supprime les données périmées. À lancer une fois par jour.
+
+    Chaque suppression est bornée (`PURGE_BATCH`) : mieux vaut plusieurs
+    passages qu'une transaction qui immobilise une table de production.
+    """
+    from sqlalchemy import delete
+
+    from app.models.order import Cart
+    from app.models.security import LoginLog, RefreshToken
+
+    now = datetime.now(UTC)
+
+    async def _bounded_delete(model, condition) -> int:
+        """DELETE ... WHERE id IN (SELECT id ... LIMIT n).
+
+        SQLAlchemy ne sait pas poser de LIMIT sur un DELETE : on passe
+        par une sous-requête sur la clé primaire.
+        """
+        ids = (await db.scalars(
+            select(model.id).where(condition).limit(PURGE_BATCH)
+        )).all()
+        if not ids:
+            return 0
+        await db.execute(delete(model).where(model.id.in_(ids)))
+        return len(ids)
+
+    logs = await _bounded_delete(
+        LoginLog,
+        LoginLog.created_at < now - timedelta(days=LOGIN_LOG_RETENTION_DAYS),
+    )
+
+    # Expiré OU révoqué depuis assez longtemps. Un jeton révoqué mais non
+    # encore expiré doit rester le temps du délai de grâce : c'est
+    # justement celui qui intéresse une enquête.
+    grace = now - timedelta(days=REFRESH_TOKEN_GRACE_DAYS)
+    tokens = await _bounded_delete(
+        RefreshToken,
+        or_(
+            RefreshToken.expires_at < grace,
+            and_(
+                RefreshToken.revoked_at.is_not(None),
+                RefreshToken.revoked_at < grace,
+            ),
+        ),
+    )
+
+    # `cart_items` suit par ON DELETE CASCADE (vérifié en base).
+    carts = await _bounded_delete(
+        Cart,
+        and_(
+            Cart.user_id.is_(None),
+            Cart.updated_at < now - timedelta(days=ANONYMOUS_CART_DAYS),
+        ),
+    )
+
+    await db.commit()
+    return {
+        "login_logs": logs,
+        "refresh_tokens": tokens,
+        "anonymous_carts": carts,
+        "batch_limit": PURGE_BATCH,
+    }
