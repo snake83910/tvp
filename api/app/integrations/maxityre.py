@@ -364,7 +364,13 @@ class MaxityreConnector(SupplierConnector):
             headers={**self._headers(), "content-type": "application/json"},
             json={"address": address},
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # Le CORPS de la réponse dit ce qui cloche (champ manquant,
+            # ville inconnue…). Un « 400 Bad Request » nu oblige à
+            # deviner : on a déjà perdu du temps là-dessus.
+            raise RuntimeError(
+                f"POST /addresses {resp.status_code} : {resp.text[:400]}"
+            )
 
         body = resp.json() or {}
         cree = body.get("address") if isinstance(body.get("address"), dict) else None

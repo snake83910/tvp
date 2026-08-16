@@ -192,8 +192,10 @@ def _cmd_domicile():
         garage_snapshot={},
         shipping_address={
             "line1": "17 Rue Ambroise Croizat", "line2": None,
+            # Pas de téléphone : les snapshots de commande n'en portent
+            # pas, il vit sur le compte client (`_address_snapshot` ne
+            # copie que label, lignes, code postal, ville, pays).
             "postal_code": "83560", "city": "Rians", "country": "FR",
-            "phone": "07 71 87 81 98",
         },
     )
 
@@ -224,7 +226,33 @@ def test_livraison_domicile_utilise_ladresse_du_client():
     a = sc.build_address(_cmd_domicile())
     assert a["street"] == "17 Rue Ambroise Croizat"
     assert a["postalCode"] == "83560"
-    assert a["phone"] == {"country": "FR", "number": "0771878198"}
+
+
+@pytest.mark.asyncio
+async def test_telephone_obligatoire(_email_site):
+    """Les adresses figées ne portent PAS de téléphone : il vient du
+    compte. Sans lui le fournisseur refuse l'adresse par un 400 nu —
+    autant l'arrêter ici, avec un message qui nomme le champ."""
+    connector = SimpleNamespace(
+        list_addresses=AsyncMock(), create_address=AsyncMock()
+    )
+    with pytest.raises(sc.SupplierCartError, match="téléphone"):
+        await sc.ensure_address(connector, _cmd_domicile(), "Simon Rémy")
+
+    connector.create_address.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telephone_du_compte_normalise(_email_site):
+    connector = SimpleNamespace(
+        list_addresses=AsyncMock(return_value=[]),
+        create_address=AsyncMock(return_value={"id": 7}),
+    )
+    await sc.ensure_address(
+        connector, _cmd_domicile(), "Simon Rémy", "07 71 87 81 98"
+    )
+    envoye = connector.create_address.await_args.args[0]
+    assert envoye["phone"] == {"country": "FR", "number": "0771878198"}
 
 
 def test_complement_dadresse_conserve():
@@ -290,7 +318,9 @@ async def test_adresse_existante_reutilisee_sans_creation(_email_site):
         list_addresses=AsyncMock(return_value=[existante]),
         create_address=AsyncMock(),
     )
-    res = await sc.ensure_address(connector, _cmd_domicile(), "Simon Rémy")
+    res = await sc.ensure_address(
+        connector, _cmd_domicile(), "Simon Rémy", "0771878198"
+    )
 
     assert res == {"id": 696430, "created": False,
                    "name": "Simon Rémy", "city": "Rians"}
@@ -304,7 +334,9 @@ async def test_adresse_absente_creee(_email_site):
         create_address=AsyncMock(return_value={"id": 999, "name": "Simon Rémy",
                                                "city": "Rians"}),
     )
-    res = await sc.ensure_address(connector, _cmd_domicile(), "Simon Rémy")
+    res = await sc.ensure_address(
+        connector, _cmd_domicile(), "Simon Rémy", "0771878198"
+    )
     assert res["id"] == 999
     assert res["created"] is True
 

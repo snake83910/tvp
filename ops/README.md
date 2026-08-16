@@ -214,6 +214,11 @@ domicile, celle du GARAGE pour un montage — c'est lui qui reçoit les
 pneus. Une adresse identique déjà présente est réutilisée plutôt que
 dupliquée. Il ne reste qu'à la sélectionner sur maxityre.fr.
 
+Le **nom et le téléphone** du destinataire viennent du COMPTE client :
+les adresses figées sur la commande n'en portent pas. Un compte sans
+téléphone bloque la création, avec un message qui nomme le champ — le
+fournisseur, lui, refuse l'adresse par un « 400 Bad Request » muet.
+
 L'email envoyé au fournisseur est celui du site (`ADMIN_EMAIL`, à défaut
 `SMTP_SENDER`), jamais celui du client : les avis d'expédition doivent
 nous revenir, et le fournisseur n'a pas à récupérer le fichier client.

@@ -219,7 +219,9 @@ def build_address(order: Order) -> dict:
     }
 
 
-async def ensure_address(connector, order: Order, recipient: str = "") -> dict:
+async def ensure_address(
+    connector, order: Order, recipient: str = "", phone: str = ""
+) -> dict:
     """Adresse de livraison présente dans le carnet du fournisseur.
 
     Réutilise une adresse identique si elle existe déjà, la crée sinon.
@@ -229,11 +231,17 @@ async def ensure_address(connector, order: Order, recipient: str = "") -> dict:
     cible = build_address(order)
     if recipient:
         cible["name"] = recipient[:100]
+    if phone:
+        cible["phone"] = {"country": "FR", "number": _digits(phone)}
 
     manquants = [
         champ for champ in ("name", "street", "postalCode", "city", "mail")
         if not str(cible.get(champ) or "").strip()
     ]
+    # Le transporteur en a besoin, et le fournisseur refuse l'adresse
+    # sans lui — vécu : un « 400 Bad Request » sans autre explication.
+    if not (cible.get("phone") or {}).get("number"):
+        manquants.append("téléphone")
     if manquants:
         # `mail` manquant = ADMIN_EMAIL et SMTP_SENDER vides côté serveur.
         # Créer une adresse sans contact chez le fournisseur reviendrait à
@@ -262,21 +270,23 @@ async def ensure_address(connector, order: Order, recipient: str = "") -> dict:
     }
 
 
-async def _recipient(db: AsyncSession, order: Order) -> str:
-    """Nom du destinataire pour une livraison à domicile.
+async def _contact(db: AsyncSession, order: Order) -> tuple[str, str]:
+    """Nom ET téléphone du destinataire, lus sur le COMPTE client.
 
-    Les adresses figées sur la commande ne portent PAS de nom — il vit
-    sur le compte client. Sans cette lecture, le colis partirait sans
-    destinataire et le transporteur ne saurait pas à qui remettre.
+    Les adresses figées sur la commande n'en portent aucun des deux :
+    `_address_snapshot` ne copie que label, lignes, code postal, ville
+    et pays. Sans cette lecture, le colis partait sans destinataire et
+    sans numéro — et le fournisseur refusait l'adresse (400).
     """
     if order.delivery_mode == "partner_garage":
-        return ""  # le garage est déjà nommé dans son snapshot
+        return "", ""  # garage : nom et téléphone sont dans son snapshot
     from app.models.user import User
 
     user = await db.get(User, order.user_id)
     if user is None:
-        return ""
-    return " ".join(p for p in [user.first_name, user.last_name] if p)
+        return "", ""
+    nom = " ".join(p for p in [user.first_name, user.last_name] if p)
+    return nom, user.phone or ""
 
 
 async def push_order(db: AsyncSession, order: Order) -> dict:
@@ -325,7 +335,8 @@ async def push_order(db: AsyncSession, order: Order) -> dict:
     adresse: dict | None = None
     adresse_erreur: str | None = None
     try:
-        adresse = await ensure_address(connector, order, await _recipient(db, order))
+        nom, tel = await _contact(db, order)
+        adresse = await ensure_address(connector, order, nom, tel)
     except Exception as exc:
         adresse_erreur = f"{type(exc).__name__}: {str(exc)[:160]}"
 
