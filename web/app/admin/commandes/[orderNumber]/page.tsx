@@ -44,6 +44,10 @@ export default function AdminOrderDetail() {
   // l'opération se fait au back office de la banque, et ce champ est ce
   // qui rend la déclaration vérifiable plus tard.
   const [refundAmount, setRefundAmount] = useState("");
+  // Par défaut le site appelle la banque. Coché = l'admin déclare un
+  // remboursement DÉJÀ fait à la main : les deux n'ont pas la même
+  // valeur probante, le choix doit être conscient.
+  const [refundManual, setRefundManual] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -109,11 +113,12 @@ export default function AdminOrderDetail() {
         cancel_reason: cancelReason || undefined,
         refund_cents:
           targetStatus === "refunded" ? euroToCents(refundAmount) : undefined,
+        refund_manual: targetStatus === "refunded" ? refundManual : undefined,
       });
       setOrder(updated);
       setTargetStatus("");
       setTracking(""); setCarrier(""); setTrackingUrl(""); setCancelReason("");
-      setRefundAmount("");
+      setRefundAmount(""); setRefundManual(false);
       toast("Statut mis à jour", "success");
       adminApi.listAudit(orderNumber).then(setAuditEntries).catch(() => {});
     } catch (e) {
@@ -207,11 +212,13 @@ export default function AdminOrderDetail() {
             {order.refunded < order.total_ttc && " (partiel)"}
           </p>
           <p className="mt-0.5 text-xs text-amber-800">
-            Déclaré le{" "}
+            {order.refund_mode === "sogecommerce"
+              ? "Exécuté par Sogecommerce"
+              : "Déclaré à la main — aucune preuve bancaire attachée"}{" "}
+            le{" "}
             {order.refunded_at
               ? new Date(order.refunded_at).toLocaleString("fr-FR")
-              : "—"}{" "}
-            · opération effectuée au back office bancaire
+              : "—"}
           </p>
         </div>
       )}
@@ -345,15 +352,34 @@ export default function AdminOrderDetail() {
 
                 {targetStatus === "refunded" && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-                    <p className="text-xs font-semibold text-amber-900">
-                      Le remboursement n&apos;est pas exécuté par le site.
-                    </p>
-                    <p className="mt-1 text-xs text-amber-800">
-                      Effectuez-le au back office Sogecommerce, puis
-                      saisissez ici le montant réellement rendu. Il est
-                      enregistré sur la commande, tracé dans l&apos;audit,
-                      et envoyé au client par email.
-                    </p>
+                    {order.refund_api_available && !refundManual ? (
+                      <>
+                        <p className="text-xs font-semibold text-amber-900">
+                          Le site va rembourser via Sogecommerce.
+                        </p>
+                        <p className="mt-1 text-xs text-amber-800">
+                          L&apos;argent part réellement. Si la transaction
+                          n&apos;est pas encore remise en banque, elle sera
+                          simplement annulée et le client ne sera pas
+                          débité. La référence bancaire est archivée sur la
+                          commande.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs font-semibold text-amber-900">
+                          {order.refund_api_available
+                            ? "Déclaration d'un remboursement déjà effectué."
+                            : "Remboursement automatique indisponible."}
+                        </p>
+                        <p className="mt-1 text-xs text-amber-800">
+                          Rien ne part d&apos;ici : effectuez
+                          l&apos;opération au back office Sogecommerce, puis
+                          saisissez le montant réellement rendu. Il sera
+                          enregistré <strong>sans preuve bancaire</strong>.
+                        </p>
+                      </>
+                    )}
                     <label
                       htmlFor="refund-amount"
                       className="mt-3 mb-1 block text-xs font-bold uppercase tracking-wider text-amber-900"
@@ -375,6 +401,20 @@ export default function AdminOrderDetail() {
                     <p className="mt-1 text-xs text-amber-800">
                       Total de la commande : {order.total_ttc.toFixed(2)} €
                     </p>
+                    {order.refund_api_available && (
+                      <label className="mt-3 flex items-start gap-2 text-xs text-amber-800">
+                        <input
+                          type="checkbox"
+                          checked={refundManual}
+                          onChange={(e) => setRefundManual(e.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          J&apos;ai déjà remboursé au back office — enregistrer
+                          sans appeler la banque
+                        </span>
+                      </label>
+                    )}
                   </div>
                 )}
 
@@ -465,14 +505,20 @@ export default function AdminOrderDetail() {
         message={
           targetStatus === "cancelled"
             ? "Cette action déclenche un email d'annulation au client et ne peut pas être annulée."
-            : `Le client recevra un email annonçant un remboursement de ` +
-              `${refundAmount || "0"} €. Ne validez que si l'opération est ` +
-              `déjà faite au back office Sogecommerce : le site ne rembourse pas lui-même.`
+            : order?.refund_api_available && !refundManual
+              ? `${refundAmount || "0"} € vont être RÉELLEMENT rendus au client ` +
+                `via Sogecommerce. L'opération n'est pas réversible depuis ce site, ` +
+                `et le client en est informé par email.`
+              : `Enregistrement d'un remboursement de ${refundAmount || "0"} € ` +
+                `effectué au back office. Le client recevra un email : ne validez ` +
+                `que si l'argent est réellement parti.`
         }
         confirmLabel={
           targetStatus === "cancelled"
             ? "Annuler la commande"
-            : `Déclarer ${refundAmount || "0"} € remboursés`
+            : order?.refund_api_available && !refundManual
+              ? `Rembourser ${refundAmount || "0"} €`
+              : `Déclarer ${refundAmount || "0"} € remboursés`
         }
         danger
         onClose={() => setConfirmDestructive(null)}

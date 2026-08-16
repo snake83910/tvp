@@ -29,6 +29,7 @@ from app.modules.mailer.service import (
     send_order_refunded,
     send_order_shipped,
 )
+from app.modules.orders import refund
 from app.schemas.order import (
     AdminCustomer,
     AdminCustomerAddress,
@@ -111,6 +112,8 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
             order.refunded_cents / 100 if order.refunded_cents is not None else None
         ),
         refunded_at=order.refunded_at,
+        refund_mode=order.refund_mode,
+        refund_api_available=refund.api_available(),
         payment_check_result=order.payment_check_result,
         payment_checked_at=order.payment_checked_at,
     )
@@ -424,22 +427,17 @@ async def update_status(
 
     previous_status = order.status.value
 
-    # Le remboursement s'exécute au back office de la banque — le site
-    # n'a pas de contrat de remboursement par API. « Remboursée » n'est
-    # donc qu'une DÉCLARATION, et une déclaration sans montant ni date
-    # n'est pas vérifiable : six mois plus tard, personne ne peut dire
-    # si le client a été remboursé ni de combien. Le montant est donc
-    # exigé, borné au total de la commande, et tracé.
+    # Remboursement. Le montant est exigé et borné dans tous les cas :
+    # sans lui, personne ne peut vérifier six mois plus tard ce qui a
+    # été rendu au client.
     refund_cents: int | None = None
+    refund_result: dict | None = None
     if target == OrderStatus.refunded:
         refund_cents = data.refund_cents
         if refund_cents is None:
             raise HTTPException(
                 status_code=422,
-                detail=(
-                    "Indiquez le montant réellement remboursé au back "
-                    "office de la banque."
-                ),
+                detail="Indiquez le montant à rembourser.",
             )
         if refund_cents <= 0 or refund_cents > order.total_ttc_cents:
             raise HTTPException(
@@ -449,6 +447,23 @@ async def update_status(
                     f"{order.total_ttc_cents / 100:.2f} €."
                 ),
             )
+
+        if data.refund_manual or not refund.api_available():
+            # Déclaration : quelqu'un affirme avoir remboursé au Back
+            # Office. Aucune preuve bancaire — d'où le marquage distinct.
+            order.refund_mode = "manual"
+        else:
+            # L'ORDRE COMPTE : la banque d'abord, le statut ensuite. Si
+            # l'appel échoue, la commande n'a pas bougé et l'admin peut
+            # réessayer. L'inverse laisserait une commande « remboursée »
+            # sans un centime rendu.
+            try:
+                refund_result = await refund.refund_order(
+                    db, order, refund_cents,
+                    comment=(data.cancel_reason or "").strip() or None,
+                )
+            except refund.RefundError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
         order.transition_to(target)
@@ -468,8 +483,12 @@ async def update_status(
     elif target == OrderStatus.cancelled:
         send_order_cancelled(order, user, data.cancel_reason)
     elif target == OrderStatus.refunded:
-        order.refunded_cents = refund_cents
-        order.refunded_at = datetime.now(UTC)
+        # En mode API, refund_order a déjà posé montant, date et mode
+        # à partir de la réponse bancaire. En déclaration manuelle, il
+        # n'y a personne d'autre pour le faire.
+        if refund_result is None:
+            order.refunded_cents = refund_cents
+            order.refunded_at = datetime.now(UTC)
         # Le client était jusqu'ici le seul à ne pas être prévenu de son
         # propre remboursement.
         send_order_refunded(order, user, refund_cents, data.cancel_reason)
@@ -483,6 +502,11 @@ async def update_status(
             "tracking_number": data.tracking_number,
             "cancel_reason": data.cancel_reason,
             "refund_cents": refund_cents,
+            "refund_mode": order.refund_mode,
+            # Référence bancaire du crédit : c'est elle qu'on cherchera
+            # au Back Office le jour d'une réclamation.
+            "refund_ref": (refund_result or {}).get("uuid"),
+            "refund_status": (refund_result or {}).get("detailedStatus"),
         },
         request=request,
     )

@@ -204,6 +204,65 @@ class SogecommercePayment(PaymentProvider):
             raise RuntimeError(f"Order/Get échoué : {body.get('answer', {})}")
         return body["answer"]
 
+    async def cancel_or_refund(
+        self,
+        transaction_uuid: str,
+        amount_cents: int,
+        currency: str = "EUR",
+        comment: str | None = None,
+    ) -> dict:
+        """Rend l'argent au client — Transaction/CancelOrRefund.
+
+        La banque choisit seule entre les deux opérations, et c'est
+        volontaire (`resolutionMode` laissé sur AUTO) :
+
+        * transaction pas encore remise en banque -> **annulation**, le
+          client n'est jamais débité ;
+        * transaction déjà capturée -> **remboursement**, une nouvelle
+          transaction de type CREDIT est créée.
+
+        Forcer l'un des deux modes ferait échouer l'appel dès que la
+        transaction est de l'autre côté de la remise — laquelle dépend
+        de l'heure de la journée, pas de notre code.
+
+        Lève `RuntimeError` sur tout refus : l'appelant NE DOIT PAS
+        marquer la commande remboursée s'il n'a pas de réponse claire.
+        Un remboursement supposé est pire qu'un remboursement refusé.
+        """
+        payload: dict = {
+            "uuid": transaction_uuid,
+            "amount": amount_cents,
+            "currency": currency,
+            "resolutionMode": "AUTO",
+        }
+        if comment:
+            # Visible dans l'historique de la transaction au Back Office :
+            # c'est ce qui permet de rapprocher un mouvement bancaire
+            # d'une commande sans ouvrir notre base.
+            payload["comment"] = comment[:255]
+
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+        ) as client:
+            resp = await client.post(
+                f"{self._BASE}/Transaction/CancelOrRefund",
+                headers={
+                    "Authorization": self._auth_header(),
+                    "Content-Type": "application/json",
+                },
+                content=json.dumps(payload),
+            )
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("status") != "SUCCESS":
+            err = body.get("answer", {}) or {}
+            raise RuntimeError(
+                f"CancelOrRefund refusé : {err.get('errorCode')} "
+                f"{err.get('errorMessage')} "
+                f"{err.get('detailedErrorMessage') or ''}".strip()
+            )
+        return body["answer"]
+
     def verify_ipn(self, payload: dict, signature: str | None) -> IPNResult:
         """
         IPN Sogecommerce : le corps contient 'kr-answer' (JSON string),

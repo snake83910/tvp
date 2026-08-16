@@ -313,9 +313,16 @@ class AdminOrderDetail(OrderDetail):
     customer_name: str | None = None
     allowed_transitions: list[str]
     admin_note: str | None = None
-    # Remboursement effectivement enregistré (euros), et sa date.
+    # Remboursement effectivement enregistré (euros), sa date, et son
+    # origine : « sogecommerce » (exécuté par l'API, preuve archivée) ou
+    # « manual » (déclaré par un admin).
     refunded: float | None = None
     refunded_at: datetime | None = None
+    refund_mode: str | None = None
+    #: Le remboursement automatique est-il possible sur cette instance ?
+    #: Pilote l'écran admin : sans clés REST, seule la déclaration
+    #: manuelle est proposée.
+    refund_api_available: bool = False
     # Dernière réponse de la banque sur le paiement, pour les commandes
     # bloquées en attente : c'est ce qui explique pourquoi la relance ne
     # les a pas annulées.
@@ -329,11 +336,15 @@ class StatusUpdateIn(BaseModel):
     carrier: str | None = None
     tracking_url: str | None = None
     cancel_reason: str | None = None
-    # Montant réellement remboursé, en centimes. OBLIGATOIRE pour passer
-    # une commande en « remboursée » : le remboursement se fait au back
-    # office de la banque, et sans ce montant rien ne permet de vérifier
-    # après coup qu'il a bien eu lieu, ni de combien.
+    # Montant à rembourser, en centimes. OBLIGATOIRE pour passer une
+    # commande en « remboursée » : sans montant, rien ne permet de
+    # vérifier après coup ce qui a été rendu, ni combien.
     refund_cents: int | None = None
+    # True = l'admin déclare un remboursement DÉJÀ effectué à la main au
+    # Back Office. Par défaut le site appelle lui-même la banque. Le
+    # drapeau est explicite parce que les deux n'ont pas la même valeur
+    # probante : l'un porte une réponse bancaire, l'autre une parole.
+    refund_manual: bool = False
 
 
 class AdminStats(BaseModel):

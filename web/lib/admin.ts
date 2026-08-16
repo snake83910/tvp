@@ -87,6 +87,11 @@ export interface AdminOrderDetail extends OrderDetail {
    *  statut, qui permet de vérifier après coup ce qui a été rendu. */
   refunded: number | null;
   refunded_at: string | null;
+  /** « sogecommerce » = exécuté par l'API bancaire, preuve archivée.
+   *  « manual » = un admin déclare l'avoir fait au Back Office. */
+  refund_mode: string | null;
+  /** Le remboursement automatique est-il possible sur cette instance ? */
+  refund_api_available: boolean;
   /** Dernière réponse de la banque sur le paiement. Explique pourquoi
    *  une commande en attente n'a pas été annulée automatiquement. */
   payment_check_result: string | null;
@@ -232,6 +237,9 @@ export const adminApi = {
       cancel_reason?: string;
       /** Obligatoire pour passer en « remboursée ». En centimes. */
       refund_cents?: number;
+      /** true = déclarer un remboursement DÉJÀ fait au Back Office, au
+       *  lieu de laisser le site appeler la banque. */
+      refund_manual?: boolean;
     }
   ) => call<AdminOrderDetail>(`/admin/orders/${orderNumber}/status`, "PATCH", data),
 

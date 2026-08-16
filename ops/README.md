@@ -155,6 +155,40 @@ Effets :
   garage.
 - Décalé à 10h30 : un email d'avis n'a aucune raison de partir la nuit.
 
+## Remboursements
+
+Depuis l'écran commande de l'admin, le site appelle lui-même
+`Transaction/CancelOrRefund` (API REST V4). La banque choisit seule entre
+les deux opérations, et c'est voulu :
+
+- transaction **pas encore remise en banque** → annulation, le client
+  n'est jamais débité ;
+- transaction **déjà capturée** → remboursement, une transaction de type
+  `CREDIT` est créée, créditée sous quelques jours ouvrés.
+
+Garde-fous :
+
+- **Rien n'est marqué remboursé sans réponse claire de la banque.** Un
+  appel refusé ou expiré laisse la commande intacte, et l'admin peut
+  réessayer. L'inverse laisserait un statut « remboursée » sans un
+  centime rendu.
+- **Un seul remboursement par commande** : la ligne est verrouillée
+  (`SELECT … FOR UPDATE`) avant l'appel réseau, donc deux clics rapides
+  ne produisent pas deux crédits.
+- La transaction à rembourser est **relue chez la banque** à chaque
+  fois, jamais reprise d'un payload stocké, et seul le débit accepté est
+  retenu (ni un crédit déjà émis, ni une tentative refusée).
+- La réponse bancaire (`uuid` du crédit, statut) est archivée sur le
+  paiement et dans l'audit : c'est la seule preuve exploitable en cas de
+  réclamation.
+
+Si les clés REST manquent (`SOGECOMMERCE_SHOP_ID` /
+`SOGECOMMERCE_API_PASSWORD`), l'écran bascule sur la **déclaration
+manuelle** : l'admin rembourse au Back Office et saisit le montant. Ces
+commandes portent `refund_mode = 'manual'` — enregistré sans preuve
+bancaire, et l'interface le dit explicitement. Une case à cocher permet
+aussi de forcer ce mode quand le remboursement a déjà été fait à la main.
+
 ## Monitoring uptime (UptimeRobot, gratuit)
 
 1. Compte gratuit sur https://uptimerobot.com (50 monitors gratuits, check toutes les 5 min)

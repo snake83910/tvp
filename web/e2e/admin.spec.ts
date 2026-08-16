@@ -202,6 +202,11 @@ test("un remboursement sans montant est refusé", async ({ request }) => {
   expect(apres.status).toBe("refunded");
   expect(apres.refunded).toBeCloseTo(detail.total_ttc, 2);
   expect(apres.refunded_at).toBeTruthy();
+  // Sans banque branchée (paiement simulé en CI), le site ne peut pas
+  // exécuter le remboursement : il l'enregistre comme déclaration, et
+  // le dit. C'est ce marquage qui distingue une preuve d'une parole.
+  expect(apres.refund_mode).toBe("manual");
+  expect(detail.refund_api_available).toBe(false);
 });
 
 

@@ -232,6 +232,10 @@ class Order(Base):
     refunded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # sogecommerce = exécuté par l'API bancaire, preuve à l'appui.
+    # manual = quelqu'un affirme l'avoir fait au Back Office. La nuance
+    # est tout sauf cosmétique le jour où un client conteste.
+    refund_mode: Mapped[str | None] = mapped_column(String(20))
     # Demande d'avis envoyée — une seule par commande, jamais de relance.
     review_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
@@ -287,6 +291,11 @@ class Payment(Base):
     status: Mapped[str] = mapped_column(String(20))  # authorised/captured/failed
     ipn_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     ipn_signature_ok: Mapped[bool | None] = mapped_column(Boolean)
+    # Remboursement : identifiant de la transaction rendue par la banque
+    # et sa réponse complète. C'est la seule preuve exploitable si le
+    # client conteste — le montant seul ne prouve rien.
+    refund_ref: Mapped[str | None] = mapped_column(String(120))
+    refund_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
