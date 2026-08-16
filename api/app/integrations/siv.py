@@ -53,8 +53,33 @@ _ACCESS_ERROR_CODES = {401, 402, 403, 429, 500, 502, 503}
 
 
 class PlateAccessError(RuntimeError):
-    """Clé refusée, quota épuisé, provider en panne. Pas un véhicule
-    inconnu : l'appelant doit essayer ailleurs, pas conclure."""
+    """Clé refusée, quota épuisé, provider en panne, URL périmée. Pas un
+    véhicule inconnu : l'appelant doit essayer ailleurs, pas conclure."""
+
+
+#: Endpoint courant. Le défaut de `settings` pointe ici ; cette
+#: constante existe pour pouvoir REMPLACER une valeur périmée héritée
+#: d'un `.env` déployé avant la correction.
+DEFAULT_URL = "https://api.apiplaqueimmatriculation.com/plaque"
+
+#: Endpoints morts qu'on a pu recopier dans un `.env`. Un réglage
+#: d'environnement qui écrase silencieusement un défaut corrigé est un
+#: piège : le code est à jour, la production ne l'est pas, et l'erreur
+#: (« 301 Moved Permanently ») ne désigne pas sa propre cause. On les
+#: ignore plutôt que d'attendre que quelqu'un pense à éditer le fichier.
+_LEGACY_URLS = {
+    "https://www.apiplaqueimmatriculation.com/getinfosvehicule.php",
+    "http://www.apiplaqueimmatriculation.com/getinfosvehicule.php",
+    "https://apiplaqueimmatriculation.com/getinfosvehicule.php",
+}
+
+
+def resolve_url() -> str:
+    """URL effective du provider, l'héritage périmé mis de côté."""
+    configured = (settings.siv_api_url or "").strip()
+    if not configured or configured.lower().rstrip("/") in _LEGACY_URLS:
+        return DEFAULT_URL
+    return configured
 
 
 def _parse_tire_string(s: str) -> dict | None:
@@ -171,9 +196,14 @@ async def lookup_by_plate(plate: str) -> list[dict]:
     if not api_key:
         raise ValueError("SIV_API_KEY non configurée")
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    url = resolve_url()
+    # Redirections NON suivies, volontairement : l'URL porte le jeton en
+    # clair dans sa query string, et suivre un 30x l'enverrait à un hôte
+    # qu'on n'a pas choisi. Une redirection est ici le symptôme d'une
+    # URL périmée, pas un détour normal.
+    async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
         resp = await client.get(
-            settings.siv_api_url,
+            url,
             # Forme exacte relevée sur un appel qui fonctionne :
             #   /plaque?vin=&immatriculation=HG066TH&token=…
             # Le jeton s'appelle `token` (et non `key`), et `vin` est
@@ -182,10 +212,25 @@ async def lookup_by_plate(plate: str) -> list[dict]:
             headers={"Accept": "application/json"},
         )
 
+    # Une redirection signifie qu'on frappe à la mauvaise porte. Le dire
+    # explicitement : « 301 Moved Permanently » ne désigne pas sa cause,
+    # et on a passé du temps dessus.
+    if 300 <= resp.status_code < 400:
+        raise PlateAccessError(
+            f"URL périmée ({url}) : le provider redirige "
+            f"(HTTP {resp.status_code}). Attendu : {DEFAULT_URL} — "
+            "retirez SIV_API_URL de votre .env."
+        )
+
     # Le provider peut signaler le refus par le statut HTTP autant que
     # dans le corps : on regarde les deux plutôt que de parier.
     if resp.status_code in _ACCESS_ERROR_CODES:
         raise PlateAccessError(f"HTTP {resp.status_code}")
+    if resp.status_code == 404:
+        raise PlateAccessError(
+            f"Endpoint introuvable ({url}). Retirez SIV_API_URL de "
+            "votre .env pour repartir sur la valeur par défaut."
+        )
     resp.raise_for_status()
 
     payload = resp.json()

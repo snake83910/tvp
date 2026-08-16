@@ -21,8 +21,10 @@ Lancer : pytest app/tests/test_siv.py
 import pytest
 
 from app.integrations.siv import (
+    DEFAULT_URL,
     PlateAccessError,
     _parse_response,
+    resolve_url,
     vehicle_label,
 )
 
@@ -125,6 +127,55 @@ def test_libelle_vehicule():
     client à comprendre pourquoi."""
     assert vehicle_label(REPONSE_REELLE) == "CITROEN DS3 1.6 E-HDI"
     assert vehicle_label({"data": {}}) == ""
+
+
+# ── URL effective ─────────────────────────────────────────────────
+
+def test_url_periemee_heritee_dun_env_est_ignoree(monkeypatch):
+    """Un .env déployé avant la correction contient l'ancien endpoint et
+    écraserait silencieusement le défaut corrigé : le code est à jour,
+    la production ne l'est pas, et le « 301 Moved Permanently » ne
+    désigne pas sa propre cause."""
+    from app.core.config import settings
+
+    for perimee in (
+        "https://www.apiplaqueimmatriculation.com/GetInfosVehicule.php",
+        "https://www.apiplaqueimmatriculation.com/getinfosvehicule.php/",
+        "",
+    ):
+        monkeypatch.setattr(settings, "siv_api_url", perimee)
+        assert resolve_url() == DEFAULT_URL
+
+
+def test_url_personnalisee_respectee(monkeypatch):
+    """Le remplacement ne doit pas confisquer un vrai changement de
+    provider."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "siv_api_url", "https://autre.example/api")
+    assert resolve_url() == "https://autre.example/api"
+
+
+@pytest.mark.asyncio
+async def test_redirection_dit_quoi_corriger(monkeypatch):
+    """Et ne suit PAS la redirection : le jeton est dans la query
+    string, l'envoyer à un hôte non choisi serait le divulguer."""
+    _install(monkeypatch, {}, status=301)
+
+    from app.integrations.siv import lookup_by_plate
+    with pytest.raises(PlateAccessError) as exc:
+        await lookup_by_plate("EE131HC")
+    assert "SIV_API_URL" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_endpoint_introuvable_dit_quoi_corriger(monkeypatch):
+    _install(monkeypatch, {}, status=404)
+
+    from app.integrations.siv import lookup_by_plate
+    with pytest.raises(PlateAccessError) as exc:
+        await lookup_by_plate("EE131HC")
+    assert "SIV_API_URL" in str(exc.value)
 
 
 # ── Distinction inconnu / refusé ──────────────────────────────────
