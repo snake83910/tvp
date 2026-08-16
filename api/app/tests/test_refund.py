@@ -79,12 +79,13 @@ def _user():
     )
 
 
-def _payment():
+def _payment(ipn=None):
     return SimpleNamespace(
-        provider_ref="order-uuid-123",
+        provider_ref="CMD-2026-000001",
         status="captured",
         refund_ref=None,
         refund_payload={},
+        ipn_payload=ipn or {},
     )
 
 
@@ -259,9 +260,13 @@ def _service_db(order, payment):
     return db
 
 
-def _soge(order_answer=None, refund_answer=None, refund_boom=None):
+def _soge(order_answer=None, refund_answer=None, refund_boom=None,
+          get_boom=None):
     client = AsyncMock()
-    client.get_order_status = AsyncMock(return_value=order_answer or {})
+    if get_boom:
+        client.get_order_status = AsyncMock(side_effect=RuntimeError(get_boom))
+    else:
+        client.get_order_status = AsyncMock(return_value=order_answer or {})
     if refund_boom:
         client.cancel_or_refund = AsyncMock(side_effect=RuntimeError(refund_boom))
     else:
@@ -319,8 +324,8 @@ async def test_service_refuse_un_second_remboursement():
 
 @pytest.mark.asyncio
 async def test_service_sans_transaction_debitee():
-    """Une commande sans débit accepté n'a rien à rembourser — et
-    surtout, on ne doit pas rembourser une tentative refusée."""
+    """Une tentative refusée n'a jamais débité le client : la rembourser
+    créerait un crédit sans débit correspondant."""
     order, payment = _order(), _payment()
     db = _service_db(order, payment)
     refuse = {"uuid": "x", "operationType": "DEBIT", "detailedStatus": "REFUSED"}
@@ -328,7 +333,7 @@ async def test_service_sans_transaction_debitee():
 
     with patch.object(refund, "api_available", lambda: True), \
          patch("app.integrations.payment.SogecommercePayment", factory):
-        with pytest.raises(refund.RefundError, match="Aucune transaction"):
+        with pytest.raises(refund.RefundError, match="Impossible de retrouver"):
             await refund.refund_order(db, order, TOTAL)
 
     client.cancel_or_refund.assert_not_awaited()
@@ -364,6 +369,82 @@ async def test_service_montant_superieur_a_la_transaction():
             await refund.refund_order(db, order, TOTAL)
 
     client.cancel_or_refund.assert_not_awaited()
+
+
+PSP_100 = (
+    "Order/Get échoué : {'errorCode': 'PSP_100', 'errorMessage': "
+    "'rest API option not enabled'}"
+)
+
+
+@pytest.mark.asyncio
+async def test_repli_sur_l_ipn_quand_order_get_est_desactive():
+    """Cas réel : la boutique n'a pas le droit WS_REST_GET. L'uuid de la
+    transaction est pourtant déjà chez nous, dans l'IPN du paiement —
+    refuser de rembourser reviendrait à se priver d'une opération qu'on
+    sait faire."""
+    order = _order()
+    payment = _payment(ipn={"transactions": [{
+        "uuid": "txn-ipn-7",
+        "detailedStatus": "AUTHORISED",
+        "amount": TOTAL,
+        "currency": "EUR",
+    }]})
+    db = _service_db(order, payment)
+    credit = {"uuid": "txn-credit-7", "operationType": "CREDIT"}
+    factory, client = _soge(refund_answer=credit, get_boom=PSP_100)
+
+    with patch.object(refund, "api_available", lambda: True),          patch("app.integrations.payment.SogecommercePayment", factory):
+        result = await refund.refund_order(db, order, TOTAL)
+
+    assert result == credit
+    # Le remboursement porte bien sur la transaction retrouvée dans l'IPN.
+    assert client.cancel_or_refund.await_args.args[0] == "txn-ipn-7"
+    assert order.refund_mode == "sogecommerce"
+
+
+@pytest.mark.asyncio
+async def test_ni_order_get_ni_ipn_renvoie_vers_le_manuel():
+    """Quand aucune piste ne mène à la transaction, le message doit dire
+    quoi faire — pas seulement que ça a échoué."""
+    order, payment = _order(), _payment(ipn={})
+    db = _service_db(order, payment)
+    factory, client = _soge(get_boom=PSP_100)
+
+    with patch.object(refund, "api_available", lambda: True),          patch("app.integrations.payment.SogecommercePayment", factory):
+        with pytest.raises(refund.RefundError, match="déjà remboursé"):
+            await refund.refund_order(db, order, TOTAL)
+
+    client.cancel_or_refund.assert_not_awaited()
+    assert order.refunded_cents is None
+
+
+@pytest.mark.asyncio
+async def test_order_get_prioritaire_sur_l_ipn():
+    """Quand la banque répond, c'est elle qui fait foi : l'IPN archivé
+    n'est qu'un filet."""
+    order = _order()
+    payment = _payment(ipn={"transactions": [{
+        "uuid": "txn-vieux", "detailedStatus": "AUTHORISED", "amount": TOTAL,
+    }]})
+    db = _service_db(order, payment)
+    factory, client = _soge({"transactions": [DEBIT]}, {"uuid": "c"})
+
+    with patch.object(refund, "api_available", lambda: True),          patch("app.integrations.payment.SogecommercePayment", factory):
+        await refund.refund_order(db, order, TOTAL)
+
+    assert client.cancel_or_refund.await_args.args[0] == "txn-debit-1"
+
+
+def test_ipn_sans_operation_type_reste_exploitable():
+    """Un IPN de paiement ne notifie jamais autre chose qu'un débit :
+    exiger le champ ferait rater la seule piste disponible."""
+    ipn = [{"uuid": "u", "detailedStatus": "AUTHORISED"}]
+    assert refund.pick_debit_transaction(ipn) is None
+    assert refund.pick_debit_transaction(ipn, assume_debit=True)["uuid"] == "u"
+    # Mais un crédit explicite reste exclu, même en mode indulgent.
+    credit = [{"uuid": "c", "operationType": "CREDIT", "detailedStatus": "CAPTURED"}]
+    assert refund.pick_debit_transaction(credit, assume_debit=True) is None
 
 
 def test_choix_de_la_transaction_a_rembourser():

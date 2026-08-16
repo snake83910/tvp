@@ -18,9 +18,17 @@ Trois principes, dans cet ordre :
    clics rapides déclenchent deux crédits — et récupérer de l'argent
    rendu en trop est autrement plus difficile que de le rendre.
 
-3. **La transaction est relue chez la banque**, jamais reprise d'un
-   payload stocké. Un remboursement se fait sur l'identifiant réel du
-   débit, pas sur une copie vieille de plusieurs semaines.
+3. **La transaction est relue chez la banque quand c'est possible.**
+   `Order/Get` donne l'identifiant du débit à jour. Mais ce web service
+   dépend du droit `WS_REST_GET`, que toutes les boutiques n'ont pas
+   (`PSP_100 : rest API option not enabled`). On retombe alors sur
+   l'identifiant conservé dans l'IPN du paiement : il ne change jamais,
+   et c'est `CancelOrRefund` qui reste l'autorité — si la transaction
+   n'est plus remboursable, elle refuse, et on n'a rien marqué.
+
+   Refuser tout remboursement faute de lecture serait le pire des deux
+   mondes : on saurait rembourser, mais on s'en priverait au motif qu'on
+   ne sait pas relire.
 """
 from __future__ import annotations
 
@@ -55,19 +63,58 @@ def api_available() -> bool:
     )
 
 
-def pick_debit_transaction(transactions: list[dict]) -> dict | None:
+def pick_debit_transaction(
+    transactions: list[dict], assume_debit: bool = False
+) -> dict | None:
     """Trouve LE débit à rembourser parmi les transactions d'une commande.
 
     Une commande peut en porter plusieurs : tentatives refusées, et
     éventuels crédits déjà émis. Rembourser un crédit ou une tentative
     refusée n'aurait aucun sens — on ne retient que le débit accepté.
+
+    `assume_debit` sert pour les IPN archivés, où `operationType` peut
+    manquer : un IPN de paiement ne notifie jamais autre chose qu'un
+    débit, exiger le champ ferait rater la seule piste disponible.
     """
     for t in transactions or []:
-        if t.get("operationType") != "DEBIT":
+        op = t.get("operationType")
+        if op != "DEBIT" and not (assume_debit and op is None):
             continue
         if t.get("detailedStatus") in _REFUNDABLE and t.get("uuid"):
             return t
     return None
+
+
+async def find_debit_transaction(soge, payment: Payment) -> dict | None:
+    """Retrouve le débit à rembourser. Deux sources, dans cet ordre.
+
+    1. `Order/Get` — la banque, à jour. Indisponible si la boutique n'a
+       pas le droit `WS_REST_GET` (`PSP_100 : rest API option not
+       enabled`), ce qui est le cas par défaut sur beaucoup de contrats.
+    2. L'IPN archivé au moment du paiement. L'uuid d'une transaction ne
+       change jamais : une copie de trois semaines désigne toujours le
+       bon débit. Ce qui a pu changer, c'est son état — et c'est
+       précisément ce que `CancelOrRefund` vérifiera avant d'agir.
+
+    Rend None si aucune des deux ne donne de transaction exploitable ;
+    l'appelant bascule alors sur la déclaration manuelle.
+    """
+    try:
+        answer = await soge.get_order_status(payment.provider_ref)
+    except Exception:
+        # Droit REST absent, ou API momentanément muette : on ne renonce
+        # pas pour autant, on a peut-être déjà ce qu'il faut sous la main.
+        answer = None
+
+    if answer:
+        found = pick_debit_transaction(answer.get("transactions") or [])
+        if found:
+            return found
+
+    stored = payment.ipn_payload or {}
+    return pick_debit_transaction(
+        stored.get("transactions") or [], assume_debit=True
+    )
 
 
 async def refund_order(
@@ -117,25 +164,21 @@ async def refund_order(
     from app.integrations.payment import SogecommercePayment
 
     soge = SogecommercePayment()
-
-    # Relecture chez la banque : c'est elle qui détient l'identifiant de
-    # transaction à jour, et qui sait si le débit est encore annulable.
-    try:
-        answer = await soge.get_order_status(payment.provider_ref)
-    except Exception as exc:
-        raise RefundError(
-            f"Impossible de relire la transaction chez la banque : {exc}"
-        ) from exc
-
-    debit = pick_debit_transaction(answer.get("transactions") or [])
+    debit = await find_debit_transaction(soge, payment)
     if debit is None:
         raise RefundError(
-            "Aucune transaction débitée à rembourser pour cette commande."
+            "Impossible de retrouver la transaction bancaire de cette "
+            "commande. Remboursez au Back Office Sogecommerce, puis "
+            "enregistrez-le ici en cochant « J'ai déjà remboursé »."
         )
-    if amount_cents > int(debit.get("amount") or 0):
+
+    # Le montant connu peut dater de l'IPN. On ne s'en sert que comme
+    # borne haute évidente : la banque revérifiera de toute façon.
+    known = int(debit.get("amount") or 0)
+    if known and amount_cents > known:
         raise RefundError(
-            "Montant supérieur à la transaction débitée "
-            f"({int(debit.get('amount') or 0) / 100:.2f} €)."
+            f"Montant supérieur à la transaction débitée "
+            f"({known / 100:.2f} €)."
         )
 
     try:

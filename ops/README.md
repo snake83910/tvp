@@ -136,13 +136,21 @@ Effets :
   bord admin. Ne jamais annuler dans le doute : le client est peut-être
   débité.
 
-> **Prérequis Sogecommerce** : la vérification utilise l'API `Order/Get`
-> (droit `WS_REST_GET`). Si elle n'est pas activée sur la boutique, chaque
-> contrôle rend `unavailable` et **plus aucune commande n'est annulée
-> automatiquement** — elles s'empilent dans l'écran « à vérifier ». Vérifier
-> dans le Back Office → Paramétrage → Boutique → Clés d'API REST. Le
-> comportement est volontairement conservateur, mais il suppose un tri
-> manuel tant que ce droit manque.
+> **`WS_REST_GET` n'est PAS activé sur la boutique 62343537.** Constaté
+> en production : `Order/Get` répond
+> `PSP_100 rest API option not enabled`. Conséquence directe — chaque
+> contrôle rend `unavailable`, donc **plus aucune commande n'est annulée
+> automatiquement** dès qu'un paiement a été initialisé. Elles s'empilent
+> dans la tuile « paiements à vérifier ».
+>
+> C'est le comportement voulu (ne jamais annuler la commande d'un client
+> peut-être débité) mais il suppose un tri manuel tant que le droit
+> manque. Les paniers abandonnés AVANT la page bancaire, eux, continuent
+> d'être annulés normalement : sans transaction, il n'y a rien à vérifier.
+>
+> **À demander à Sogecommerce** : activation de `WS_REST_GET` sur la
+> boutique (Back Office → Paramétrage → Boutique → Clés d'API REST). Le
+> remboursement, lui, sait déjà s'en passer.
 
 `/cron/appointments` — toutes les heures
 - Rappel la veille du montage (le no-show est le premier coût d'un planning en ligne)
@@ -202,9 +210,13 @@ Garde-fous :
 - **Un seul remboursement par commande** : la ligne est verrouillée
   (`SELECT … FOR UPDATE`) avant l'appel réseau, donc deux clics rapides
   ne produisent pas deux crédits.
-- La transaction à rembourser est **relue chez la banque** à chaque
-  fois, jamais reprise d'un payload stocké, et seul le débit accepté est
-  retenu (ni un crédit déjà émis, ni une tentative refusée).
+- La transaction à rembourser est **relue chez la banque** (`Order/Get`)
+  quand c'est possible, et seul le débit accepté est retenu — ni un
+  crédit déjà émis, ni une tentative refusée. Si `Order/Get` est
+  indisponible (voir `WS_REST_GET` ci-dessous), on retombe sur l'uuid
+  conservé dans l'IPN du paiement : il ne change jamais, et c'est
+  `CancelOrRefund` qui reste l'autorité — transaction plus remboursable,
+  elle refuse, et rien n'est marqué.
 - La réponse bancaire (`uuid` du crédit, statut) est archivée sur le
   paiement et dans l'audit : c'est la seule preuve exploitable en cas de
   réclamation.
