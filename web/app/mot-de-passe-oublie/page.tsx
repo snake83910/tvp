@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { apiBase } from "@/lib/apiBase";
 
-const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BROWSER_API = apiBase();
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");

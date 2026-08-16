@@ -3,6 +3,7 @@
 import { authFetch, saveTokens } from "@/lib/auth";
 import { apiError } from "@/lib/errors";
 import type { Garage, PartnerEditablePayload } from "@/lib/admin";
+import { publicApiBase } from "@/lib/apiBase";
 
 export interface PartnerRegisterData {
   email: string;
@@ -74,8 +75,7 @@ export type {
   PartnerEditablePayload,
 } from "@/lib/admin";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = publicApiBase();
 
 /** URL publique d'une photo de garage à partir de son chemin relatif. */
 export function mediaUrl(path: string): string {

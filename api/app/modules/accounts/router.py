@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -160,16 +160,24 @@ async def delete_address(
 
 @router.get("/orders", response_model=list[OrderSummary])
 async def list_my_orders(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Liste des commandes du client connecté, plus récentes en premier."""
+    """Liste des commandes du client connecté, plus récentes en premier.
+
+    Paginée : un client fidèle finissait par charger tout son historique
+    — et ses lignes de commande — à chaque ouverture de son espace.
+    """
     rows = (
         await db.scalars(
             select(Order)
             .where(Order.user_id == user.id)
             .order_by(Order.created_at.desc())
             .options(selectinload(Order.items))
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
     ).all()
 

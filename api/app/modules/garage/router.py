@@ -148,10 +148,17 @@ async def _verify_siret_into(g: Garage) -> None:
 
 @router.get("/admin/garages", response_model=list[GarageOut])
 async def admin_list_garages(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(_admin),
 ):
-    rows = await db.scalars(select(Garage).order_by(Garage.name))
+    rows = await db.scalars(
+        select(Garage)
+        .order_by(Garage.name)
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
     return list(rows)
 
 
@@ -774,10 +781,17 @@ def _partner_order_view(order: Order, cust: User | None) -> PartnerOrder:
 
 @router.get("/partner/orders", response_model=list[PartnerOrder])
 async def partner_orders(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(_garage_user),
 ):
-    """Commandes rattachées au garage, SANS les prix (montage payé sur place)."""
+    """Commandes rattachées au garage, SANS les prix (montage payé sur place).
+
+    Paginée : un garage actif depuis deux ans rechargeait sinon tout son
+    historique — et une requête par client — à chaque ouverture de son
+    espace.
+    """
     g = await _own_garage(db, user)
     orders = list(
         await db.scalars(
@@ -788,6 +802,8 @@ async def partner_orders(
             )
             .options(selectinload(Order.items))
             .order_by(Order.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         )
     )
     out: list[PartnerOrder] = []

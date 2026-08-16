@@ -179,12 +179,32 @@ async def health(response: Response):
     return {"status": "ok" if healthy else "degraded", "env": settings.environment, "checks": checks}
 
 
-app.include_router(admin_router)
-app.include_router(auth_router)
-app.include_router(totp_router)
-app.include_router(accounts_router)
-app.include_router(catalog_router)
-app.include_router(garage_router)
-app.include_router(cart_router)
-app.include_router(payment_router)
+# Version de l'API dans le chemin. Posée AVANT qu'un tiers ne consomme
+# quoi que ce soit : la doc publique et l'application mobile sont au
+# programme, et le jour où elles existent, plus rien n'est renommable
+# sans casser des clients qu'on ne contrôle pas. Une ligne aujourd'hui,
+# une migration pour tout le monde plus tard.
+API_V1 = "/v1"
+
+for _router in (
+    admin_router,
+    auth_router,
+    totp_router,
+    accounts_router,
+    catalog_router,
+    garage_router,
+    cart_router,
+    payment_router,
+):
+    app.include_router(_router, prefix=API_V1)
+
+# ── Surfaces volontairement NON versionnées ──────────────────────────
+# Ce ne sont pas des API produit : personne n'écrit de client dessus, et
+# les déplacer casserait des configurations extérieures au dépôt.
+#
+# /payment/ipn est déclarée chez Sogecommerce : la banque appelle cette
+# URL exacte. L'alias ci-dessous la maintient en vie ; il est masqué de
+# la doc pour que /v1/payment reste la seule surface annoncée.
+app.include_router(payment_router, include_in_schema=False)
+# /cron/* est appelé par le crontab du VPS, /health par les sondes.
 app.include_router(cron_router)

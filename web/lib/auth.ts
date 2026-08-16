@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { invoiceError, saveBlob } from "@/lib/download";
 import { apiError } from "@/lib/errors";
+import { apiBase } from "@/lib/apiBase";
 
-const BROWSER_API =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BROWSER_API = apiBase();
 
 const TOKEN_KEY = "tvp_access";
 const REFRESH_KEY = "tvp_refresh";

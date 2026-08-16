@@ -5,8 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { apiError, errorMessage } from "@/lib/errors";
+import { apiBase } from "@/lib/apiBase";
 
-const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BROWSER_API = apiBase();
 
 /**
  * Page « j'ai cliqué sur un lien reçu par email ».

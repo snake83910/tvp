@@ -7,13 +7,7 @@ import { apiError } from "@/lib/errors";
  * Côté navigateur : utilise l'URL publique (NEXT_PUBLIC_API_URL).
  */
 
-const SERVER_API = process.env.API_URL_INTERNAL || "http://api:8000";
-const BROWSER_API =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-function baseUrl(): string {
-  return typeof window === "undefined" ? SERVER_API : BROWSER_API;
-}
+import { apiBase } from "@/lib/apiBase";
 
 /** Familles de véhicules supportées par la recherche. */
 export type VehicleCategory =
@@ -192,7 +186,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(`${baseUrl()}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",

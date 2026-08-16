@@ -1,6 +1,8 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 
-export const API = process.env.E2E_API_URL || "http://localhost:8000";
+// L'API produit est versionnée. /health, /cron et /payment/ipn ne le
+// sont pas — ce sont des surfaces opérationnelles, pas des API client.
+export const API = `${process.env.E2E_API_URL || "http://localhost:8000"}/v1`;
 
 /** Compte fixe réutilisé d'un run à l'autre : le crée à chaque exécution
  *  consommerait le quota d'inscription (3/h/IP). */

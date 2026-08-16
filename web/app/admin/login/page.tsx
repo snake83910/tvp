@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { saveTokens } from "@/lib/auth";
+import { apiBase } from "@/lib/apiBase";
 
-const BROWSER_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BROWSER_API = apiBase();
 
 interface AdminLoginResponse {
   requires_2fa: boolean;

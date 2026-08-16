@@ -118,6 +118,24 @@ dans `.env`. Aucun autre code à changer.
 docker compose exec api python -m pytest app/tests/ -q   # 13 verts
 ```
 
+## Versionnement de l'API
+
+L'API produit est servie sous `/v1` : `/v1/auth`, `/v1/cart`, `/v1/me`,
+`/v1/garages`, `/v1/partner`, `/v1/admin`, `/v1/search`, `/v1/payment`.
+Le front n'ecrit ce prefixe qu'a UN endroit, `web/lib/apiBase.ts`.
+
+Trois surfaces restent volontairement NON versionnees, parce qu'elles ne
+sont pas des API client et que les deplacer casserait des configurations
+exterieures au depot :
+
+| Route | Appelee par |
+|---|---|
+| `/health` | sondes d'infrastructure |
+| `/cron/*` | crontab du VPS |
+| `/payment/ipn` | Sogecommerce (URL declaree chez la banque) |
+
+`/payment` reste donc accessible sans prefixe, en alias masque de la doc.
+
 ## Tests de bout en bout
 
 ```bash

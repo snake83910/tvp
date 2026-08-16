@@ -7,11 +7,12 @@ import { api, type GaragePublic, type GarageReview } from "@/lib/api";
 import { formatEuro } from "@/lib/money";
 import { paymentLabel, vehicleLabel } from "@/components/garage/constants";
 import { GarageReviewForm } from "@/components/GarageReviewForm";
+import { publicApiBase } from "@/lib/apiBase";
 
 export const dynamic = "force-dynamic";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://tousvospneus.com";
-const MEDIA_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const MEDIA_BASE = publicApiBase();
 
 async function load(slug: string): Promise<GaragePublic | null> {
   try {
