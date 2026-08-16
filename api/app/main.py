@@ -87,6 +87,13 @@ from app.modules.orders.payment_router import router as payment_router  # noqa: 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     yield
+    # Emails partis en arrière-plan : on leur laisse le temps de finir.
+    # Sans ça, un redéploiement tue les envois lancés une seconde plus
+    # tôt — typiquement la confirmation d'une commande qui vient d'être
+    # payée.
+    from app.modules.mailer.base import drain_pending
+    await drain_pending()
+
     # Fermeture propre du client httpx partagé (connexions keep-alive)
     from app.integrations.maxityre import aclose_shared_client
     await aclose_shared_client()

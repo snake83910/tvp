@@ -24,7 +24,10 @@ class RefreshToken(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     # Hash SHA-256 du token (jamais stocké en clair)
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # `unique=True` SANS `index=True` : la contrainte d'unicité crée déjà
+    # son propre index. Demander les deux en produisait deux identiques —
+    # double écriture à chaque connexion, pour rien.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Pour rotation : token suivant qui a remplacé celui-ci

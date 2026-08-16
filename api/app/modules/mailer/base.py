@@ -80,6 +80,15 @@ class Mailer(ABC):
         return await self.send(EmailMessage(to=to, subject=subject, html=html))
 
 
+#: Tâches d'envoi en cours. Cet ensemble n'est PAS décoratif : la boucle
+#: d'événements ne garde qu'une référence FAIBLE vers les tâches, et le
+#: ramasse-miettes peut donc collecter une tâche en pleine exécution.
+#: Les vingt appels à `fire_and_forget` du site jettent leur valeur de
+#: retour ; sans cet ensemble, une confirmation de commande pouvait
+#: disparaître avant d'être envoyée, sans erreur ni trace.
+_pending: set[asyncio.Task] = set()
+
+
 def fire_and_forget(coro):
     """
     Lance une coroutine en tâche d'arrière-plan, sans attendre son résultat.
@@ -87,5 +96,32 @@ def fire_and_forget(coro):
     Utilisé pour que l'envoi d'email ne bloque PAS la réponse HTTP au
     client. Si l'envoi échoue, le mailer logge l'erreur - on ne veut
     JAMAIS faire échouer une commande payée pour un email raté.
+
+    La tâche est retenue jusqu'à sa fin (voir `_pending`), puis relâchée.
     """
-    return asyncio.create_task(coro)
+    task = asyncio.create_task(coro)
+    _pending.add(task)
+    task.add_done_callback(_pending.discard)
+    return task
+
+
+async def drain_pending(timeout: float = 10.0) -> int:
+    """Attend les envois en cours. Rend le nombre de tâches attendues.
+
+    Appelé à l'arrêt du serveur : sans ça, un redéploiement tue les
+    emails partis une seconde plus tôt — typiquement la confirmation
+    d'une commande qui vient d'être payée.
+
+    Le délai est borné : mieux vaut perdre un email qu'empêcher le
+    processus de s'arrêter.
+    """
+    if not _pending:
+        return 0
+    en_cours = list(_pending)
+    done, _ = await asyncio.wait(en_cours, timeout=timeout)
+    if len(done) < len(en_cours):
+        log.warning(
+            "Arrêt avec %d envoi(s) d'email inachevé(s)",
+            len(en_cours) - len(done),
+        )
+    return len(en_cours)
