@@ -87,3 +87,61 @@ export async function findCandidates(
     .sort((a, b) => Number(b.stock != null) - Number(a.stock != null))
     .slice(0, 8);
 }
+
+
+// ── Compte partenaire ─────────────────────────────────────────────
+
+export const PARTNER_EMAIL =
+  process.env.E2E_PARTNER_EMAIL || "e2e-partenaire@example.com";
+export const PARTNER_PASSWORD =
+  process.env.E2E_PARTNER_PASSWORD || "PneusE2e!2026-garage";
+
+let cachedPartner: Promise<Session> | null = null;
+
+/**
+ * Session sur le compte garage de test, créé au besoin.
+ *
+ * Comme `login`, la promesse est mise en cache : /auth/login est limité
+ * à 5 tentatives par minute, et /partner/register à 3 par heure. Une
+ * seule inscription sur une base neuve, une seule connexion par run.
+ */
+export function loginPartner(request: APIRequestContext): Promise<Session> {
+  cachedPartner ??= openPartnerSession(request);
+  return cachedPartner;
+}
+
+async function openPartnerSession(
+  request: APIRequestContext,
+): Promise<Session> {
+  const creds = { email: PARTNER_EMAIL, password: PARTNER_PASSWORD };
+  let res = await request.post(`${API}/auth/login`, { data: creds });
+
+  if (res.status() === 401) {
+    // /partner/register est en multipart (il accepte un Kbis) et crée
+    // le compte ET sa fiche garage d'un coup.
+    const reg = await request.post(`${API}/partner/register`, {
+      multipart: {
+        email: PARTNER_EMAIL,
+        password: PARTNER_PASSWORD,
+        garage_name: "Garage E2E",
+        address: "1 rue des Tests",
+        postal_code: "69003",
+        city: "Lyon",
+        siret: "12345678900017",
+        phone: "0400000000",
+      },
+    });
+    expect(reg.ok(), `inscription partenaire e2e : ${reg.status()}`).toBeTruthy();
+    res = await request.post(`${API}/auth/login`, { data: creds });
+  }
+
+  if (res.status() === 429) {
+    throw new Error(
+      "Quota de connexion atteint (429). L'API limite /auth/login à 5 " +
+        "tentatives par minute et par IP.",
+    );
+  }
+  expect(res.ok(), `connexion partenaire e2e : ${res.status()}`).toBeTruthy();
+  const body = await res.json();
+  return { access: body.access_token, refresh: body.refresh_token };
+}

@@ -12,7 +12,18 @@ from app.core.config import settings
 from app.core.errors import AppError, ErrorCode
 from app.integrations.maxityre import MaxityreConnector, SupplierUnconfiguredError
 
-connector = MaxityreConnector()
+
+def _make_connector():
+    """Connecteur de catalogue. Le bouchon n'est choisi que si on le
+    demande explicitement — le défaut reste le vrai fournisseur."""
+    if settings.supplier_provider == "fake":
+        from app.integrations.fake_supplier import FakeConnector
+
+        return FakeConnector()
+    return MaxityreConnector()
+
+
+connector = _make_connector()
 
 
 def fmt_dim(value: float | int) -> str:
@@ -26,10 +37,19 @@ def dimension_cache_key(
 ) -> str:
     """Clé Redis d'un catalogue de dimension — UNIQUE point de vérité
     (recherche, panier, invalidation au checkout)."""
+    # Le fournisseur fait partie de la clé : sans lui, un catalogue
+    # bouchon écrit par les tests serait resservi au vrai trafic (et
+    # réciproquement) tant que le TTL n'a pas expiré.
     return (
-        f"maxityre:dim:{category}:{fmt_dim(width)}:"
+        f"{settings.supplier_provider}:dim:{category}:{fmt_dim(width)}:"
         f"{fmt_dim(ratio)}:{fmt_dim(diameter)}"
     )
+
+
+def detail_cache_key(supplier_ref: str) -> str:
+    """Clé Redis d'une fiche détaillée — UNIQUE point de vérité, partagée
+    avec l'invalidation faite au checkout."""
+    return f"{settings.supplier_provider}:detail:{supplier_ref}"
 
 
 async def load_dimension_catalog(
@@ -77,7 +97,7 @@ async def load_detail(supplier_ref: str) -> dict | None:
     La recherche liste ne renvoie PAS les offres/stock ; la fiche
     détaillée si. Utilisée par la fiche produit ET par les contrôles
     de stock du panier."""
-    cache_key = f"maxityre:detail:{supplier_ref}"
+    cache_key = detail_cache_key(supplier_ref)
     detail = await cache_get(cache_key)
     if detail is None:
         full = await connector.get_by_ref(supplier_ref)

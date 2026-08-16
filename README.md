@@ -118,6 +118,26 @@ dans `.env`. Aucun autre code à changer.
 docker compose exec api python -m pytest app/tests/ -q   # 13 verts
 ```
 
+## Tests de bout en bout
+
+```bash
+docker compose up -d
+cd web && npx playwright test          # tunnels client + espace partenaire
+```
+
+Par defaut les e2e interrogent le VRAI catalogue Maxityre : le stock est
+reel, donc il s'epuise d'un run a l'autre. Pour une suite reproductible
+(CI, executions rapprochees), basculer l'API sur le catalogue bouchon —
+`SUPPLIER_PROVIDER=fake` dans `.env`, puis `docker compose up -d api`.
+Voir `.env.example`.
+
+Nettoyage des comptes et commandes laisses par les tests :
+
+```bash
+docker compose exec api python -m app.scripts_clean_test_data        # apercu
+docker compose exec api python -m app.scripts_clean_test_data --yes  # supprime
+```
+
 ## Documentation
 
 Les guides détaillés (architecture, déploiement, intégrations) sont

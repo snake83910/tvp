@@ -617,10 +617,11 @@ async def checkout(
         # pour que la recherche et les fiches produit affichent
         # immédiatement les nouveaux prix, sans attendre le TTL.
         all_changed = changed_refs | unavailable
-        stale_keys = [
-            f"maxityre:detail:{ref}" for ref in all_changed
-        ]
-        from app.modules.catalog.service import dimension_cache_key
+        from app.modules.catalog.service import (
+            detail_cache_key,
+            dimension_cache_key,
+        )
+        stale_keys = [detail_cache_key(ref) for ref in all_changed]
         stale_keys += [
             dimension_cache_key(
                 pd["width"], pd["ratio"], pd["diameter"],

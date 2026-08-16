@@ -43,9 +43,21 @@ def create_access_token(user_id: str, account_type: str, role: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> str:
+    """Jeton de rafraîchissement, tracé en base par le hash de sa valeur.
+
+    Le `jti` n'est pas décoratif. Sans lui, la charge utile se réduit à
+    (sub, type, iat, exp) — or `iat` et `exp` sont des dates à la SECONDE.
+    Deux connexions du même compte dans la même seconde produisaient donc
+    deux jetons rigoureusement identiques, et l'insertion du second violait
+    la contrainte d'unicité sur `refresh_tokens.token_hash` : HTTP 500 sur
+    le chemin de connexion. Un double-clic sur « Se connecter », deux
+    onglets, ou une commande invité suivie d'une connexion suffisaient.
+    """
+    import uuid as _uuid
+
     return _create_token(
         sub=user_id,
-        claims={},
+        claims={"jti": _uuid.uuid4().hex},
         expires=timedelta(days=settings.refresh_token_expire_days),
         token_type="refresh",
     )

@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # Fournisseur Maxityre / AD Tyres
     maxityre_base_url: str = "https://api.maxityre.com"
     maxityre_site_id: str = "4"
+    # Fournisseur de catalogue. "maxityre" en temps normal ; "fake"
+    # active un catalogue déterministe pour les tests de bout en bout
+    # (voir integrations/fake_supplier.py). Jamais par défaut.
+    supplier_provider: str = "maxityre"
     maxityre_username: str = ""
     maxityre_password: str = ""
     # 30 min : compromis fraîcheur des prix affichés / volume d'appels
