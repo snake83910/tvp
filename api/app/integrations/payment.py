@@ -35,6 +35,35 @@ class PaymentInit:
 
 
 @dataclass
+class BuyerInfo:
+    """Identité de l'acheteur transmise à la banque.
+
+    Volontairement neutre : la traduction vers le format du prestataire
+    se fait dans chaque implémentation, pas chez l'appelant. Le routeur
+    décrit un acheteur, il n'écrit pas du JSON Sogecommerce.
+
+    Ces informations ne sont pas décoratives. Elles nourrissent
+    l'analyse de risque de la banque — une commande livrée à une adresse
+    cohérente avec le porteur de carte passe mieux qu'une commande
+    anonyme — et rendent le Back Office exploitable : sans elles, une
+    transaction contestée n'est identifiable que par un montant.
+    """
+
+    email: str | None = None
+    reference: str | None = None      # identifiant client chez nous
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+    is_company: bool = False
+    company_name: str | None = None
+    # Adresses figées sur la commande (mêmes clés que les snapshots)
+    billing: dict | None = None
+    shipping: dict | None = None
+    # home | partner_garage — détermine le mode de livraison déclaré
+    delivery_mode: str = "home"
+
+
+@dataclass
 class IPNResult:
     """Résultat de la vérification d'un webhook de paiement."""
 
@@ -54,6 +83,7 @@ class PaymentProvider(ABC):
         order_id: str,
         amount_cents: int,
         customer_email: str | None = None,
+        buyer: "BuyerInfo | None" = None,
     ) -> PaymentInit:
         ...
 
@@ -78,7 +108,9 @@ class SimulatedPayment(PaymentProvider):
         order_id: str,
         amount_cents: int,
         customer_email: str | None = None,
+        buyer: "BuyerInfo | None" = None,
     ) -> PaymentInit:
+        # `buyer` est ignoré : il n'y a pas de Back Office à renseigner.
         ref = f"SIM-{uuid.uuid4().hex[:12]}"
         return PaymentInit(
             provider=self.name,
@@ -145,6 +177,7 @@ class SogecommercePayment(PaymentProvider):
         order_id: str,
         amount_cents: int,
         customer_email: str | None = None,
+        buyer: "BuyerInfo | None" = None,
     ) -> PaymentInit:
         # orderId Sogecommerce = notre référence commande (pas l'UUID interne)
         payload = {
@@ -157,8 +190,9 @@ class SogecommercePayment(PaymentProvider):
         # Email transmis au formToken : le smartForm ne redemande pas au
         # client une info qu'on connaît déjà (champ E-mail masqué), et le
         # Back Office rattache la transaction au bon acheteur.
-        if customer_email:
-            payload["customer"] = {"email": customer_email}
+        customer = _soge_customer(buyer, customer_email)
+        if customer:
+            payload["customer"] = customer
         async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)) as client:
             resp = await client.post(
                 self._API,
@@ -333,6 +367,104 @@ class SogecommercePayment(PaymentProvider):
             signature_ok=sig_ok,
             raw=answer,
         )
+
+
+# ── Traduction BuyerInfo -> objet Customer Sogecommerce ─────────────
+#
+# Les longueurs viennent du schéma officiel de l'API V4. Un champ trop
+# long fait échouer tout l'appel : mieux vaut tronquer un nom de famille
+# que refuser un paiement.
+
+def _cut(value: object, length: int) -> str | None:
+    """Nettoie et borne une valeur. Rend None si elle est vide — un champ
+    absent vaut mieux qu'un champ vide, que la banque compte comme une
+    information fournie."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text[:length] or None
+
+
+def _soge_address(snapshot: dict | None, extra: dict) -> dict:
+    """Traduit une adresse figée de commande vers le format banque."""
+    snap = snapshot or {}
+    # line2 (complément) n'existe pas dans billingDetails : on le
+    # concatène plutôt que de le perdre, l'adresse doit rester livrable.
+    line1 = " ".join(
+        p for p in [snap.get("line1"), snap.get("line2")] if p
+    ).strip()
+    out = {
+        "address": _cut(line1, 255),
+        "zipCode": _cut(snap.get("postal_code"), 64),
+        "city": _cut(snap.get("city"), 128),
+        # ISO 3166-1 alpha-2 majuscules : « France » serait refusé.
+        "country": _cut(_iso_country(snap.get("country")), 2),
+        **extra,
+    }
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def _iso_country(value: object) -> str | None:
+    """Ramène un pays au code à deux lettres attendu par la banque.
+
+    Les commandes portent tantôt « FR », tantôt « France » selon le
+    parcours (invité ou carnet d'adresses). La banque n'accepte que le
+    code ISO, et un champ invalide fait échouer la création du paiement.
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if len(text) == 2:
+        return text.upper()
+    return {"france": "FR", "belgique": "BE", "belgium": "BE",
+            "luxembourg": "LU", "suisse": "CH", "espagne": "ES",
+            "allemagne": "DE", "italie": "IT"}.get(text.lower())
+
+
+def _soge_customer(
+    buyer: "BuyerInfo | None", fallback_email: str | None
+) -> dict:
+    """Objet `customer` du CreatePayment. Vide si on ne sait rien."""
+    if buyer is None:
+        return {"email": _cut(fallback_email, 150)} if fallback_email else {}
+
+    identity = {
+        "firstName": _cut(buyer.first_name, 63),
+        "lastName": _cut(buyer.last_name, 63),
+        "phoneNumber": _cut(buyer.phone, 32),
+        "legalName": _cut(buyer.company_name, 100) if buyer.is_company else None,
+    }
+    identity = {k: v for k, v in identity.items() if v is not None}
+
+    billing = _soge_address(buyer.billing or buyer.shipping, identity)
+    shipping = _soge_address(buyer.shipping or buyer.billing, identity)
+
+    # Ces marqueurs sont ajoutés APRÈS : les poser dans le dict de base
+    # rendrait l'objet non vide même sans la moindre donnée réelle, et on
+    # enverrait à la banque une « adresse » réduite à une langue et une
+    # catégorie — du bruit qu'elle compterait comme une info fournie.
+    category = "COMPANY" if buyer.is_company else "PRIVATE"
+    if billing:
+        billing["category"] = category
+        billing["language"] = "fr"
+    if shipping:
+        shipping["category"] = category
+        # Retrait au garage partenaire : la banque distingue une
+        # livraison à domicile d'un retrait en point de vente, et
+        # l'écart adresse/porteur cesse alors d'être suspect.
+        shipping["shippingMethod"] = (
+            "RECLAIM_IN_SHOP"
+            if buyer.delivery_mode == "partner_garage"
+            else "PACKAGE_DELIVERY_COMPANY"
+        )
+
+    customer = {
+        "email": _cut(buyer.email or fallback_email, 150),
+        "reference": _cut(buyer.reference, 63),
+        "billingDetails": billing or None,
+        "shippingDetails": shipping or None,
+    }
+    return {k: v for k, v in customer.items() if v}
 
 
 def get_payment_provider() -> PaymentProvider:

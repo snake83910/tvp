@@ -22,9 +22,9 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
-from app.integrations.payment import get_payment_provider
+from app.integrations.payment import BuyerInfo, get_payment_provider
 from app.models.order import Order, OrderStatus, Payment
-from app.models.user import User
+from app.models.user import ProProfile, User
 from app.modules.mailer.service import (
     send_appointment_confirmed,
     send_garage_order_notification,
@@ -34,6 +34,35 @@ from app.modules.orders import reconcile
 from app.schemas.order import PaymentInitOut
 
 router = APIRouter(prefix="/payment", tags=["payment"])
+
+
+def _buyer_info(
+    order: Order, user: User, company_name: str | None = None
+) -> BuyerInfo:
+    """Décrit l'acheteur pour la banque, à partir de la COMMANDE.
+
+    Les adresses sont prises sur la commande, pas sur le compte : ce
+    sont celles figées au checkout. Un client qui modifie son carnet
+    d'adresses pendant qu'il paie ne doit pas décaler ce que la banque
+    analyse par rapport à ce qui sera livré.
+
+    L'identité, elle, vient du compte — c'est la seule source, les
+    snapshots d'adresse ne portent pas de nom.
+    """
+    return BuyerInfo(
+        email=user.email,
+        # Référence stable côté marchand : elle relie plusieurs
+        # commandes au même acheteur dans le Back Office.
+        reference=str(user.id),
+        first_name=user.first_name,
+        last_name=user.last_name,
+        phone=user.phone,
+        is_company=bool(company_name),
+        company_name=company_name,
+        billing=order.billing_address or order.shipping_address,
+        shipping=order.shipping_address,
+        delivery_mode=order.delivery_mode or "home",
+    )
 
 
 @router.post("/init/{order_number}", response_model=PaymentInitOut)
@@ -53,9 +82,26 @@ async def init_payment(
             detail=f"Commande non payable (statut {order.status.value})",
         )
 
+    # Raison sociale d'un compte pro, chargée explicitement : la relation
+    # `user.pro_profile` est paresseuse, et y toucher dans un contexte
+    # async lève MissingGreenlet plutôt que de charger quoi que ce soit.
+    company_name: str | None = None
+    if (order.account_type_snapshot or "").startswith("pro"):
+        company_name = await db.scalar(
+            select(ProProfile.company_name).where(ProProfile.user_id == user.id)
+        )
+
     provider = get_payment_provider()
+    # orderId = le NUMÉRO de commande, pas l'UUID interne. C'est lui que
+    # le client cite dans un email, lui qui figure sur la facture, et
+    # c'est donc lui qui doit apparaître au Back Office : sans ça,
+    # rapprocher une transaction contestée d'une commande demande un
+    # aller-retour en base.
     init = await provider.init_payment(
-        str(order.id), order.total_ttc_cents, customer_email=user.email
+        order.order_number,
+        order.total_ttc_cents,
+        customer_email=user.email,
+        buyer=_buyer_info(order, user, company_name),
     )
     # Un seul Payment par commande : si un init précédent existe (retour
     # arrière, double-clic), on le met à jour au lieu d'empiler des lignes

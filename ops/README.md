@@ -155,6 +155,33 @@ Effets :
   garage.
 - Décalé à 10h30 : un email d'avis n'a aucune raison de partir la nuit.
 
+## Ce qui est transmis à Sogecommerce au paiement
+
+`Charge/CreatePayment` reçoit désormais :
+
+- `orderId` = le **numéro de commande** (`CMD-2026-000123`), plus l'UUID
+  interne. C'est la référence que le client cite et qui figure sur sa
+  facture : au Back Office, une transaction se rapproche d'une commande
+  sans aller-retour en base.
+- `customer.reference` = l'identifiant du compte, qui relie plusieurs
+  commandes au même acheteur.
+- `customer.billingDetails` et `customer.shippingDetails` : nom, prénom,
+  téléphone, adresse complète, pays au format ISO, `category`
+  PRIVATE/COMPANY (+ `legalName` pour un compte pro).
+- `shippingMethod` = `RECLAIM_IN_SHOP` pour un montage en garage
+  partenaire, `PACKAGE_DELIVERY_COMPANY` sinon. Un écart entre adresse
+  de facturation et lieu de livraison est un signal de fraude — sauf
+  s'il s'agit d'un retrait en point de vente, encore faut-il le dire.
+
+Les adresses viennent de la **commande** (figées au checkout), pas du
+carnet d'adresses : ce que la banque analyse correspond à ce qui sera
+réellement livré.
+
+Deux précautions dans le mapping, parce qu'un champ mal formé fait
+échouer l'appel entier — donc pas de paiement du tout : les valeurs sont
+tronquées aux longueurs du schéma V4, et le pays est ramené au code ISO
+à deux lettres (« France » saisi côté invité devient `FR`).
+
 ## Remboursements
 
 Depuis l'écran commande de l'admin, le site appelle lui-même
