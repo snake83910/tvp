@@ -30,6 +30,22 @@ export function invoiceLabel(order: {
   return `FAC-${year}-${String(order.invoice_number).padStart(6, "0")}`;
 }
 
+/** Référence de la facture d'avoir, série dédiée AV.
+ *
+ *  Le millésime vient de la date de remboursement, pas de celle de la
+ *  commande : un remboursement de janvier sur une vente de décembre
+ *  appartient au nouvel exercice. */
+export function creditNoteLabel(order: {
+  credit_note_number?: number | null;
+  refunded_at?: string | null;
+  created_at?: string | null;
+}): string | null {
+  if (!order.credit_note_number) return null;
+  const base = order.refunded_at || order.created_at;
+  const year = base ? new Date(base).getFullYear() : new Date().getFullYear();
+  return `AV-${year}-${String(order.credit_note_number).padStart(6, "0")}`;
+}
+
 /** Date au format long français, ou null. */
 function longDate(iso: string | null | undefined): string | null {
   if (!iso) return null;

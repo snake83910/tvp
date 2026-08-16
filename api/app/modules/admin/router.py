@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -91,6 +91,7 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
         ),
         mounting_note=order.mounting_note,
         invoice_number=order.invoice_number,
+        credit_note_number=order.credit_note_number,
         promo_code=order.promo_code,
         discount_ttc=order.discount_ttc_cents / 100,
         tracking_number=order.tracking_number,
@@ -407,6 +408,38 @@ async def download_invoice_admin(
     )
 
 
+@router.get("/orders/{order_number}/credit-note")
+async def download_credit_note_admin(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Facture d'avoir d'une commande remboursée (admin)."""
+    order = await _load_order(order_number, db)
+    user = await db.get(User, order.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Client introuvable")
+
+    from app.modules.orders.invoice import (
+        credit_note_ref,
+        generate_credit_note_pdf,
+    )
+    try:
+        pdf_bytes = generate_credit_note_pdf(order, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="avoir-{credit_note_ref(order)}.pdf"'
+            )
+        },
+    )
+
+
 @router.patch("/orders/{order_number}/status", response_model=AdminOrderDetail)
 async def update_status(
     order_number: str,
@@ -489,6 +522,14 @@ async def update_status(
         if refund_result is None:
             order.refunded_cents = refund_cents
             order.refunded_at = datetime.now(UTC)
+        # Facture d'avoir : une facture émise ne se modifie pas, elle se
+        # rectifie. Le numéro vient d'une séquence PostgreSQL dédiée —
+        # la numérotation doit rester chronologique et sans trou, ce
+        # qu'un compteur applicatif ne garantirait pas à deux workers.
+        if order.credit_note_number is None:
+            order.credit_note_number = (
+                await db.execute(text("SELECT nextval('credit_note_number_seq')"))
+            ).scalar()
         # Le client était jusqu'ici le seul à ne pas être prévenu de son
         # propre remboursement.
         send_order_refunded(order, user, refund_cents, data.cancel_reason)
@@ -507,6 +548,7 @@ async def update_status(
             # au Back Office le jour d'une réclamation.
             "refund_ref": (refund_result or {}).get("uuid"),
             "refund_status": (refund_result or {}).get("detailedStatus"),
+            "credit_note_number": order.credit_note_number,
         },
         request=request,
     )

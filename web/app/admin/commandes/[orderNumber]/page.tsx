@@ -2,7 +2,13 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { adminApi, downloadAdminInvoice, type AdminOrderDetail, type AuditEntry } from "@/lib/admin";
+import {
+  adminApi,
+  downloadAdminCreditNote,
+  downloadAdminInvoice,
+  type AdminOrderDetail,
+  type AuditEntry,
+} from "@/lib/admin";
 import { STATUS_LABEL } from "@/lib/orderStatus";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { CopyButton } from "@/components/admin/CopyButton";
@@ -15,6 +21,7 @@ import {
   OrderItems,
   OrderTotals,
   TrackingBlock,
+  creditNoteLabel,
   invoiceLabel,
 } from "@/components/order/blocks";
 
@@ -51,6 +58,7 @@ export default function AdminOrderDetail() {
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [creditNoteLoading, setCreditNoteLoading] = useState(false);
 
   // Note admin
   const [note, setNote] = useState("");
@@ -75,6 +83,19 @@ export default function AdminOrderDetail() {
       toast(e instanceof Error ? e.message : "Erreur", "error");
     } finally {
       setNoteSaving(false);
+    }
+  }
+
+  async function handleCreditNote() {
+    const ref = order && creditNoteLabel(order);
+    if (!ref) return;
+    setCreditNoteLoading(true);
+    try {
+      await downloadAdminCreditNote(orderNumber, ref);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setCreditNoteLoading(false);
     }
   }
 
@@ -220,6 +241,15 @@ export default function AdminOrderDetail() {
               ? new Date(order.refunded_at).toLocaleString("fr-FR")
               : "—"}
           </p>
+          {creditNoteLabel(order) && (
+            <button
+              onClick={handleCreditNote}
+              disabled={creditNoteLoading}
+              className="mt-3 rounded-full border border-amber-400 px-4 py-1.5 text-xs font-bold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
+            >
+              {creditNoteLoading ? "…" : `⬇ Avoir ${creditNoteLabel(order)}`}
+            </button>
+          )}
         </div>
       )}
 

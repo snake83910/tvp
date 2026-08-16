@@ -41,6 +41,14 @@
     </a>
   </p>
 
+  {% if credit_note_ref %}
+    <p style="margin:0 0 20px 0;color:#7a7a72;font-size:13px;">
+      Votre facture d&rsquo;avoir <strong>{{ credit_note_ref }}</strong> est
+      disponible depuis
+      <a href="{{ order_url }}" style="color:#17181a;">votre commande</a>.
+    </p>
+  {% endif %}
+
   <p style="margin:0 0 8px 0;color:#7a7a72;font-size:13px;">
     Passé une semaine sans rien voir arriver, répondez à cet email avec
     le numéro de commande : nous vérifierons avec notre banque.

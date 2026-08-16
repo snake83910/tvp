@@ -417,3 +417,243 @@ def generate_invoice_pdf(order: Order, user: User) -> bytes:
         pdf.ln(0.5)
 
     return bytes(pdf.output())
+
+
+# ──────────────────────────────────────────────────────────────────
+#  Facture d'avoir
+# ──────────────────────────────────────────────────────────────────
+#
+# Une facture émise ne se modifie ni ne s'annule. Un remboursement se
+# matérialise par une facture rectificative — un avoir — qui référence
+# la facture d'origine et porte la TVA à régulariser (art. 289 et 272
+# du CGI). Sans elle, la TVA collectée sur la vente reste due.
+#
+# Série DÉDIÉE `AV-2026-000001`, distincte des factures : deux compteurs
+# à surveiller, mais des pièces qu'on ne confond jamais.
+
+
+def credit_note_ref(order: Order) -> str | None:
+    """Référence lisible de l'avoir, ou None s'il n'y en a pas."""
+    if not order.credit_note_number:
+        return None
+    year = (order.refunded_at or order.created_at).year
+    return f"AV-{year}-{order.credit_note_number:06d}"
+
+
+def invoice_ref(order: Order) -> str | None:
+    """Référence de la facture d'origine, ou None si jamais facturée."""
+    if not order.invoice_number:
+        return None
+    year = (order.paid_at or order.created_at).year
+    return f"FAC-{year}-{order.invoice_number:06d}"
+
+
+def split_refund_vat(order: Order, amount_cents: int) -> tuple[int, int]:
+    """Décompose une somme remboursée TTC en (HT, TVA), en centimes.
+
+    Remboursement TOTAL : on reprend les montants exacts de la commande.
+    Les recalculer introduirait un écart d'arrondi entre la facture et
+    son avoir, c'est-à-dire un centime que personne ne saurait justifier.
+
+    Remboursement PARTIEL : on applique le taux effectif de la commande
+    — celui qui ressort de ses propres totaux, remise comprise. C'est la
+    seule répartition défendable quand on rembourse une somme et non des
+    lignes précises.
+    """
+    # `total_ttc_cents` non nul dans la condition : sur une commande
+    # dégénérée à 0, « rembourser au moins le total » serait vrai pour
+    # n'importe quelle somme, et on rendrait (0, 0) en perdant le montant.
+    if order.total_ttc_cents and amount_cents >= order.total_ttc_cents:
+        return order.total_ht_cents, order.total_vat_cents
+    ht_total = order.total_ht_cents or 0
+    if ht_total <= 0:
+        return amount_cents, 0
+    ratio = (order.total_vat_cents or 0) / ht_total
+    ht = round(amount_cents / (1 + ratio))
+    return ht, amount_cents - ht
+
+
+def generate_credit_note_pdf(order: Order, user: User) -> bytes:
+    """Facture d'avoir d'une commande remboursée.
+
+    Lève si aucun avoir n'a été attribué : produire un document sans
+    numéro de série reviendrait à fabriquer une pièce comptable
+    fantôme, invérifiable et hors chronologie.
+    """
+    ref = credit_note_ref(order)
+    if ref is None or order.refunded_cents is None:
+        raise ValueError("Aucun avoir n'est attaché à cette commande.")
+
+    amount = order.refunded_cents
+    partiel = amount < order.total_ttc_cents
+    ht_cents, vat_cents = split_refund_vat(order, amount)
+    origine = invoice_ref(order)
+    date = order.refunded_at or order.created_at
+
+    pdf = _InvoicePDF()
+    pdf.add_page()
+
+    # ── En-tête ───────────────────────────────────────────────────
+    y_top = pdf.get_y()
+    logo_bottom = _draw_logo(pdf, 18, y_top)
+
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(*_INK)
+    pdf.set_xy(110, y_top)
+    pdf.cell(82, 9, "FACTURE D'AVOIR", align="R", ln=True)
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*_GREY)
+    entetes = [
+        ("N° d'avoir", ref),
+        ("Date", date.strftime("%d/%m/%Y")),
+        # La référence à la facture d'origine est ce qui fait de ce
+        # document une facture RECTIFICATIVE, et non une seconde vente.
+        ("Facture rectifiée", origine or "-"),
+        ("Commande", order.order_number),
+    ]
+    for label, value in entetes:
+        pdf.set_x(110)
+        pdf.cell(82, 4, f"{label} : {value}", align="R", ln=True)
+
+    pdf.set_y(max(logo_bottom, pdf.get_y()) + 5)
+
+    pdf.set_draw_color(*_RED)
+    pdf.set_line_width(0.5)
+    pdf.line(18, pdf.get_y(), 192, pdf.get_y())
+    pdf.ln(6)
+
+    # ── Adresses : mêmes blocs que la facture ─────────────────────
+    shipping = order.shipping_address or {}
+    billing = order.billing_address or shipping
+    full_name = " ".join(filter(None, [user.first_name, user.last_name]))
+
+    issuer_lines = _issuer_lines()
+    billing_lines = [
+        *filter(None, [full_name, user.email]), *_address_lines(billing)
+    ]
+    y0 = pdf.get_y()
+    _address_block(pdf, 18, y0, "ÉMETTEUR", issuer_lines)
+    _address_block(pdf, 76, y0, "AVOIR À", billing_lines)
+    pdf.set_y(y0 + 5 + 4 * max(len(issuer_lines), len(billing_lines)))
+    pdf.ln(8)
+
+    # ── Détail ────────────────────────────────────────────────────
+    headers = ["Réf.", "Désignation", "Qté", "PU HT", "TVA", "Total TTC"]
+    pdf.set_fill_color(245, 245, 245)
+    pdf.set_text_color(30, 30, 30)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_line_width(0.3)
+    pdf.set_draw_color(210, 210, 210)
+    for i, h in enumerate(headers):
+        pdf.cell(_COL_W[i], 7, h, border=1, fill=True, align="R" if i >= 2 else "L")
+    pdf.ln()
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_fill_color(255, 255, 255)
+    pdf.set_text_color(30, 30, 30)
+
+    if partiel:
+        # On rembourse une SOMME, pas des lignes : détailler les
+        # articles laisserait croire à un retour produit qui n'a pas eu
+        # lieu, et les lignes ne sommeraient pas au montant rendu.
+        taux = (vat_cents / ht_cents * 100) if ht_cents else 0
+        pdf.cell(_COL_W[0], 6, "-", border=1, align="L")
+        pdf.cell(
+            _COL_W[1], 6,
+            _truncate(f"Remboursement partiel sur {origine or order.order_number}", 47),
+            border=1, align="L",
+        )
+        pdf.cell(_COL_W[2], 6, "1", border=1, align="R")
+        pdf.cell(_COL_W[3], 6, f"-{_eur(ht_cents / 100)}", border=1, align="R")
+        pdf.cell(_COL_W[4], 6, f"{taux:.0f}%", border=1, align="R")
+        pdf.cell(_COL_W[5], 6, f"-{_eur(amount / 100)}", border=1, align="R")
+        pdf.ln()
+    else:
+        # Annulation totale : on reprend les lignes de la facture, en
+        # négatif. Elles somment au total par construction, exactement
+        # comme sur la facture d'origine.
+        fill = False
+        for it in order.items:
+            unit_ht = it.unit_price_ht_cents / 100
+            line_ttc = unit_ht * (1 + it.vat_rate / 100) * it.quantity
+            pdf.set_fill_color(250, 250, 250) if fill else pdf.set_fill_color(255, 255, 255)
+            pdf.cell(_COL_W[0], 6, _truncate(it.supplier_ref, 12), border=1, fill=fill, align="L")
+            pdf.cell(_COL_W[1], 6, _truncate(it.label_snapshot, 47), border=1, fill=fill, align="L")
+            pdf.cell(_COL_W[2], 6, str(it.quantity), border=1, fill=fill, align="R")
+            pdf.cell(_COL_W[3], 6, f"-{_eur(unit_ht)}", border=1, fill=fill, align="R")
+            pdf.cell(_COL_W[4], 6, f"{it.vat_rate:.0f}%", border=1, fill=fill, align="R")
+            pdf.cell(_COL_W[5], 6, f"-{_eur(line_ttc)}", border=1, fill=fill, align="R")
+            pdf.ln()
+            fill = not fill
+
+    pdf.ln(4)
+
+    # ── Totaux ────────────────────────────────────────────────────
+    x_label, col_lbl, col_val = 120, 52, 20
+
+    def total_row(label: str, value: str) -> None:
+        pdf.set_x(x_label)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(50, 50, 50)
+        pdf.cell(col_lbl, 6, label, align="R")
+        pdf.cell(col_val, 6, value, align="R", ln=True)
+
+    total_row("Total HT :", f"-{_eur(ht_cents / 100)}")
+    # LA ligne qui justifie tout le document : c'est elle qui porte la
+    # TVA à régulariser sur la déclaration.
+    total_row("TVA :", f"-{_eur(vat_cents / 100)}")
+
+    y = pdf.get_y()
+    pdf.set_draw_color(*_RED)
+    pdf.line(x_label, y, 192, y)
+    pdf.ln(2)
+
+    pdf.set_fill_color(*_RED)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_x(x_label)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(
+        col_lbl + col_val, 8,
+        f"TOTAL AVOIR TTC   -{_eur(amount / 100)}",
+        align="R", fill=True, ln=True,
+    )
+
+    # ── Remboursement ─────────────────────────────────────────────
+    pdf.ln(10)
+    pdf.set_draw_color(*_LINE)
+    pdf.set_line_width(0.3)
+    pdf.line(18, pdf.get_y(), 192, pdf.get_y())
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(*_INK)
+    pdf.cell(0, 4, "Remboursement", ln=True)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*_GREY)
+    pdf.cell(
+        0, 4,
+        f"{_eur(amount / 100)} remboursés le {date.strftime('%d/%m/%Y')} "
+        "sur le moyen de paiement d'origine.",
+        ln=True,
+    )
+    if partiel:
+        pdf.cell(
+            0, 4,
+            f"Avoir partiel. Facture d'origine : {_eur(order.total_ttc_cents / 100)} TTC.",
+            ln=True,
+        )
+
+    # ── Mentions ──────────────────────────────────────────────────
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "", 6.5)
+    pdf.set_text_color(*_GREY)
+    pdf.multi_cell(
+        174, 3,
+        "Facture rectificative émise en application de l'article 289 du CGI. "
+        f"Annule et remplace à due concurrence la facture {origine or order.order_number}. "
+        "La TVA mentionnée ci-dessus fait l'objet d'une régularisation.",
+        align="L",
+    )
+
+    return bytes(pdf.output())

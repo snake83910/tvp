@@ -185,6 +185,9 @@ export interface OrderDetail {
   mounting_at?: string | null;
   mounting_note?: string | null;
   invoice_number: number | null;
+  /** Numéro de facture d'avoir (série AV). Non nul dès qu'un
+   *  remboursement a été enregistré. */
+  credit_note_number?: number | null;
   promo_code?: string | null;
   discount_ttc?: number;
   tracking_number: string | null;
@@ -204,6 +207,17 @@ export async function downloadInvoice(orderNumber: string): Promise<void> {
   const res = await authFetch(`/me/orders/${orderNumber}/invoice`);
   if (!res.ok) throw new Error(invoiceError(res.status));
   saveBlob(await res.blob(), `facture-${orderNumber}.pdf`);
+}
+
+/** Facture d'avoir : le client y a droit autant que l'émetteur — c'est
+ *  la pièce qui justifie la somme rendue sur son relevé. */
+export async function downloadCreditNote(
+  orderNumber: string,
+  ref: string,
+): Promise<void> {
+  const res = await authFetch(`/me/orders/${orderNumber}/credit-note`);
+  if (!res.ok) throw new Error(invoiceError(res.status));
+  saveBlob(await res.blob(), `avoir-${ref}.pdf`);
 }
 
 export const accountApi = {

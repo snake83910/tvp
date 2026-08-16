@@ -192,6 +192,19 @@ export async function downloadAdminInvoice(orderNumber: string): Promise<void> {
   saveBlob(await res.blob(), `facture-${orderNumber}.pdf`);
 }
 
+/** Facture d'avoir d'une commande remboursée. Le nom du fichier porte
+ *  la référence de l'avoir, pas celle de la commande : c'est la pièce
+ *  comptable qu'on cherchera plus tard, et deux avoirs sur des
+ *  commandes différentes ne doivent pas se ressembler. */
+export async function downloadAdminCreditNote(
+  orderNumber: string,
+  ref: string,
+): Promise<void> {
+  const res = await authFetch(`/admin/orders/${orderNumber}/credit-note`);
+  if (!res.ok) throw new Error(invoiceError(res.status));
+  saveBlob(await res.blob(), `avoir-${ref}.pdf`);
+}
+
 export const adminApi = {
   getStats: () => call<AdminStats>("/admin/stats"),
 

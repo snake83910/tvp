@@ -320,6 +320,8 @@ def send_order_refunded(
     attend l'argent, et c'est lui qui doit pouvoir vérifier le montant
     sur son relevé — d'où le montant explicite dans le corps du mail.
     """
+    from app.modules.orders.invoice import credit_note_ref
+
     mailer = get_mailer()
     fire_and_forget(
         mailer.send_template(
@@ -328,6 +330,10 @@ def send_order_refunded(
             template="order_refunded.html",
             civilite=_civilite(user),
             order_number=order.order_number,
+            # Facture d'avoir : la pièce que le client devra produire
+            # s'il comptabilise lui-même l'opération. Le mailer ne sait
+            # pas joindre de fichier — on donne donc le lien.
+            credit_note_ref=credit_note_ref(order),
             amount=f"{amount_cents / 100:.2f} €".replace(".", ","),
             partial=amount_cents < order.total_ttc_cents,
             total=f"{order.total_ttc_cents / 100:.2f} €".replace(".", ","),

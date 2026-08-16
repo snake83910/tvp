@@ -236,6 +236,13 @@ class Order(Base):
     # manual = quelqu'un affirme l'avoir fait au Back Office. La nuance
     # est tout sauf cosmétique le jour où un client conteste.
     refund_mode: Mapped[str | None] = mapped_column(String(20))
+    # Numéro de la facture d'avoir (série AV, distincte des factures).
+    # Une facture émise ne se modifie pas : un remboursement se
+    # matérialise par une facture rectificative, seule pièce qui permet
+    # de régulariser la TVA collectée sur la vente.
+    credit_note_number: Mapped[int | None] = mapped_column(
+        Integer, unique=True
+    )
     # Demande d'avis envoyée — une seule par commande, jamais de relance.
     review_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)

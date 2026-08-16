@@ -52,6 +52,7 @@ def _order():
         refunded_cents=None,
         refunded_at=None,
         refund_mode=None,
+        credit_note_number=None,
         items=[],
         created_at=None,
         paid_at=None,

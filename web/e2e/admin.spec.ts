@@ -207,6 +207,32 @@ test("un remboursement sans montant est refusé", async ({ request }) => {
   // le dit. C'est ce marquage qui distingue une preuve d'une parole.
   expect(apres.refund_mode).toBe("manual");
   expect(detail.refund_api_available).toBe(false);
+
+  // Une facture émise ne se modifie pas : le remboursement doit produire
+  // une facture d'avoir, seule pièce qui permet de régulariser la TVA
+  // collectée sur la vente.
+  expect(apres.credit_note_number, "aucun avoir attribué").toBeTruthy();
+  const avoir = await request.get(
+    `${API}/admin/orders/${orderNumber}/credit-note`,
+    { headers: { Authorization: `Bearer ${admin.access}` } },
+  );
+  expect(avoir.ok(), `avoir : ${avoir.status()}`).toBeTruthy();
+  expect(avoir.headers()["content-type"]).toContain("application/pdf");
+  expect(avoir.headers()["content-disposition"]).toContain("avoir-AV-");
+  expect((await avoir.body()).length).toBeGreaterThan(1000);
+});
+
+
+test("pas d'avoir sur une commande non remboursée", async ({ request }) => {
+  // Un document hors série serait une pièce comptable fantôme.
+  const admin = await loginAdmin(request);
+  const { orderNumber } = await seedPaidOrder(request);
+
+  const res = await request.get(
+    `${API}/admin/orders/${orderNumber}/credit-note`,
+    { headers: { Authorization: `Bearer ${admin.access}` } },
+  );
+  expect(res.status()).toBe(404);
 });
 
 

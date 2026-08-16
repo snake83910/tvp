@@ -232,6 +232,27 @@ Garde-fous :
   paiement et dans l'audit : c'est la seule preuve exploitable en cas de
   réclamation.
 
+### Facture d'avoir
+
+Tout remboursement enregistré — **dans les deux modes** — produit une
+facture d'avoir, en **série dédiée `AV-2026-000001`** (compteur
+PostgreSQL distinct de celui des factures). Une facture émise ne se
+modifie ni ne s'annule : c'est cette pièce rectificative qui référence
+la facture d'origine et porte la TVA à régulariser (art. 289 et 272 du
+CGI). Sans elle, la TVA collectée sur la vente reste due.
+
+- Téléchargeable depuis l'écran commande de l'admin **et** depuis
+  l'espace client — le client peut avoir à la comptabiliser lui-même.
+- Le millésime vient de la date de remboursement : un remboursement de
+  janvier sur une vente de décembre appartient au nouvel exercice.
+- Avoir **total** : reprend les montants exacts de la facture, au
+  centime. Avoir **partiel** : une seule ligne, avec HT et TVA ventilés
+  au taux effectif de la commande — on rembourse une somme, pas des
+  lignes, et détailler les articles laisserait croire à un retour
+  produit qui n'a pas eu lieu.
+- Les remboursements antérieurs à cette mise en place ont été numérotés
+  par la migration, dans l'ordre de leur date.
+
 Si les clés REST manquent (`SOGECOMMERCE_SHOP_ID` /
 `SOGECOMMERCE_API_PASSWORD`), l'écran bascule sur la **déclaration
 manuelle** : l'admin rembourse au Back Office et saisit le montant. Ces

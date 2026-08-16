@@ -236,6 +236,7 @@ def _order_detail(order: Order) -> OrderDetail:
         ),
         mounting_note=order.mounting_note,
         invoice_number=order.invoice_number,
+        credit_note_number=order.credit_note_number,
         promo_code=order.promo_code,
         discount_ttc=order.discount_ttc_cents / 100,
         tracking_number=order.tracking_number,
@@ -440,6 +441,46 @@ async def download_invoice(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="facture-{order_number}.pdf"'
+        },
+    )
+
+
+@router.get("/orders/{order_number}/credit-note")
+async def download_credit_note(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Facture d'avoir d'une commande remboursée (propriétaire).
+
+    Le client y a droit autant que l'émetteur : c'est la pièce qui
+    justifie la somme rendue sur son relevé, et la seule qu'il pourra
+    produire s'il doit lui-même la comptabiliser.
+    """
+    order = await db.scalar(
+        select(Order)
+        .where(Order.order_number == order_number)
+        .options(selectinload(Order.items))
+    )
+    if order is None or order.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+
+    from app.modules.orders.invoice import (
+        credit_note_ref,
+        generate_credit_note_pdf,
+    )
+    try:
+        pdf_bytes = generate_credit_note_pdf(order, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="avoir-{credit_note_ref(order)}.pdf"'
+            )
         },
     )
 

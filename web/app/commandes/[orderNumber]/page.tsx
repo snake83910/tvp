@@ -14,10 +14,12 @@ import {
   OrderItems,
   OrderTotals,
   TrackingBlock,
+  creditNoteLabel,
   invoiceLabel,
 } from "@/components/order/blocks";
 import {
   accountApi,
+  downloadCreditNote,
   downloadInvoice,
   useCurrentUser,
   type OrderDetail,
@@ -46,6 +48,7 @@ export default function OrderDetailPage(
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [avoirLoading, setAvoirLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -67,6 +70,20 @@ export default function OrderDetailPage(
       setCancelError(e instanceof Error ? e.message : "Erreur");
     } finally {
       setCancelBusy(false);
+    }
+  }
+
+  async function handleCreditNote() {
+    const ref = order && creditNoteLabel(order);
+    if (!ref) return;
+    setAvoirLoading(true);
+    setPdfError(null);
+    try {
+      await downloadCreditNote(params.orderNumber, ref);
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setAvoirLoading(false);
     }
   }
 
@@ -207,6 +224,13 @@ export default function OrderDetailPage(
                 Facture {invoiceLabel(order)}
               </p>
             )}
+            {/* Un avoir se produit et se conserve comme une facture :
+                le client peut avoir à le comptabiliser lui-même. */}
+            {creditNoteLabel(order) && (
+              <p className="mt-0.5 text-sm font-semibold text-amber-700">
+                Avoir {creditNoteLabel(order)}
+              </p>
+            )}
             <OrderDates order={order} />
           </div>
           <div className="flex items-center gap-3">
@@ -224,6 +248,15 @@ export default function OrderDetailPage(
             >
               {pdfLoading ? "…" : "⬇ Facture PDF"}
             </button>
+            {creditNoteLabel(order) && (
+              <button
+                onClick={handleCreditNote}
+                disabled={avoirLoading}
+                className="flex items-center gap-1.5 rounded-full border border-amber-400 px-4 py-1.5 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:opacity-50"
+              >
+                {avoirLoading ? "…" : "⬇ Avoir PDF"}
+              </button>
+            )}
           </div>
           {pdfError && (
             <p className="text-xs text-signal">{pdfError}</p>

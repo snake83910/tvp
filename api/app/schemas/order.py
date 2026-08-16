@@ -273,6 +273,10 @@ class OrderDetail(BaseModel):
 
     # Numéro de facture (assigné au paiement)
     invoice_number: int | None = None
+    # Numéro de facture d'avoir (série AV), présent dès qu'un
+    # remboursement a été enregistré. Pilote l'affichage du bouton de
+    # téléchargement côté client comme côté admin.
+    credit_note_number: int | None = None
 
     # Code promo appliqué + remise TTC (0 si aucun)
     promo_code: str | None = None
