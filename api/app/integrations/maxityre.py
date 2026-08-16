@@ -340,6 +340,46 @@ class MaxityreConnector(SupplierConnector):
     # rien : un humain ouvre ensuite le panier Maxityre, vérifie et
     # valide. La ressaisie disparaît, le contrôle avant dépense reste.
 
+    async def list_addresses(self) -> list[dict]:
+        """Carnet d'adresses du compte. Sert d'abord à NE PAS recréer une
+        adresse déjà présente : un client qui recommande ne doit pas
+        empiler des doublons dans le carnet."""
+        await self.authenticate()
+        resp = await _get_client().get(
+            f"{settings.maxityre_base_url}/addresses", headers=self._headers()
+        )
+        resp.raise_for_status()
+        return list((resp.json() or {}).get("addresses") or [])
+
+    async def create_address(self, address: dict) -> dict:
+        """Ajoute une adresse de livraison au carnet, et la rend.
+
+        La forme exacte de la réponse n'étant pas garantie, on relit le
+        carnet ensuite pour retrouver l'adresse créée : c'est son
+        identifiant qui compte, pas le corps de la réponse.
+        """
+        await self.authenticate()
+        resp = await _get_client().post(
+            f"{settings.maxityre_base_url}/addresses",
+            headers={**self._headers(), "content-type": "application/json"},
+            json={"address": address},
+        )
+        resp.raise_for_status()
+
+        body = resp.json() or {}
+        cree = body.get("address") if isinstance(body.get("address"), dict) else None
+        if cree and cree.get("id"):
+            return cree
+
+        # Repli : on cherche dans le carnet fraîchement relu.
+        from app.modules.orders.supplier_cart import address_key
+
+        cible = address_key(address)
+        for a in await self.list_addresses():
+            if address_key(a) == cible:
+                return a
+        raise RuntimeError("Adresse créée mais introuvable dans le carnet")
+
     async def get_offers(self, product_id: int | str) -> list[dict]:
         """Offres actuelles d'un pneu : qui le vend, à quel prix, sous
         quel délai.

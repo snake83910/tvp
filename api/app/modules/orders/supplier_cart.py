@@ -147,6 +147,138 @@ async def build_lines(
     return lines, rapport
 
 
+# ── Adresse de livraison chez le fournisseur ───────────────────────
+#
+# Le fournisseur livre le client DIRECTEMENT (dropshipping) : l'adresse
+# à créer est celle du destinataire réel, pas la nôtre. C'est aussi la
+# ressaisie la plus risquée du processus — une faute de frappe dans un
+# code postal envoie les pneus à l'autre bout du département.
+#
+# On s'arrête à la création de l'adresse. L'attacher au panier passe
+# par `PUT /cart/valid`, qui ne fait pas que cela : il transforme le
+# panier en COMMANDE fournisseur. Cet engagement reste humain.
+
+
+def _digits(value: object) -> str:
+    return "".join(c for c in str(value or "") if c.isdigit())
+
+
+def address_key(a: dict) -> tuple:
+    """Empreinte d'une adresse, pour reconnaître un doublon.
+
+    Comparaison insensible à la casse et aux espaces : le carnet
+    contient des « FUVEAU » et des « fuveau », et un client qui
+    recommande ne doit pas empiler des adresses identiques.
+    """
+    rue = a.get("street") or ""
+    return (
+        " ".join(str(a.get("name") or "").lower().split()),
+        " ".join(str(rue).lower().split()),
+        _digits(a.get("postalCode")),
+        " ".join(str(a.get("city") or "").lower().split()),
+    )
+
+
+def build_address(order: Order) -> dict:
+    """Adresse à créer chez le fournisseur pour cette commande.
+
+    Montage en garage : c'est le GARAGE qui reçoit les pneus, pas le
+    client. Se tromper de destinataire enverrait la livraison chez
+    quelqu'un qui n'attend rien.
+
+    L'email est celui du site, jamais celui du client : les avis
+    d'expédition doivent nous revenir, et le fournisseur n'a pas à
+    récupérer le fichier client.
+    """
+    from app.core.config import settings
+
+    if order.delivery_mode == "partner_garage" and order.garage_snapshot:
+        g = order.garage_snapshot
+        nom = g.get("name") or ""
+        rue = g.get("address") or ""
+        cp = g.get("postal_code") or ""
+        ville = g.get("city") or ""
+        tel = g.get("phone") or ""
+    else:
+        a = order.shipping_address or {}
+        nom = (a.get("label_name") or a.get("name") or "").strip()
+        rue = " ".join(
+            p for p in [a.get("line1"), a.get("line2")] if p
+        ).strip()
+        cp = a.get("postal_code") or ""
+        ville = a.get("city") or ""
+        tel = a.get("phone") or ""
+
+    return {
+        "mail": settings.admin_email or settings.smtp_sender or "",
+        "phone": {"country": "FR", "number": _digits(tel)},
+        "name": nom[:100],
+        "postalCode": str(cp),
+        "city": str(ville),
+        "street": rue[:120],
+    }
+
+
+async def ensure_address(connector, order: Order, recipient: str = "") -> dict:
+    """Adresse de livraison présente dans le carnet du fournisseur.
+
+    Réutilise une adresse identique si elle existe déjà, la crée sinon.
+    Rend `{id, created, name, city}` — `created` dit lequel des deux
+    s'est produit, ce que l'admin doit voir.
+    """
+    cible = build_address(order)
+    if recipient:
+        cible["name"] = recipient[:100]
+
+    manquants = [
+        champ for champ in ("name", "street", "postalCode", "city", "mail")
+        if not str(cible.get(champ) or "").strip()
+    ]
+    if manquants:
+        # `mail` manquant = ADMIN_EMAIL et SMTP_SENDER vides côté serveur.
+        # Créer une adresse sans contact chez le fournisseur reviendrait à
+        # se priver des avis d'expédition, et se découvrirait au premier
+        # colis perdu.
+        raise SupplierCartError(
+            "Adresse de livraison incomplète : " + ", ".join(manquants)
+        )
+
+    empreinte = address_key(cible)
+    for existante in await connector.list_addresses():
+        if address_key(existante) == empreinte:
+            return {
+                "id": existante.get("id"),
+                "created": False,
+                "name": existante.get("name"),
+                "city": existante.get("city"),
+            }
+
+    creee = await connector.create_address(cible)
+    return {
+        "id": creee.get("id"),
+        "created": True,
+        "name": creee.get("name") or cible["name"],
+        "city": creee.get("city") or cible["city"],
+    }
+
+
+async def _recipient(db: AsyncSession, order: Order) -> str:
+    """Nom du destinataire pour une livraison à domicile.
+
+    Les adresses figées sur la commande ne portent PAS de nom — il vit
+    sur le compte client. Sans cette lecture, le colis partirait sans
+    destinataire et le transporteur ne saurait pas à qui remettre.
+    """
+    if order.delivery_mode == "partner_garage":
+        return ""  # le garage est déjà nommé dans son snapshot
+    from app.models.user import User
+
+    user = await db.get(User, order.user_id)
+    if user is None:
+        return ""
+    return " ".join(p for p in [user.first_name, user.last_name] if p)
+
+
 async def push_order(db: AsyncSession, order: Order) -> dict:
     """Ajoute les articles d'une commande au panier Maxityre.
 
@@ -186,6 +318,17 @@ async def push_order(db: AsyncSession, order: Order) -> dict:
         ) from exc
 
     cart = answer.get("cart") or {}
+
+    # Adresse APRÈS les lignes : si elle échoue, le panier est déjà
+    # rempli et l'admin n'a plus qu'à saisir l'adresse à la main —
+    # l'inverse ferait perdre le travail utile.
+    adresse: dict | None = None
+    adresse_erreur: str | None = None
+    try:
+        adresse = await ensure_address(connector, order, await _recipient(db, order))
+    except Exception as exc:
+        adresse_erreur = f"{type(exc).__name__}: {str(exc)[:160]}"
+
     result = {
         "lines": rapport,
         "cart_id": cart.get("id"),
@@ -199,7 +342,9 @@ async def push_order(db: AsyncSession, order: Order) -> dict:
             ),
             2,
         ),
-        "partial": any(not r["ok"] for r in rapport),
+        "address": adresse,
+        "address_error": adresse_erreur,
+        "partial": any(not r["ok"] for r in rapport) or adresse_erreur is not None,
         "late": any(r.get("late") for r in rapport),
         "pushed_at": datetime.now(UTC).isoformat(),
     }

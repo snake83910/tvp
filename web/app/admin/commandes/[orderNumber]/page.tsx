@@ -359,6 +359,31 @@ export default function AdminOrderDetail() {
                   </li>
                 ))}
               </ul>
+              {/* Adresse : le gain principal du dropshipping, et la
+                  ressaisie la plus risquée — une faute dans un code
+                  postal envoie les pneus à l'autre bout du département. */}
+              {order.supplier_push_result.address && (
+                <p className="mt-2 text-xs text-ink-soft">
+                  Adresse{" "}
+                  {order.supplier_push_result.address.created
+                    ? "créée"
+                    : "déjà présente"}{" "}
+                  chez le fournisseur :{" "}
+                  <strong className="text-ink">
+                    {order.supplier_push_result.address.name} ·{" "}
+                    {order.supplier_push_result.address.city}
+                  </strong>{" "}
+                  (n° {order.supplier_push_result.address.id}) — à
+                  sélectionner sur maxityre.fr
+                </p>
+              )}
+              {order.supplier_push_result.address_error && (
+                <p className="mt-2 text-xs font-semibold text-signal">
+                  Adresse non créée : {order.supplier_push_result.address_error}
+                  {" "}— à saisir à la main.
+                </p>
+              )}
+
               {order.supplier_push_result.buy_total_ht != null && (
                 <p className="mt-2 text-xs text-ink-soft">
                   Total d&apos;achat{" "}

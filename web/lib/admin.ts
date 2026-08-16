@@ -118,6 +118,9 @@ export interface SupplierPushLine {
 
 export interface SupplierPushResult {
   lines: SupplierPushLine[];
+  /** Adresse de livraison créée (ou retrouvée) chez le fournisseur. */
+  address?: { id: number; created: boolean; name: string; city: string } | null;
+  address_error?: string | null;
   cart_id?: number;
   cart_count?: number;
   buy_total_ht?: number;

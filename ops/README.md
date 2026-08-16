@@ -208,6 +208,23 @@ Choix de l'offre, au moment de la transmission et jamais avant :
 - si aucune ne la tient : la plus rapide, et le retard est **signalé** à
   l'écran. Les rendez-vous de montage sont calés sur cette date.
 
+**L'adresse de livraison est créée dans le carnet Maxityre** au même
+moment, à partir de la commande : celle du client pour une livraison à
+domicile, celle du GARAGE pour un montage — c'est lui qui reçoit les
+pneus. Une adresse identique déjà présente est réutilisée plutôt que
+dupliquée. Il ne reste qu'à la sélectionner sur maxityre.fr.
+
+L'email envoyé au fournisseur est celui du site (`ADMIN_EMAIL`, à défaut
+`SMTP_SENDER`), jamais celui du client : les avis d'expédition doivent
+nous revenir, et le fournisseur n'a pas à récupérer le fichier client.
+Si aucun des deux n'est configuré, la création est refusée plutôt que de
+déposer une adresse sans contact.
+
+> **On ne va pas plus loin, volontairement.** Attacher l'adresse au
+> panier passe par `PUT /cart/valid`, qui ne fait pas que cela : il
+> transforme le panier en COMMANDE fournisseur en attente de paiement.
+> Cet engagement reste humain.
+
 Le compte rendu affiche le **prix d'achat du jour** par article, à côté
 du prix de vente figé : c'est le seul moment où la marge réelle d'une
 commande se vérifie. Un article introuvable n'empêche pas d'envoyer les

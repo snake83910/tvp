@@ -182,3 +182,141 @@ async def test_rien_a_envoyer_ne_touche_pas_la_commande():
             await sc.push_order(db, order)
 
     assert order.supplier_pushed_at is None
+
+
+# ── Adresse de livraison ──────────────────────────────────────────
+
+def _cmd_domicile():
+    return SimpleNamespace(
+        delivery_mode="home",
+        garage_snapshot={},
+        shipping_address={
+            "line1": "17 Rue Ambroise Croizat", "line2": None,
+            "postal_code": "83560", "city": "Rians", "country": "FR",
+            "phone": "07 71 87 81 98",
+        },
+    )
+
+
+def _cmd_garage():
+    return SimpleNamespace(
+        delivery_mode="partner_garage",
+        garage_snapshot={
+            "name": "Garage Rivaz", "address": "12 avenue du Garage",
+            "postal_code": "69003", "city": "Lyon", "phone": "0478000000",
+        },
+        shipping_address={"line1": "chez le client", "postal_code": "13100",
+                          "city": "Aix", "country": "FR"},
+    )
+
+
+def test_montage_en_garage_livre_au_garage():
+    """LE piège du dropshipping : pour un montage, le destinataire est
+    le GARAGE. Livrer chez le client enverrait les pneus à quelqu'un qui
+    n'attend rien et ne pourra pas les monter."""
+    a = sc.build_address(_cmd_garage())
+    assert a["name"] == "Garage Rivaz"
+    assert a["city"] == "Lyon"
+    assert a["postalCode"] == "69003"
+
+
+def test_livraison_domicile_utilise_ladresse_du_client():
+    a = sc.build_address(_cmd_domicile())
+    assert a["street"] == "17 Rue Ambroise Croizat"
+    assert a["postalCode"] == "83560"
+    assert a["phone"] == {"country": "FR", "number": "0771878198"}
+
+
+def test_complement_dadresse_conserve():
+    """Un « Bâtiment C » perdu, c'est un colis qui revient."""
+    cmd = _cmd_domicile()
+    cmd.shipping_address["line2"] = "Bâtiment C"
+    assert "Bâtiment C" in sc.build_address(cmd)["street"]
+
+
+def test_email_du_site_jamais_celui_du_client(monkeypatch):
+    """Les avis d'expédition doivent nous revenir, et le fournisseur n'a
+    pas à récupérer le fichier client."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_email", "service@tousvospneus.com")
+    a = sc.build_address(_cmd_domicile())
+    assert a["mail"] == "service@tousvospneus.com"
+
+
+@pytest.mark.asyncio
+async def test_email_du_site_absent_bloque_la_creation():
+    """ADMIN_EMAIL et SMTP_SENDER vides : créer une adresse sans contact
+    priverait des avis d'expédition, et se découvrirait au premier colis
+    perdu."""
+    connector = SimpleNamespace(
+        list_addresses=AsyncMock(), create_address=AsyncMock()
+    )
+    with pytest.raises(sc.SupplierCartError, match="mail"):
+        await sc.ensure_address(connector, _cmd_domicile(), "Simon Rémy")
+
+    connector.create_address.assert_not_awaited()
+
+
+def test_doublons_reconnus_malgre_casse_et_espaces():
+    """Le carnet mélange « FUVEAU » et « fuveau » : sans normalisation,
+    un client qui recommande empilerait des adresses identiques."""
+    a = {"name": "Simon Rémy", "street": "17 Rue Ambroise Croizat",
+         "postalCode": "83560", "city": "Rians"}
+    b = {"name": "simon  rémy", "street": "17 rue ambroise croizat",
+         "postalCode": "83 560", "city": "RIANS"}
+    assert sc.address_key(a) == sc.address_key(b)
+
+    autre = {**a, "street": "18 Rue Ambroise Croizat"}
+    assert sc.address_key(a) != sc.address_key(autre)
+
+
+@pytest.fixture
+def _email_site(monkeypatch):
+    """Le serveur a une adresse de contact configurée (cas nominal)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_email", "service@tousvospneus.com")
+
+
+@pytest.mark.asyncio
+async def test_adresse_existante_reutilisee_sans_creation(_email_site):
+    existante = {
+        "id": 696430, "name": "Simon Rémy",
+        "street": "17 Rue Ambroise Croizat",
+        "postalCode": "83560", "city": "Rians",
+    }
+    connector = SimpleNamespace(
+        list_addresses=AsyncMock(return_value=[existante]),
+        create_address=AsyncMock(),
+    )
+    res = await sc.ensure_address(connector, _cmd_domicile(), "Simon Rémy")
+
+    assert res == {"id": 696430, "created": False,
+                   "name": "Simon Rémy", "city": "Rians"}
+    connector.create_address.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_adresse_absente_creee(_email_site):
+    connector = SimpleNamespace(
+        list_addresses=AsyncMock(return_value=[]),
+        create_address=AsyncMock(return_value={"id": 999, "name": "Simon Rémy",
+                                               "city": "Rians"}),
+    )
+    res = await sc.ensure_address(connector, _cmd_domicile(), "Simon Rémy")
+    assert res["id"] == 999
+    assert res["created"] is True
+
+
+@pytest.mark.asyncio
+async def test_adresse_incomplete_refusee_avant_tout_appel(_email_site):
+    """Mieux vaut refuser que créer une adresse sans destinataire : le
+    transporteur ne saurait pas à qui remettre le colis."""
+    connector = SimpleNamespace(
+        list_addresses=AsyncMock(), create_address=AsyncMock()
+    )
+    with pytest.raises(sc.SupplierCartError, match="incomplète"):
+        await sc.ensure_address(connector, _cmd_domicile(), "")
+
+    connector.create_address.assert_not_awaited()
