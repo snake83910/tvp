@@ -59,6 +59,8 @@ export default function AdminOrderDetail() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [creditNoteLoading, setCreditNoteLoading] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [confirmPush, setConfirmPush] = useState(false);
 
   // Note admin
   const [note, setNote] = useState("");
@@ -83,6 +85,25 @@ export default function AdminOrderDetail() {
       toast(e instanceof Error ? e.message : "Erreur", "error");
     } finally {
       setNoteSaving(false);
+    }
+  }
+
+  async function pushToSupplier() {
+    setPushing(true);
+    try {
+      const r = await adminApi.pushToSupplier(orderNumber);
+      toast(
+        r.partial
+          ? "Panier fournisseur partiellement rempli — vérifiez le détail"
+          : `Ajouté au panier fournisseur (achat ${r.buy_total_ht?.toFixed(2)} € HT)`,
+        r.partial ? "error" : "success",
+      );
+      setOrder(await adminApi.getOrder(orderNumber));
+      adminApi.listAudit(orderNumber).then(setAuditEntries).catch(() => {});
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setPushing(false);
     }
   }
 
@@ -275,6 +296,82 @@ export default function AdminOrderDetail() {
             </p>
           </div>
         )}
+
+      {/* Transmission au fournisseur. Bouton distinct du changement de
+          statut : remplir le panier Maxityre et déclarer « transmise »
+          sont deux gestes, et l'admin fait le second APRÈS avoir validé
+          le panier chez eux. */}
+      {(order.status === "paid" || order.status === "sent_to_supplier") && (
+        <div className="mb-6 rounded-xl border border-line bg-paper p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-ink">Panier fournisseur</p>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                Ajoute les articles au panier Maxityre. <strong>N&apos;achète
+                rien</strong> : la validation reste à faire sur leur site.
+              </p>
+              {order.supplier_pushed_at && (
+                <p className="mt-1 text-xs text-ink-muted">
+                  Dernière transmission le{" "}
+                  {new Date(order.supplier_pushed_at).toLocaleString("fr-FR")}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => setConfirmPush(true)}
+              disabled={pushing}
+              className="shrink-0 rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink-soft transition hover:border-signal hover:text-signal disabled:opacity-50"
+            >
+              {pushing
+                ? "Envoi…"
+                : order.supplier_pushed_at
+                  ? "Renvoyer au panier"
+                  : "Envoyer au panier"}
+            </button>
+          </div>
+
+          {order.supplier_push_result && (
+            <div className="mt-4 border-t border-line pt-3">
+              <ul className="space-y-1.5 text-xs">
+                {order.supplier_push_result.lines.map((l) => (
+                  <li key={l.ref} className="flex flex-wrap gap-x-3">
+                    <span className={l.ok ? "text-ink" : "font-semibold text-signal"}>
+                      {l.ok ? "✓" : "✗"} {l.label}
+                    </span>
+                    {l.ok ? (
+                      <>
+                        <span className="text-ink-muted">
+                          ×{l.quantity} · achat{" "}
+                          <strong className="text-ink">
+                            {l.buy_price_ht?.toFixed(2)} € HT
+                          </strong>{" "}
+                          / vendu {l.sell_price_ht?.toFixed(2)} € HT
+                        </span>
+                        {l.late && (
+                          <span className="font-semibold text-amber-700">
+                            livraison plus tardive que promise
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-signal">{l.error}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {order.supplier_push_result.buy_total_ht != null && (
+                <p className="mt-2 text-xs text-ink-soft">
+                  Total d&apos;achat{" "}
+                  <strong className="text-ink">
+                    {order.supplier_push_result.buy_total_ht.toFixed(2)} € HT
+                  </strong>{" "}
+                  · vendu {order.total_ht.toFixed(2)} € HT
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Colonne principale */}
@@ -528,6 +625,18 @@ export default function AdminOrderDetail() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmPush}
+        title="Envoyer au panier Maxityre ?"
+        message="Les articles seront ajoutés à votre panier fournisseur au prix du jour. Aucun achat n'est effectué : la validation reste à faire sur leur site."
+        confirmLabel="Envoyer au panier"
+        onClose={() => setConfirmPush(false)}
+        onConfirm={() => {
+          setConfirmPush(false);
+          pushToSupplier();
+        }}
+      />
 
       <ConfirmDialog
         open={confirmDestructive !== null}

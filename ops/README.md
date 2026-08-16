@@ -186,6 +186,33 @@ attendre l'heure suivante, ou rattraper une nuit sautée. L'exécution est
 identique à celle du crontab, trace comprise, et l'action est auditée —
 `dunning` peut annuler des commandes et envoyer des emails.
 
+## Transmission au panier fournisseur
+
+Écran commande de l'admin → « Envoyer au panier ». Les articles sont
+ajoutés au panier Maxityre du compte du site.
+
+**Rien n'est acheté.** `cart/add` remplit le panier ; la validation et le
+paiement restent à faire à la main sur maxityre.fr. Ce qui disparaît,
+c'est la ressaisie — et avec elle les fautes de frappe qui envoient les
+mauvais pneus. Le statut de la commande n'est pas modifié non plus :
+« transmettre » et déclarer « envoyée au fournisseur » sont deux gestes,
+le second se fait après avoir validé le panier.
+
+Choix de l'offre, au moment de la transmission et jamais avant :
+
+- les offres sont **relues** chez le fournisseur. Entre la vente et
+  l'envoi il peut s'écouler des jours : un `offerId` mémorisé au
+  catalogue désigne ce qui n'existe plus ;
+- à stock suffisant, la moins chère **parmi celles qui tiennent la date
+  annoncée au client** (supplément unitaire `supHtOne` compris) ;
+- si aucune ne la tient : la plus rapide, et le retard est **signalé** à
+  l'écran. Les rendez-vous de montage sont calés sur cette date.
+
+Le compte rendu affiche le **prix d'achat du jour** par article, à côté
+du prix de vente figé : c'est le seul moment où la marge réelle d'une
+commande se vérifie. Un article introuvable n'empêche pas d'envoyer les
+autres, il est listé à part.
+
 ## Textes des emails
 
 Admin → Emails : les 21 templates sont consultables et modifiables, avec

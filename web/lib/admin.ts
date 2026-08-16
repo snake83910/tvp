@@ -96,6 +96,34 @@ export interface AdminOrderDetail extends OrderDetail {
    *  une commande en attente n'a pas été annulée automatiquement. */
   payment_check_result: string | null;
   payment_checked_at: string | null;
+  /** Transmission au panier du fournisseur : date et compte rendu. */
+  supplier_pushed_at: string | null;
+  supplier_push_result: SupplierPushResult | null;
+}
+
+export interface SupplierPushLine {
+  ref: string;
+  label: string;
+  ok: boolean;
+  error?: string;
+  quantity?: number;
+  /** Prix d'ACHAT du jour chez le fournisseur, à comparer au prix de
+   *  vente figé : c'est ici que la marge réelle se vérifie. */
+  buy_price_ht?: number;
+  sell_price_ht?: number;
+  delivery?: string;
+  /** Cette offre ne tient pas la date annoncée au client. */
+  late?: boolean;
+}
+
+export interface SupplierPushResult {
+  lines: SupplierPushLine[];
+  cart_id?: number;
+  cart_count?: number;
+  buy_total_ht?: number;
+  partial?: boolean;
+  late?: boolean;
+  pushed_at?: string;
 }
 
 export interface PlateProviderSetting {
@@ -313,6 +341,14 @@ export const adminApi = {
       refund_manual?: boolean;
     }
   ) => call<AdminOrderDetail>(`/admin/orders/${orderNumber}/status`, "PATCH", data),
+
+  /** Ajoute les articles au panier Maxityre. N'achète rien : le panier
+   *  fournisseur reste à valider à la main sur leur site. */
+  pushToSupplier: (orderNumber: string) =>
+    call<SupplierPushResult>(
+      `/admin/orders/${orderNumber}/push-supplier`,
+      "POST",
+    ),
 
   updateNote: (orderNumber: string, admin_note: string) =>
     call<AdminOrderDetail>(`/admin/orders/${orderNumber}/note`, "PATCH", { admin_note }),

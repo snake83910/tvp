@@ -236,6 +236,13 @@ class Order(Base):
     # manual = quelqu'un affirme l'avoir fait au Back Office. La nuance
     # est tout sauf cosmétique le jour où un client conteste.
     refund_mode: Mapped[str | None] = mapped_column(String(20))
+    # Transmission au panier du fournisseur. `push_result` porte le
+    # compte rendu par article — dont le PRIX D'ACHAT du jour, seul
+    # moment où la marge réelle d'une commande est vérifiable.
+    supplier_pushed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    supplier_push_result: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Numéro de la facture d'avoir (série AV, distincte des factures).
     # Une facture émise ne se modifie pas : un remboursement se
     # matérialise par une facture rectificative, seule pièce qui permet

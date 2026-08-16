@@ -120,6 +120,8 @@ def _order_to_detail(order: Order, user: User) -> AdminOrderDetail:
         refund_api_available=refund.api_available(),
         payment_check_result=order.payment_check_result,
         payment_checked_at=order.payment_checked_at,
+        supplier_pushed_at=order.supplier_pushed_at,
+        supplier_push_result=order.supplier_push_result or None,
     )
 
 
@@ -441,6 +443,55 @@ async def download_credit_note_admin(
             )
         },
     )
+
+
+@router.post("/orders/{order_number}/push-supplier")
+async def push_to_supplier(
+    order_number: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Ajoute les articles de la commande au panier Maxityre.
+
+    N'achète RIEN : le panier fournisseur reste à valider à la main sur
+    leur site. Ce qui disparaît, c'est la ressaisie — et avec elle les
+    fautes de frappe qui envoient les mauvais pneus.
+
+    Le statut de la commande n'est pas modifié : transmettre et déclarer
+    « envoyée au fournisseur » sont deux gestes distincts, et l'admin
+    fait le second quand il a validé le panier.
+    """
+    from app.modules.orders import supplier_cart
+
+    order = await _load_order(order_number, db)
+    if order.status not in (OrderStatus.paid, OrderStatus.sent_to_supplier):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Commande non transmissible : elle doit être payée "
+                f"(statut actuel : {order.status.value})."
+            ),
+        )
+
+    try:
+        result = await supplier_cart.push_order(db, order)
+    except supplier_cart.SupplierCartError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await audit(
+        db, user=admin,
+        action="order.push_supplier",
+        target_type="order", target_id=order.order_number,
+        payload={
+            "cart_id": result.get("cart_id"),
+            "buy_total_ht": result.get("buy_total_ht"),
+            "partial": result.get("partial"),
+        },
+        request=request,
+    )
+    await db.commit()
+    return result
 
 
 @router.patch("/orders/{order_number}/status", response_model=AdminOrderDetail)

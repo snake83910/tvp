@@ -332,6 +332,10 @@ class AdminOrderDetail(OrderDetail):
     # les a pas annulées.
     payment_check_result: str | None = None
     payment_checked_at: datetime | None = None
+    # Transmission au panier fournisseur : date et compte rendu par
+    # article (prix d'achat du jour, articles introuvables, retards).
+    supplier_pushed_at: datetime | None = None
+    supplier_push_result: dict | None = None
 
 
 class StatusUpdateIn(BaseModel):

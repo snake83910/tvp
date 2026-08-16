@@ -329,6 +329,64 @@ class MaxityreConnector(SupplierConnector):
                 out.append(tyre)
         return out
 
+    # ---- Panier fournisseur -------------------------------------------------
+    #
+    # Jusqu'ici le connecteur était en lecture seule et chaque commande
+    # payée était ressaisie à la main sur le site Maxityre : le poste le
+    # plus coûteux par commande, et celui où une faute de frappe envoie
+    # les mauvais pneus.
+    #
+    # On s'arrête au PANIER, délibérément. L'ajout au panier n'achète
+    # rien : un humain ouvre ensuite le panier Maxityre, vérifie et
+    # valide. La ressaisie disparaît, le contrôle avant dépense reste.
+
+    async def get_offers(self, product_id: int | str) -> list[dict]:
+        """Offres actuelles d'un pneu : qui le vend, à quel prix, sous
+        quel délai.
+
+        Interrogées AU MOMENT de la commande fournisseur, jamais reprises
+        du catalogue : entre la vente au client et la transmission, une
+        offre peut disparaître, changer de prix ou de délai. Commander
+        sur un `offerId` d'il y a trois jours, c'est commander ce qui
+        n'existe plus.
+        """
+        await self.authenticate()
+        resp = await _get_client().get(
+            f"{settings.maxityre_base_url}/pneu/{product_id}",
+            headers=self._headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json() or {}
+        tyre = data.get("tyre") if isinstance(data.get("tyre"), dict) else data
+        return list(tyre.get("offers") or [])
+
+    async def add_to_cart(self, lines: list[dict]) -> dict:
+        """Ajoute des lignes au panier du compte Maxityre.
+
+        `lines` : dicts {supplier, hash, productId, type, quantity,
+        offerId}. Rend la réponse complète — elle contient le panier
+        résultant, donc de quoi vérifier ce qui a réellement été pris.
+        """
+        await self.authenticate()
+        resp = await _get_client().post(
+            f"{settings.maxityre_base_url}/cart/add",
+            headers={**self._headers(), "content-type": "application/json"},
+            json={"cart": {"newProducts": lines}},
+        )
+        resp.raise_for_status()
+        return resp.json() or {}
+
+    async def get_cart(self) -> dict:
+        """État du panier fournisseur. Sert à montrer à l'admin ce qui
+        s'y trouve avant qu'il n'aille valider."""
+        await self.authenticate()
+        resp = await _get_client().get(
+            f"{settings.maxityre_base_url}/cart/details",
+            headers=self._headers(),
+        )
+        resp.raise_for_status()
+        return resp.json() or {}
+
     async def get_by_ref(self, supplier_ref: str) -> SupplierTyre | None:
         """Fiche produit détaillée via /pneu/{id}.
 
