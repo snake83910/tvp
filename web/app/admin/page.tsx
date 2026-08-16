@@ -12,6 +12,22 @@ import { OrderTable } from "@/components/admin/OrderTable";
 import { Sparkline } from "@/components/admin/Sparkline";
 import { SkeletonList } from "@/components/Skeleton";
 import { formatEuro } from "@/lib/money";
+import { STATUS_LABEL } from "@/lib/orderStatus";
+
+/** Ordre du cycle de vie d'une commande. L'API rend un dictionnaire :
+ *  sans tri, les pastilles s'affichaient dans un ordre arbitraire qui
+ *  changeait d'un déploiement à l'autre. Les lire dans l'ordre du
+ *  parcours réel rend la répartition compréhensible d'un coup d'œil. */
+const STATUS_ORDER = [
+  "cart",
+  "pending_payment",
+  "paid",
+  "sent_to_supplier",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "refunded",
+];
 
 const POLL_INTERVAL = 30000; // 30s
 
@@ -241,15 +257,26 @@ export default function AdminDashboard() {
         <div className="mt-8">
           <h2 className="mb-3 font-display text-lg font-black text-ink">Par statut</h2>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(stats.orders_by_status).map(([s, count]) => (
+            {Object.entries(stats.orders_by_status)
+              .sort(
+                ([a], [b]) =>
+                  (STATUS_ORDER.indexOf(a) + 1 || 99) -
+                  (STATUS_ORDER.indexOf(b) + 1 || 99),
+              )
+              .map(([s, count]) => (
               <Link
                 key={s}
                 href={`/admin/commandes?status=${s}`}
                 className="rounded-full border border-line bg-paper px-4 py-1.5 text-sm font-semibold text-ink-soft transition hover:border-signal hover:text-signal"
               >
-                {s} <span className="ml-2 font-bold text-ink">{count}</span>
+                {/* Libellé français : « pending_payment » est un nom de
+                    code interne, pas une information pour un humain. Le
+                    repli sur la clé brute couvre un statut ajouté côté
+                    serveur sans traduction. */}
+                {STATUS_LABEL[s] ?? s}{" "}
+                <span className="ml-2 font-bold text-ink">{count}</span>
               </Link>
-            ))}
+              ))}
           </div>
         </div>
       )}
