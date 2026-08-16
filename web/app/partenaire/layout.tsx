@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { PartnerHeader } from "@/components/partner/PartnerHeader";
 import { useCurrentUser } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/partenaire/login", "/partenaire/inscription"];
+const PUBLIC_PATHS = ["/partenaire/inscription"];
 
 export default function PartnerLayout({
   children,
@@ -20,7 +20,7 @@ export default function PartnerLayout({
   useEffect(() => {
     if (isPublic || loading) return;
     if (!user) {
-      router.replace("/partenaire/login");
+      router.replace("/connexion?next=/partenaire");
       return;
     }
     if (user.role !== "garage") {

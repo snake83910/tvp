@@ -12,14 +12,14 @@ export function PartnerHeader() {
 
   function logout() {
     clearTokens();
-    router.replace("/partenaire/login");
+    router.replace("/connexion?next=/partenaire");
   }
 
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-ink text-paper">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3.5">
         <Link
-          href={isGarage ? "/partenaire" : "/partenaire/login"}
+          href={isGarage ? "/partenaire" : "/connexion?next=/partenaire"}
           className="flex items-center gap-2.5"
         >
           <span className="font-display text-base font-extrabold tracking-tightest">

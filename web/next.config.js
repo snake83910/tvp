@@ -81,6 +81,14 @@ const nextConfig = {
         permanent: true,
       },
       {
+        // La connexion partenaire a fusionné avec la connexion client :
+        // c'était le même formulaire, au refus près. `next` conserve
+        // l'habillage partenaire et la destination.
+        source: '/partenaire/login',
+        destination: '/connexion?next=/partenaire',
+        permanent: true,
+      },
+      {
         // Il existait DEUX pages de commande, distinguées par un seul
         // « s » : /commande/<n> (confirmation post-paiement, quasi vide)
         // et /commandes/<n> (le détail réel). Elles ont fusionné dans la

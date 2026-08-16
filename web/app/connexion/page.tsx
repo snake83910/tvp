@@ -25,10 +25,24 @@ export default function LoginPage() {
   );
 }
 
+/**
+ * Connexion UNIQUE, client comme partenaire.
+ *
+ * L'espace partenaire avait sa propre page : même appel `auth.login`,
+ * même PasswordField, même carte — pour une seule différence de fond, un
+ * REFUS. Un client arrivé par cette porte était éjecté avec « ce compte
+ * n'est pas un compte partenaire », là où cette page-ci l'aurait
+ * simplement conduit chez lui. On a donc supprimé du code ET une
+ * friction.
+ *
+ * `?next=/partenaire` conserve l'habillage partenaire : c'est la même
+ * porte, mais elle sait d'où l'on vient.
+ */
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/compte";
+  const partnerContext = next.startsWith("/partenaire");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +54,15 @@ function LoginForm() {
     setBusy(true);
     try {
       await auth.login(email, password);
-      // Un compte garage est dirigé vers son espace partenaire, pas la
-      // boutique : connexion client et partenaire restent distinctes.
       const me = await auth.me();
-      router.push(me.role === "garage" ? "/partenaire" : next);
+      if (me.role === "garage") {
+        // Un compte garage va toujours à son espace, jamais à la boutique.
+        router.push("/partenaire");
+      } else {
+        // Client entré par la porte partenaire : on le conduit chez lui
+        // plutôt que vers un espace dont il serait rejeté à l'arrivée.
+        router.push(partnerContext ? "/compte" : next);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible");
     } finally {
@@ -53,8 +72,24 @@ function LoginForm() {
 
   return (
     <main className="mx-auto max-w-md px-6 py-16">
+      {partnerContext && (
+        <div className="mb-5 text-center">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-signal">
+            Espace partenaire
+          </p>
+          <h1 className="mt-1 font-display text-2xl font-black tracking-tightest text-ink">
+            Connexion garage
+          </h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Gérez votre fiche, vos créneaux et vos commandes.
+          </p>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-2xl border border-line bg-paper shadow-card">
-        <AuthTabs active="login" />
+        {/* Les onglets renvoient vers l'inscription CLIENT : hors sujet
+            quand on arrive de l'espace partenaire. */}
+        {!partnerContext && <AuthTabs active="login" />}
       <form
         onSubmit={submit}
         className="space-y-5 p-6 md:p-8"
@@ -88,8 +123,11 @@ function LoginForm() {
       </div>
 
       <p className="mt-6 text-center text-sm text-ink-muted">
-        Pas encore de compte ?{" "}
-        <Link href="/inscription" className="font-semibold text-signal hover:underline">
+        {partnerContext ? "Pas encore partenaire ? " : "Pas encore de compte ? "}
+        <Link
+          href={partnerContext ? "/partenaire/inscription" : "/inscription"}
+          className="font-semibold text-signal hover:underline"
+        >
           Créer un compte
         </Link>
       </p>

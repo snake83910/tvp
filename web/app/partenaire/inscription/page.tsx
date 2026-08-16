@@ -117,7 +117,7 @@ export default function PartnerRegisterPage() {
 
         <p className="mt-6 text-center text-sm text-ink-muted">
           Déjà partenaire ?{" "}
-          <Link href="/partenaire/login" className="font-semibold text-signal hover:underline">
+          <Link href="/connexion?next=/partenaire" className="font-semibold text-signal hover:underline">
             Se connecter
           </Link>
         </p>
