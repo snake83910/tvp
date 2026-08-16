@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.auth import AddressIn, NormalizedEmail
+from app.schemas.auth import AddressIn, FrenchPhone, NormalizedEmail
 
 
 class AddItemIn(BaseModel):
@@ -194,7 +194,8 @@ class GuestCheckoutIn(BaseModel):
     email: NormalizedEmail
     first_name: str = Field(min_length=1, max_length=120)
     last_name: str = Field(min_length=1, max_length=120)
-    phone: str | None = Field(default=None, max_length=30)
+    # Obligatoire : ce numéro accompagne l'adresse chez le fournisseur.
+    phone: FrenchPhone
 
     shipping: AddressIn
     # None = facturation identique à la livraison

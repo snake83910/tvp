@@ -214,6 +214,12 @@ domicile, celle du GARAGE pour un montage — c'est lui qui reçoit les
 pneus. Une adresse identique déjà présente est réutilisée plutôt que
 dupliquée. Il ne reste qu'à la sélectionner sur maxityre.fr.
 
+Le téléphone est **obligatoire** à l'inscription, au checkout invité et
+à l'inscription partenaire, et normalisé en dix chiffres
+(`app/core/phone.py`) quelle que soit la saisie : `+33 6…`, points,
+espaces. Un compte antérieur qui n'en aurait pas peut le renseigner via
+`PATCH /v1/me/profile`.
+
 Le **nom et le téléphone** du destinataire viennent du COMPTE client :
 les adresses figées sur la commande n'en portent pas. Un compte sans
 téléphone bloque la création, avec un message qui nomme le champ — le

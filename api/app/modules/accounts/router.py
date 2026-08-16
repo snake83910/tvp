@@ -19,7 +19,7 @@ from app.modules.mailer.service import (
     send_appointment_changed_to_garage,
     send_appointment_confirmed,
 )
-from app.schemas.auth import AddressIn, AddressOut, UserOut
+from app.schemas.auth import AddressIn, AddressOut, ProfileUpdateIn, UserOut
 from app.schemas.garage import AppointmentIn, SlotsOut
 from app.schemas.order import OrderDetail, OrderItemDetail, OrderSummary
 
@@ -28,6 +28,26 @@ router = APIRouter(prefix="/me", tags=["account"])
 
 @router.get("/profile", response_model=UserOut)
 async def get_profile(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/profile", response_model=UserOut)
+async def update_profile(
+    data: ProfileUpdateIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Met à jour son identité et son téléphone.
+
+    Champs omis = inchangés. Le téléphone est normalisé par le schéma
+    (dix chiffres) : c'est cette forme qui part chez le fournisseur.
+    """
+    fields = data.model_dump(exclude_unset=True)
+    for name, value in fields.items():
+        if value is not None:
+            setattr(user, name, value)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 

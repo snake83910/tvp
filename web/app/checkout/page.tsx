@@ -398,12 +398,10 @@ export default function CheckoutPage() {
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Input label="Email" value={email} onChange={setEmail} />
-                  <Input
-                    label="Téléphone"
-                    value={phone}
-                    onChange={setPhone}
-                    required={false}
-                  />
+                  {/* Obligatoire : ce numéro accompagne l'adresse chez
+                      le fournisseur, qui refuse une livraison sans lui
+                      — et le transporteur en a besoin pour prévenir. */}
+                  <Input label="Téléphone" value={phone} onChange={setPhone} />
                   <Input label="Prénom" value={firstName} onChange={setFirstName} />
                   <Input label="Nom" value={lastName} onChange={setLastName} />
                 </div>

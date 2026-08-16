@@ -510,7 +510,9 @@ async def partner_register(
     postal_code: str = Form(..., min_length=4, max_length=10),
     city: str = Form(..., min_length=1, max_length=120),
     siret: str = Form(..., min_length=9, max_length=20),
-    phone: str | None = Form(None),
+    # Obligatoire : c'est le numéro du garage qui part chez le
+    # fournisseur quand une commande y est livrée pour montage.
+    phone: str = Form(..., min_length=6, max_length=30),
     kbis: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -521,6 +523,13 @@ async def partner_register(
     email = email.lower().strip()
     if "@" not in email:
         raise HTTPException(status_code=422, detail="Email invalide")
+    from app.core.phone import MESSAGE as PHONE_MESSAGE
+    from app.core.phone import normalize_fr
+
+    phone_clean = normalize_fr(phone)
+    if phone_clean is None:
+        raise HTTPException(status_code=422, detail=PHONE_MESSAGE)
+
     siret_clean = "".join(c for c in siret if c.isdigit())
     if len(siret_clean) != 14:
         raise HTTPException(
@@ -541,7 +550,7 @@ async def partner_register(
         role=UserRole.garage,
         is_active=True,
         email_verified=True,
-        phone=phone,
+        phone=phone_clean,
     )
     db.add(user)
     await db.flush()
@@ -552,7 +561,7 @@ async def partner_register(
         address=address,
         postal_code=postal_code,
         city=city,
-        phone=phone,
+        phone=phone_clean,
         email=email,
         siret=siret_clean,
         siret_verified=bool(sirene["exists"] and sirene["active"]),

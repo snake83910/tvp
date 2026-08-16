@@ -256,7 +256,7 @@ function RegisterContent() {
                 value={form.phone}
                 onChange={(v) => up("phone", v)}
                 placeholder="06 12 34 56 78"
-                hint="Utilisé uniquement pour le suivi de vos livraisons"
+                hint="Transmis au transporteur pour la livraison"
                 required={false}
               />
             </div>

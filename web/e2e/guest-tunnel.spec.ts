@@ -113,6 +113,10 @@ test("tunnel invité : panier anonyme → commande sans compte → paiement", as
       email,
       first_name: "Pirate",
       last_name: "Malveillant",
+      // Téléphone valide EXPRÈS : sans lui la requête est refusée en 422
+      // sur la validation, et ce test-ci ne vérifierait plus la garde
+      // qu'il cible — le refus d'un email déjà enregistré.
+      phone: "0611223344",
       shipping: {
         line1: "1 rue du Vol",
         postal_code: "75001",

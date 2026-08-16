@@ -55,15 +55,54 @@ class ProInfo(BaseModel):
         return v
 
 
+class FrenchPhone(str):
+    """Téléphone français, stocké sous forme canonique (10 chiffres).
+
+    Obligatoire depuis que ces numéros partent chez le fournisseur avec
+    l'adresse de livraison : un numéro absent fait refuser l'adresse, un
+    numéro mal formé fait échouer la livraison.
+    """
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source, handler):
+        from pydantic_core import core_schema
+
+        return core_schema.no_info_after_validator_function(
+            cls._validate, core_schema.str_schema()
+        )
+
+    @classmethod
+    def _validate(cls, v: str) -> str:
+        from app.core.phone import MESSAGE, normalize_fr
+
+        digits = normalize_fr(v)
+        if digits is None:
+            raise ValueError(MESSAGE)
+        return digits
+
+
 class RegisterIn(BaseModel):
     email: NormalizedEmail
     password: str = Field(min_length=8, max_length=128)
     account_type: AccountType = AccountType.particulier
     first_name: str | None = None
     last_name: str | None = None
-    phone: str | None = None
+    phone: FrenchPhone
     # Obligatoire si account_type == pro (validé côté service)
     pro: ProInfo | None = None
+
+
+class ProfileUpdateIn(BaseModel):
+    """Modification de son propre profil.
+
+    Le téléphone est modifiable — et il le faut : c'est lui qui part
+    chez le fournisseur avec l'adresse de livraison, et les comptes
+    créés avant qu'il ne soit obligatoire n'en ont pas.
+    """
+
+    first_name: str | None = Field(default=None, max_length=120)
+    last_name: str | None = Field(default=None, max_length=120)
+    phone: FrenchPhone | None = None
 
 
 class LoginIn(BaseModel):

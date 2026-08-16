@@ -39,7 +39,7 @@ export default function PartnerRegisterPage() {
         postal_code: f.postal_code.trim(),
         city: f.city.trim(),
         siret: f.siret.trim(),
-        phone: f.phone.trim() || null,
+        phone: f.phone.trim(),
         kbis,
       });
       router.push("/partenaire");
@@ -76,7 +76,15 @@ export default function PartnerRegisterPage() {
             <Field label="Code postal" value={f.postal_code} onChange={(v) => set("postal_code", v)} required />
             <Field label="Ville" value={f.city} onChange={(v) => set("city", v)} required />
           </div>
-          <Field label="Téléphone" value={f.phone} onChange={(v) => set("phone", v)} />
+          {/* Obligatoire : c'est le numéro du garage qui part chez le
+              fournisseur quand une commande y est livrée pour montage. */}
+          <Field
+            label="Téléphone"
+            value={f.phone}
+            onChange={(v) => set("phone", v)}
+            required
+            placeholder="04 78 00 00 00"
+          />
           <Field
             label="SIRET (14 chiffres)"
             value={f.siret}
@@ -133,6 +141,7 @@ function Field({
   required,
   type = "text",
   autoComplete,
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -140,6 +149,7 @@ function Field({
   required?: boolean;
   type?: string;
   autoComplete?: string;
+  placeholder?: string;
 }) {
   return (
     <div>
@@ -150,6 +160,7 @@ function Field({
         type={type}
         required={required}
         value={value}
+        placeholder={placeholder}
         autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-signal"

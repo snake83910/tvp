@@ -9,7 +9,11 @@ from app.schemas.auth import ForgotPasswordIn, LoginIn, RegisterIn
 def test_register_email_lowercase():
     """Un email saisi avec des majuscules est stocké en minuscules,
     sinon le login (qui cherche en lowercase) ne le retrouve jamais."""
-    data = RegisterIn(email="Remy.SIMON@Gmail.com", password="unmotdepasse")
+    data = RegisterIn(
+        email="Remy.SIMON@Gmail.com",
+        password="unmotdepasse",
+        phone="0611223344",
+    )
     assert data.email == "remy.simon@gmail.com"
 
 
