@@ -1,0 +1,37 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, tout s&rsquo;est bien passé ?
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Votre commande
+    <strong style="font-family:'Courier New',monospace;">{{ order_number }}</strong>
+    a été livrée chez
+    <strong>{{ garage_name }}</strong>{% if garage_city %} ({{ garage_city }}){% endif %}.
+  </p>
+
+  <p style="margin:0 0 20px 0;">
+    Deux minutes pour noter le garage, et vous rendez service au
+    prochain automobiliste qui hésite : accueil, ponctualité, qualité du
+    montage. C&rsquo;est aussi ce qui pousse nos partenaires à bien
+    faire.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ review_url }}"
+       style="display:inline-block;padding:12px 22px;background:#17181a;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:800;">
+      Laisser mon avis
+    </a>
+  </p>
+
+  <p style="margin:0 0 8px 0;color:#7a7a72;font-size:13px;">
+    Un problème plutôt qu&rsquo;un avis ? Répondez à cet email ou
+    ouvrez <a href="{{ order_url }}" style="color:#17181a;">votre commande</a> :
+    on s&rsquo;en occupe.
+  </p>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    L&rsquo;équipe Tous Vos Pneus
+  </p>
+{% endblock %}

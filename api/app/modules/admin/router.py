@@ -428,6 +428,9 @@ async def update_status(
         order.tracking_url = data.tracking_url or order.tracking_url
         send_order_shipped(order, user, data.tracking_number, data.carrier)
     elif target == OrderStatus.delivered:
+        # Date de référence de la demande d'avis (J+2), posée ici parce
+        # que c'est le seul endroit qui sait quand la livraison est actée.
+        order.delivered_at = datetime.now(UTC)
         send_order_delivered(order, user)
     elif target == OrderStatus.cancelled:
         send_order_cancelled(order, user, data.cancel_reason)

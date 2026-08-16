@@ -104,3 +104,143 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: https://tousvospneus.com/api
+
+  # Bout en bout : le vrai backend, le vrai front, un vrai navigateur.
+  #
+  # Longtemps impossible en CI parce que le catalogue venait du
+  # fournisseur (identifiants, stocks qui bougent, pannes qui ne sont pas
+  # les nôtres). SUPPLIER_PROVIDER=fake sert un catalogue déterministe :
+  # la suite devient reproductible, et c'est ce qui la rend utile ici.
+  #
+  # PAYMENT_PROVIDER=simulated permet d'amener une commande à « payée »
+  # sans banque. L'API refuse ce mode en production — le garde-fou est
+  # dans config.py, pas dans ce fichier.
+  e2e:
+    runs-on: ubuntu-latest
+    # Au niveau du job : les trois étapes Python en ont besoin, et une
+    # variable oubliée sur l'une d'elles ferait démarrer l'API sur une
+    # autre base que celle qui vient d'être migrée.
+    env:
+      DATABASE_URL: postgresql+asyncpg://tvp:tvp@localhost:5432/tvp_e2e
+      REDIS_URL: redis://localhost:6379/0
+      ENVIRONMENT: test
+      JWT_SECRET: e2e-secret-non-sensible
+      SUPPLIER_PROVIDER: fake
+      PAYMENT_PROVIDER: simulated
+      MAILER_PROVIDER: console
+      UPLOAD_DIR: /tmp/tvp-uploads
+      PUBLIC_SITE_URL: http://localhost:3105
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install (api)
+        working-directory: api
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Migrations
+        working-directory: api
+        run: alembic upgrade head
+
+      - name: Compte admin de test
+        # Aucun endpoint ne crée d'admin (et c'est voulu) : la base de CI
+        # part vide, il faut donc le semer.
+        working-directory: api
+        run: python -m app.scripts_seed_admin e2e-admin@example.com 'PneusE2e!2026-admin'
+
+      - name: Démarrer l'API
+        working-directory: api
+        run: |
+          mkdir -p /tmp/tvp-uploads
+          uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/api.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "API prête"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API non démarrée :"; cat /tmp/api.log; exit 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install (web)
+        working-directory: web
+        run: npm ci || npm install
+
+      - name: Navigateurs Playwright
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Build du front
+        working-directory: web
+        # Même distDir que celui utilisé par playwright.config.ts, sinon
+        # `next start` ne trouverait pas ce build.
+        run: npm run build
+        env:
+          NEXT_DIST_DIR: .next-e2e
+          NEXT_PUBLIC_API_URL: http://localhost:3105/api
+
+      - name: Tests e2e
+        working-directory: web
+        # Le front est servi en mode production sur le port 3105 et
+        # proxifie /api vers API_URL_INTERNAL : le navigateur reste en
+        # même origine, aucun réglage CORS à faire ici.
+        run: npx playwright test
+        env:
+          # `next start` prévient qu'il n'est pas le mode standalone
+          # (output: standalone dans next.config.js, pour l'image Docker
+          # de production). L'avertissement est attendu : le build
+          # classique reste servi correctement, et le mode standalone
+          # exigerait de recopier public/ et .next/static à la main.
+          E2E_WEB_COMMAND: npx next start
+          API_URL_INTERNAL: http://localhost:8000
+          E2E_API_URL: http://localhost:8000
+
+      - name: Journal de l'API en cas d'échec
+        if: failure()
+        run: cat /tmp/api.log
+
+      - name: Rapport Playwright
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report
+            web/test-results
+          retention-days: 7
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tvp
+          POSTGRES_PASSWORD: tvp
+          POSTGRES_DB: tvp_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5

@@ -158,7 +158,11 @@ tiers. Sans l'en-tete, le comportement est inchange.
 
 ```bash
 docker compose up -d
-cd web && npx playwright test          # tunnels client + espace partenaire
+# Compte admin de test (une fois par base) : aucun endpoint ne cree
+# d'admin, il faut donc le semer.
+docker compose exec api python -m app.scripts_seed_admin \
+    e2e-admin@example.com 'PneusE2e!2026-admin'
+cd web && npx playwright test          # tunnels client, partenaire, admin
 ```
 
 Par defaut les e2e interrogent le VRAI catalogue Maxityre : le stock est
@@ -166,6 +170,17 @@ reel, donc il s'epuise d'un run a l'autre. Pour une suite reproductible
 (CI, executions rapprochees), basculer l'API sur le catalogue bouchon —
 `SUPPLIER_PROVIDER=fake` dans `.env`, puis `docker compose up -d api`.
 Voir `.env.example`.
+
+Les tests admin ont besoin d'amener une commande a l'etat « payee » :
+ils sautent d'eux-memes si `PAYMENT_PROVIDER` n'est pas `simulated`
+(l'API refuse la simulation des qu'une vraie banque est branchee). En
+integration continue ils echouent au lieu de sauter — un test ignore en
+silence ne protege rien.
+
+La suite tourne desormais dans la CI GitHub (job `e2e` de
+`.github/workflows/ci.yml`) : catalogue bouchon, paiement simule, front
+servi en mode production. Un run local laisse `web/next-env.d.ts`
+modifie (Next le reecrit vers `.next-e2e`) — `git checkout` dessus.
 
 Nettoyage des comptes et commandes laisses par les tests :
 

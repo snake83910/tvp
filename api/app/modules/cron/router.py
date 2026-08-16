@@ -4,9 +4,15 @@ Sécurité : header X-Cron-Token comparé à settings.cron_token.
 Si cron_token est vide, tous les endpoints renvoient 503 (désactivés).
 
 Exemple crontab sur le VPS :
-    # Relance commandes non payées toutes les heures
+    # Relance commandes non payées, toutes les heures
     0 * * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
         https://tousvospneus.com/api/cron/dunning >/dev/null
+    # Rappels de rendez-vous, toutes les heures
+    15 * * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
+        https://tousvospneus.com/api/cron/appointments >/dev/null
+    # Sollicitation d'avis, une fois par jour
+    30 10 * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
+        https://tousvospneus.com/api/cron/reviews >/dev/null
 """
 from datetime import UTC, datetime, timedelta
 
@@ -185,3 +191,67 @@ async def appointments(
 
     await db.commit()
     return {"checked": len(rows), "reminded": reminded, "at_risk": at_risk}
+
+
+# Deux jours : le client a reçu ses pneus, il est passé au garage, et le
+# souvenir est encore frais. Demander le jour même reviendrait à noter un
+# montage qui n'a pas eu lieu.
+REVIEW_DELAY_DAYS = 2
+
+
+@router.post("/reviews")
+async def reviews(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_require_cron_token),
+):
+    """Sollicite un avis sur le garage après une livraison.
+
+    À lancer une fois par jour. Ne concerne que les commandes livrées
+    chez un partenaire : l'avis porte sur le prestataire, il n'aurait
+    aucun sens pour une livraison à domicile.
+
+    Trois garde-fous, parce qu'un email d'avis mal ciblé est du spam :
+
+    * une seule demande par commande (`review_requested_at`) ;
+    * rien si le client a DÉJÀ noté ce garage — il ne pourrait pas
+      publier un second avis, l'endpoint le refuserait en 409 ;
+    * rien si la fiche garage a disparu depuis : le lien tomberait sur
+      une 404.
+    """
+    from app.models.garage import Garage, GarageReview
+    from app.modules.mailer.service import send_review_request
+
+    now = datetime.now(UTC)
+    threshold = now - timedelta(days=REVIEW_DELAY_DAYS)
+
+    rows = (await db.execute(
+        select(Order, User, Garage)
+        .join(User, User.id == Order.user_id)
+        .join(Garage, Garage.id == Order.garage_id)
+        .where(
+            Order.status == OrderStatus.delivered,
+            Order.delivery_mode == "partner_garage",
+            Order.review_requested_at.is_(None),
+            Order.delivered_at.is_not(None),
+            Order.delivered_at <= threshold,
+        )
+    )).all()
+
+    sent = 0
+    for order, user, garage in rows:
+        already = await db.scalar(
+            select(GarageReview.id).where(
+                GarageReview.garage_id == garage.id,
+                GarageReview.user_id == user.id,
+            )
+        )
+        # L'horodatage est posé dans les deux cas : le client qui a déjà
+        # noté ce garage n'a pas à être repêché au prochain passage.
+        order.review_requested_at = now
+        if already:
+            continue
+        send_review_request(order, user, garage.slug)
+        sent += 1
+
+    await db.commit()
+    return {"checked": len(rows), "sent": sent}

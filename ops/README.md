@@ -118,11 +118,26 @@ docker compose restart api
 crontab -e
 # Ajouter :
 0 * * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/dunning >/dev/null 2>&1
+15 * * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/appointments >/dev/null 2>&1
+30 10 * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/reviews >/dev/null 2>&1
 ```
 
 Effets :
-- Toutes les heures, relance les commandes `pending_payment` créées il y a plus d'1h
+
+`/cron/dunning` — toutes les heures
+- Relance les commandes `pending_payment` créées il y a plus d'1h
 - Au bout de 7 jours sans paiement, la commande est annulée automatiquement
+
+`/cron/appointments` — toutes les heures
+- Rappel la veille du montage (le no-show est le premier coût d'un planning en ligne)
+- Alerte « pneus pas encore expédiés » quand le rendez-vous approche, avec un
+  lien pour le décaler
+
+`/cron/reviews` — une fois par jour
+- Deux jours après une livraison en garage partenaire, demande un avis sur le
+  garage. Une seule demande par commande ; rien si le client a déjà noté ce
+  garage.
+- Décalé à 10h30 : un email d'avis n'a aucune raison de partir la nuit.
 
 ## Monitoring uptime (UptimeRobot, gratuit)
 

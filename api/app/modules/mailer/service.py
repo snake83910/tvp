@@ -476,3 +476,33 @@ def send_appointment_changed_to_garage(
             site_url=_site_url(),
         )
     )
+
+
+# ─────────────────────────────────────────────────────────────────
+# Sollicitation d'avis
+# ─────────────────────────────────────────────────────────────────
+
+def send_review_request(order: Order, user: User, garage_slug: str) -> None:
+    """Demande un avis quelques jours après la livraison.
+
+    Un avis ne se demande qu'une fois, et jamais le jour même : le
+    client vient de recevoir ses pneus, il ne les a pas encore fait
+    monter. Le lien pointe directement sur le formulaire de la fiche
+    garage — l'avis porte sur le prestataire, pas sur la commande.
+    """
+    garage = order.garage_snapshot or {}
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject=f"Comment s'est passé votre passage chez {garage.get('name', 'notre partenaire')} ?",
+            template="review_request.html",
+            civilite=_civilite(user),
+            order_number=order.order_number,
+            garage_name=garage.get("name", ""),
+            garage_city=garage.get("city", ""),
+            review_url=f"{_site_url()}/garages/{garage_slug}#avis",
+            order_url=f"{_site_url()}/commandes/{order.order_number}",
+            site_url=_site_url(),
+        )
+    )

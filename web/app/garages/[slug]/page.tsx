@@ -259,7 +259,9 @@ export default async function GaragePage(
           </section>
         )}
 
-        <section className="mt-8">
+        {/* id="avis" : cible du lien envoyé dans l'email de sollicitation
+            d'avis. scroll-mt laisse la place à l'en-tête collant. */}
+        <section id="avis" className="mt-8 scroll-mt-24">
           <div className="flex items-center gap-3">
             <h2 className="font-display text-lg font-bold text-ink">Avis clients</h2>
             {reviews.length > 0 && (

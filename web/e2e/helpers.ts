@@ -147,3 +147,73 @@ async function openPartnerSession(
   const body = await res.json();
   return { access: body.access_token, refresh: body.refresh_token };
 }
+
+
+// ── Compte administrateur ─────────────────────────────────────────
+
+export const ADMIN_EMAIL =
+  process.env.E2E_ADMIN_EMAIL || "e2e-admin@example.com";
+export const ADMIN_PASSWORD =
+  process.env.E2E_ADMIN_PASSWORD || "PneusE2e!2026-admin";
+
+let cachedAdmin: Promise<Session> | null = null;
+
+/**
+ * Session administrateur.
+ *
+ * Contrairement au client et au partenaire, ce compte ne peut pas être
+ * créé par l'API : aucun endpoint ne fabrique d'admin, et c'est une
+ * bonne chose. Il doit donc être semé avant le lancement de la suite :
+ *
+ *     docker compose exec api python -m app.scripts_seed_admin \
+ *         e2e-admin@example.com 'PneusE2e!2026-admin'
+ *
+ * Le message d'erreur le rappelle plutôt que de laisser croire à un
+ * mauvais mot de passe.
+ */
+export function loginAdmin(request: APIRequestContext): Promise<Session> {
+  cachedAdmin ??= openAdminSession(request);
+  return cachedAdmin;
+}
+
+async function openAdminSession(request: APIRequestContext): Promise<Session> {
+  const res = await request.post(`${API}/auth/admin/login`, {
+    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+  });
+
+  if (res.status() === 401) {
+    throw new Error(
+      `Compte admin de test absent ou mot de passe différent. Semez-le :\n` +
+        `  docker compose exec api python -m app.scripts_seed_admin ` +
+        `${ADMIN_EMAIL} '${ADMIN_PASSWORD}'`,
+    );
+  }
+  expect(res.ok(), `connexion admin e2e : ${res.status()}`).toBeTruthy();
+
+  const body = await res.json();
+  // Le seed ne pose pas de 2FA. S'il y en a une, le compte n'est pas
+  // celui qu'on croit — mieux vaut le dire que d'échouer plus loin sur
+  // un `access_token` indéfini.
+  expect(
+    body.requires_2fa,
+    "le compte admin de test ne doit pas avoir de 2FA",
+  ).toBeFalsy();
+  return { access: body.access_token, refresh: body.refresh_token };
+}
+
+
+/** Installe une session dans le navigateur.
+ *
+ *  Une page du domaine doit être chargée avant d'écrire dans son
+ *  localStorage : « about:blank » n'a pas d'origine. */
+export async function signIn(
+  page: import("@playwright/test").Page,
+  tokens: Session,
+  landing = "/",
+) {
+  await page.goto(landing);
+  await page.evaluate((t) => {
+    localStorage.setItem("tvp_access", t.access);
+    localStorage.setItem("tvp_refresh", t.refresh);
+  }, tokens);
+}

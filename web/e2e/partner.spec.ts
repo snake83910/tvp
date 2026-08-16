@@ -13,25 +13,14 @@
  * Prérequis : backend Docker lancé (docker compose up -d).
  */
 import { expect, test } from "@playwright/test";
-import { API, loginPartner } from "./helpers";
-
-/** Installe la session partenaire dans le navigateur. */
-async function signIn(page: import("@playwright/test").Page, tokens: { access: string; refresh: string }) {
-  // Une page du domaine doit être chargée avant d'écrire dans son
-  // localStorage : « about:blank » n'a pas d'origine.
-  await page.goto("/connexion?next=/partenaire");
-  await page.evaluate((t) => {
-    localStorage.setItem("tvp_access", t.access);
-    localStorage.setItem("tvp_refresh", t.refresh);
-  }, tokens);
-}
+import { API, loginPartner, signIn } from "./helpers";
 
 test("espace partenaire : fiche, coordonnées verrouillées et réglage des créneaux", async ({
   page,
   request,
 }) => {
   const tokens = await loginPartner(request);
-  await signIn(page, tokens);
+  await signIn(page, tokens, "/connexion?next=/partenaire");
 
   await page.goto("/partenaire");
 

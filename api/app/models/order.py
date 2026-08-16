@@ -210,6 +210,15 @@ class Order(Base):
     paid_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # Passage en « livrée ». Le statut seul ne dit pas QUAND : sans cette
+    # date, impossible de solliciter un avis quelques jours après coup.
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # Demande d'avis envoyée — une seule par commande, jamais de relance.
+    review_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     # Dernière relance email envoyée (dunning) — évite le spam
     last_dunning_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
