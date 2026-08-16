@@ -37,6 +37,7 @@ from app.schemas.order import (
     AdminOrderSummary,
     AdminStats,
     OrderItemDetail,
+    PlateProviderIn,
     PromoCodeIn,
     PromoCodeOut,
     PromoCodeUpdate,
@@ -688,6 +689,63 @@ async def orders_attention(
         "to_ship": serialize(to_ship_rows),
         "late": serialize(late_rows),
         "payment_stuck": serialize(stuck_rows),
+    }
+
+
+# ── Réglage : fournisseur d'immatriculation ────────────────────────
+
+@router.get("/settings/plate-provider")
+async def get_plate_provider(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Fournisseur utilisé pour la recherche par plaque, et son usage.
+
+    Les compteurs du jour sont là pour le quota : l'offre SIV gratuite
+    plafonne autour de 100 appels quotidiens, et sans compteur visible
+    on découvre la limite le jour où la recherche cesse de répondre.
+    """
+    from app.modules.catalog import plate as plate_lookup
+
+    return {
+        "mode": await plate_lookup.get_mode(db),
+        "modes": list(plate_lookup.MODES),
+        "siv_configured": plate_lookup.siv_configured(),
+        "usage_today": await plate_lookup.usage_today(),
+    }
+
+
+@router.patch("/settings/plate-provider")
+async def set_plate_provider(
+    data: PlateProviderIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Bascule le fournisseur. Tracé : le taux de réponse de la
+    recherche par plaque en dépend, et savoir QUAND l'ordre a changé
+    évite de chercher la cause ailleurs."""
+    from app.modules.catalog import plate as plate_lookup
+
+    previous = await plate_lookup.get_mode(db)
+    try:
+        await plate_lookup.set_mode(db, data.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await audit(
+        db, user=admin,
+        action="settings.plate_provider",
+        target_type="setting", target_id=plate_lookup.SETTING_KEY,
+        payload={"from": previous, "to": data.mode},
+        request=request,
+    )
+    await db.commit()
+    return {
+        "mode": data.mode,
+        "modes": list(plate_lookup.MODES),
+        "siv_configured": plate_lookup.siv_configured(),
+        "usage_today": await plate_lookup.usage_today(),
     }
 
 

@@ -11,19 +11,18 @@ Recherche catalogue.
   presentes) sont renvoyees pour batir la barre de filtres cote front.
 """
 import asyncio
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import cache_get, cache_set
 from app.core.deps import get_current_user_optional
 from app.core.errors import AppError, ErrorCode
 from app.db.session import get_db
 from app.integrations.supplier_base import VEHICLE_CATEGORIES
 from app.models.catalog import PricingRule
 from app.models.user import ProProfile, User
+from app.modules.catalog import plate as plate_lookup
 from app.modules.catalog.service import (
     load_detail as _load_detail,
 )
@@ -232,58 +231,32 @@ async def search_by_dimensions(
     )
 
 
-_MIDAS_URL = (
-    "https://www.midas.fr/api/edriver/vehicles/tires/search"
-    "?plateNumber={plate}&plateLocale=fr-FR"
-)
-_PLATE_TTL = 86400  # 24 h — les dimensions d'un véhicule ne changent pas
-
-_MIDAS_HEADERS = {
-    "accept": "application/json, text/plain, */*",
-    "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
-    "referer": "https://www.midas.fr/",
-    "origin": "https://www.midas.fr",
-}
-
-
 @router.get("/by-plate", response_model=list[VehicleDimension])
 async def search_by_plate(
     plate: str = Query(..., min_length=4, max_length=12, examples=["AA-123-AA"]),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Retourne les dimensions pneus d'un véhicule par plaque française.
+    """Dimensions pneus d'un véhicule, par plaque française.
 
-    Utilise l'API Midas eDriver via curl_cffi (empreinte TLS Chrome) pour
-    contourner la protection Cloudflare qui bloque Python/httpx.
-    Le résultat est mis en cache 24 h.
+    Deux fournisseurs, dans un ordre réglable depuis l'administration
+    (voir `modules/catalog/plate.py`). Résultat mis en cache 24 h : les
+    dimensions d'un véhicule ne changent pas, et le quota du
+    fournisseur principal se compte à la journée.
     """
-    from curl_cffi.requests import AsyncSession
-
-    clean = re.sub(r"[-\s]", "", plate).upper()
-    if not re.match(r"^[A-Z0-9]{4,9}$", clean):
+    clean = plate_lookup.clean_plate(plate)
+    if clean is None:
         raise HTTPException(status_code=422, detail="Format de plaque invalide")
 
-    cache_key = f"plate:{clean}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return cached
-
     try:
-        async with AsyncSession(impersonate="chrome120") as session:
-            resp = await session.get(
-                _MIDAS_URL.format(plate=clean),
-                headers=_MIDAS_HEADERS,
-                timeout=15,
-            )
-    except Exception as exc:
-        raise AppError(
-            status_code=502,
-            code=ErrorCode.PLATE_LOOKUP_UNAVAILABLE,
-            message="Service immatriculation indisponible.",
-        ) from exc
-
-    if resp.status_code == 404:
-        raise HTTPException(status_code=404, detail="Plaque non trouvée")
-    if resp.status_code == 403:
+        dims, _provider = await plate_lookup.lookup(db, clean)
+    except plate_lookup.PlateNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="Aucune dimension trouvée pour cette plaque"
+        ) from None
+    except plate_lookup.PlateUnavailableError as exc:
+        # Distinct du 404 : le véhicule existe peut-être, c'est NOUS qui
+        # ne savons pas répondre. Le client doit être invité à saisir
+        # ses dimensions, pas à conclure que sa voiture est inconnue.
         raise AppError(
             status_code=503,
             code=ErrorCode.PLATE_LOOKUP_UNAVAILABLE,
@@ -291,44 +264,10 @@ async def search_by_plate(
                 "Service immatriculation temporairement indisponible. "
                 "Veuillez saisir vos dimensions manuellement."
             ),
-        )
-    if resp.status_code != 200:
-        raise AppError(
-            status_code=502,
-            code=ErrorCode.PLATE_LOOKUP_UNAVAILABLE,
-            message="Service immatriculation indisponible.",
-            details={"upstream_status": resp.status_code},
-        )
+            details={"reason": str(exc)[:200]},
+        ) from exc
 
-    raw: list[dict] = resp.json()
-    if not isinstance(raw, list):
-        raise HTTPException(status_code=404, detail="Aucune donnée pour cette plaque")
-
-    seen: dict[str, dict] = {}
-    for tire in raw:
-        if "width" not in tire:
-            continue
-        key = f"{tire['width']}-{tire['height']}-{tire['diameter']}"
-        seen.setdefault(key, tire)
-
-    if not seen:
-        raise HTTPException(
-            status_code=404, detail="Aucune dimension trouvée pour cette plaque"
-        )
-
-    result = [
-        VehicleDimension(
-            width=int(t["width"]),
-            height=int(t["height"]),
-            diameter=int(t["diameter"]),
-            load_index=str(t.get("load", "")),
-            speed_rating=str(t.get("speed", "")),
-        )
-        for t in seen.values()
-    ]
-
-    await cache_set(cache_key, [r.model_dump() for r in result], _PLATE_TTL)
-    return result
+    return [VehicleDimension(**d) for d in dims]
 
 
 @router.get("/product/{ref}", response_model=TyreResult)

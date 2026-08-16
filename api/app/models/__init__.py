@@ -10,10 +10,11 @@ from app.models.order import (  # noqa: F401
     Payment,
 )
 from app.models.promo import PromoCode  # noqa: F401
+from app.models.setting import AppSetting  # noqa: F401
 from app.models.user import Address, ProProfile, User  # noqa: F401
 
 __all__ = [
     "User", "ProProfile", "Address", "Supplier", "PricingRule",
     "Cart", "CartItem", "Order", "OrderItem", "OrderStatus", "Payment",
-    "PromoCode", "Garage", "GarageReview", "CronRun",
+    "PromoCode", "Garage", "GarageReview", "CronRun", "AppSetting",
 ]

@@ -163,6 +163,37 @@ Effets :
   garage.
 - Décalé à 10h30 : un email d'avis n'a aucune raison de partir la nuit.
 
+## Recherche par plaque d'immatriculation
+
+Deux fournisseurs, dans un ordre **réglable depuis l'administration**
+(Réglages → Recherche par plaque), sans redéploiement :
+
+| Mode | Comportement |
+|---|---|
+| `siv` (défaut) | apiplaqueimmatriculation.com d'abord, Midas en secours |
+| `siv_only` | SIV seul — aucun appel à Midas |
+| `midas` | Midas seul, comportement historique |
+
+**Pour activer SIV** : inscription gratuite sur
+apiplaqueimmatriculation.com, puis `SIV_API_KEY=…` dans `.env` et
+`docker compose restart api`. Tant que la clé est absente, l'écran de
+réglages le signale et le mode `siv` retombe silencieusement sur Midas
+(`siv_only` renvoie alors une indisponibilité franche).
+
+**Pourquoi ce repli** : Midas n'est pas un fournisseur, c'est leur API
+interne appelée en imitant l'empreinte TLS de Chrome (`curl_cffi`,
+`impersonate="chrome120"`) pour passer leur protection anti-bot. Sans
+convention, l'accès peut cesser du jour au lendemain, et le procédé se
+défend mal face à un concurrent direct. `siv_only` est la cible ; les
+deux autres modes sont là pour la transition et le dépannage.
+
+Le résultat est mis en cache 24 h par plaque, y compris les plaques
+introuvables : les dimensions d'un véhicule ne changent pas, et le
+quota SIV (~100 appels/jour sur l'offre gratuite) se compte à la
+journée. L'écran de réglages affiche les appels du jour par
+fournisseur — les réponses servies par le cache n'y figurent pas,
+puisqu'elles ne consomment rien.
+
 ## Ce qui est transmis à Sogecommerce au paiement
 
 `Charge/CreatePayment` reçoit désormais :

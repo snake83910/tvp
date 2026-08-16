@@ -351,6 +351,11 @@ class StatusUpdateIn(BaseModel):
     refund_manual: bool = False
 
 
+class PlateProviderIn(BaseModel):
+    """Choix du fournisseur d'immatriculation (voir catalog/plate.py)."""
+    mode: str
+
+
 class AdminStats(BaseModel):
     orders_by_status: dict[str, int]
     revenue_total_ttc: float

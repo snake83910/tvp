@@ -98,6 +98,19 @@ export interface AdminOrderDetail extends OrderDetail {
   payment_checked_at: string | null;
 }
 
+export interface PlateProviderSetting {
+  /** siv | siv_only | midas */
+  mode: string;
+  modes: string[];
+  /** SIV_API_KEY renseignée côté serveur ? Sans elle, le mode SIV est
+   *  inopérant et le site retombe sur Midas (ou ne répond plus, en
+   *  mode siv_only). */
+  siv_configured: boolean;
+  /** Appels du jour par fournisseur — le quota SIV se compte à la
+   *  journée. */
+  usage_today: Record<string, number>;
+}
+
 export interface CronRunStatus {
   job: string;
   /** ok | error | late | never_ran */
@@ -276,6 +289,14 @@ export const adminApi = {
    *  de paiement et les rappels de rendez-vous s'arrêtent alors sans
    *  autre signal. */
   getCronRuns: () => call<CronRunStatus[]>(`/admin/cron-runs`),
+
+  getPlateProvider: () =>
+    call<PlateProviderSetting>(`/admin/settings/plate-provider`),
+
+  setPlateProvider: (mode: string) =>
+    call<PlateProviderSetting>(`/admin/settings/plate-provider`, "PATCH", {
+      mode,
+    }),
 
   bulkEmail: (order_numbers: string[], subject: string, body: string) =>
     call<{ sent: number }>(`/admin/bulk-email`, "POST", { order_numbers, subject, body }),
