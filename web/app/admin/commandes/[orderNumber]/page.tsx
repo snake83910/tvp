@@ -8,7 +8,15 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { useToast } from "@/components/admin/Toast";
-import { formatEuro } from "@/lib/money";
+import {
+  AddressBlock,
+  DenseRow,
+  OrderDates,
+  OrderItems,
+  OrderTotals,
+  TrackingBlock,
+  invoiceLabel,
+} from "@/components/order/blocks";
 
 const TRANSITION_LABEL: Record<string, string> = {
   sent_to_supplier: "Transmise au fournisseur",
@@ -150,21 +158,12 @@ export default function AdminOrderDetail() {
             <h1 className="font-display text-3xl font-black text-ink">{order.order_number}</h1>
             <CopyButton value={order.order_number} />
           </div>
-          {order.invoice_number && (
+          {invoiceLabel(order) && (
             <p className="mt-0.5 text-sm font-semibold text-signal">
-              Facture {`FAC-${new Date(order.paid_at!).getFullYear()}-${String(order.invoice_number).padStart(6, "0")}`}
+              Facture {invoiceLabel(order)}
             </p>
           )}
-          <p className="mt-1 text-sm text-ink-muted">
-            {new Date(order.created_at).toLocaleDateString("fr-FR", {
-              day: "2-digit", month: "long", year: "numeric",
-            })}
-            {order.paid_at && (
-              <> · Payée le {new Date(order.paid_at).toLocaleDateString("fr-FR", {
-                day: "2-digit", month: "long", year: "numeric",
-              })}</>
-            )}
-          </p>
+          <OrderDates order={order} />
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={order.status} />
@@ -184,76 +183,39 @@ export default function AdminOrderDetail() {
 
           {/* Client */}
           <Section title="Client">
-            <Row label="Nom" value={order.customer_name ?? "—"} />
-            <Row label="Email" value={order.customer_email} />
+            <DenseRow label="Nom" value={order.customer_name ?? "—"} />
+            <DenseRow label="Email" value={order.customer_email} />
           </Section>
 
           {/* Adresse */}
           <Section title="Adresse de livraison">
-            {addr.label && <Row label="Libellé" value={addr.label} />}
-            <Row label="Adresse" value={[addr.line1, addr.line2].filter(Boolean).join(", ")} />
-            <Row label="Ville" value={`${addr.postal_code} ${addr.city}`} />
-            <Row label="Pays" value={addr.country ?? "FR"} />
+            <AddressBlock address={addr} fallbackLabel="Adresse de livraison" dense />
           </Section>
 
           {billingDiffers && (
             <Section title="Adresse de facturation">
-              {billing.label && <Row label="Libellé" value={billing.label} />}
-              <Row label="Adresse" value={[billing.line1, billing.line2].filter(Boolean).join(", ")} />
-              <Row label="Ville" value={`${billing.postal_code} ${billing.city}`} />
-              <Row label="Pays" value={billing.country ?? "FR"} />
+              <AddressBlock address={billing} fallbackLabel="Adresse de facturation" dense />
             </Section>
           )}
 
           {/* Articles */}
           <Section title="Articles">
-            <table className="w-full text-sm">
-              <thead className="border-b border-line text-xs font-bold uppercase tracking-wider text-ink-muted">
-                <tr>
-                  <th className="pb-2 text-left">Réf.</th>
-                  <th className="pb-2 text-left">Désignation</th>
-                  <th className="pb-2 text-center">Qté</th>
-                  <th className="pb-2 text-right">PU TTC</th>
-                  <th className="pb-2 text-right">Total TTC</th>
-                </tr>
-              </thead>
-              <tbody>
-                {order.items.map((it) => (
-                  <tr key={it.supplier_ref} className="border-t border-line">
-                    <td className="py-2 pr-3 font-mono text-xs text-ink-muted">
-                      {it.supplier_ref}
-                    </td>
-                    <td className="py-2 pr-4 text-ink">{it.label}</td>
-                    <td className="py-2 text-center text-ink-soft">{it.quantity}</td>
-                    <td className="py-2 text-right text-ink-soft">
-                      {formatEuro(it.unit_price_ttc)}
-                    </td>
-                    <td className="py-2 text-right font-semibold text-ink">
-                      {formatEuro(it.line_total_ttc)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="mt-4 border-t border-line pt-4 text-sm space-y-1">
-              <div className="flex justify-between text-ink-soft">
-                <span>Articles HT</span>
-                <span>{formatEuro(order.articles_ht)}</span>
-              </div>
-              <div className="flex justify-between text-ink-soft">
-                <span>Livraison TTC</span>
-                <span>{formatEuro(order.shipping_ttc)}</span>
-              </div>
-              <div className="flex justify-between text-ink-soft">
-                <span>TVA</span>
-                <span>{formatEuro(order.total_vat)}</span>
-              </div>
-              <div className="flex justify-between border-t border-line pt-2 font-display text-base font-black text-ink">
-                <span>Total TTC</span>
-                <span>{formatEuro(order.total_ttc)}</span>
-              </div>
+            <OrderItems items={order.items} dense />
+            <div className="mt-4 border-t border-line pt-4">
+              {/* Le récapitulatif admin omettait la remise promo : sur une
+                  commande remisée, articles + livraison + TVA ne tombaient
+                  pas sur le total affiché. */}
+              <OrderTotals order={order} dense />
             </div>
           </Section>
+
+          {/* Suivi : l'admin saisissait transporteur et numéro dans le
+              formulaire de statut sans jamais les revoir ensuite. */}
+          {(order.status === "shipped" || order.status === "delivered") && (
+            <Section title="Suivi du colis">
+              <TrackingBlock order={order} />
+            </Section>
+          )}
         </div>
 
         {/* Colonne latérale — onglets Statut / Note / Historique */}
@@ -429,15 +391,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="rounded-xl border border-line bg-paper p-5 shadow-card">
       <p className="mb-4 text-xs font-bold uppercase tracking-wider text-ink-muted">{title}</p>
       {children}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between py-1 text-sm">
-      <span className="text-ink-muted">{label}</span>
-      <span className="text-right font-medium text-ink">{value}</span>
     </div>
   );
 }

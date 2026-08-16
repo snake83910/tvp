@@ -7,22 +7,21 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { useCart } from "@/components/CartProvider";
 import { AppointmentCard } from "@/components/checkout/AppointmentCard";
 import { formatEuro } from "@/lib/money";
+import { STATUS_COLOR, STATUS_LABEL } from "@/lib/orderStatus";
+import {
+  AddressBlock,
+  OrderDates,
+  OrderItems,
+  OrderTotals,
+  TrackingBlock,
+  invoiceLabel,
+} from "@/components/order/blocks";
 import {
   accountApi,
   downloadInvoice,
   useCurrentUser,
   type OrderDetail,
 } from "@/lib/auth";
-
-const STATUS_LABEL: Record<string, string> = {
-  pending_payment: "En attente de paiement",
-  paid: "Payée",
-  sent_to_supplier: "En cours de préparation",
-  shipped: "Expédiée",
-  delivered: "Livrée",
-  cancelled: "Annulée",
-  refunded: "Remboursée",
-};
 
 /** Statuts pour lesquels le paiement est effectivement encaissé. */
 const PAID_STATUSES = new Set([
@@ -31,16 +30,6 @@ const PAID_STATUSES = new Set([
   "shipped",
   "delivered",
 ]);
-
-const STATUS_COLOR: Record<string, string> = {
-  pending_payment: "bg-paper-dim text-ink-soft",
-  paid: "bg-ok/10 text-ok",
-  sent_to_supplier: "bg-ok/10 text-ok",
-  shipped: "bg-ok/10 text-ok",
-  delivered: "bg-ok/10 text-ok",
-  cancelled: "bg-signal-light text-signal-dark",
-  refunded: "bg-signal-light text-signal-dark",
-};
 
 export default function OrderDetailPage(
   props: {
@@ -210,25 +199,15 @@ export default function OrderDetailPage(
             <h1 className="font-display text-3xl font-black tracking-tightest text-ink">
               Commande {order.order_number}
             </h1>
-            <p className="mt-1 text-sm text-ink-muted">
-              Passée le{" "}
-              {new Date(order.created_at).toLocaleDateString("fr-FR", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })}
-              {order.paid_at && (
-                <>
-                  {" "}
-                  · Payée le{" "}
-                  {new Date(order.paid_at).toLocaleDateString("fr-FR", {
-                    day: "2-digit",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </>
-              )}
-            </p>
+            {/* Le numéro de facture n'était affiché que côté admin ;
+                le client, qui en a besoin pour sa comptabilité, devait
+                ouvrir le PDF pour le lire. */}
+            {invoiceLabel(order) && (
+              <p className="mt-0.5 text-sm font-semibold text-signal">
+                Facture {invoiceLabel(order)}
+              </p>
+            )}
+            <OrderDates order={order} />
           </div>
           <div className="flex items-center gap-3">
             <span
@@ -292,28 +271,7 @@ export default function OrderDetailPage(
             <h2 className="border-b border-line px-6 py-4 font-display font-bold text-ink">
               Articles
             </h2>
-            <div className="divide-y divide-line">
-              {order.items.map((it) => (
-                <div
-                  key={it.supplier_ref}
-                  className="flex items-start justify-between gap-4 px-6 py-4"
-                >
-                  <div className="min-w-0">
-                    <p className="font-display font-bold text-ink">
-                      {it.label}
-                    </p>
-                    <p className="mt-1 text-sm text-ink-muted">
-                      Réf {it.supplier_ref} · {it.quantity} pneu
-                      {it.quantity > 1 ? "s" : ""} ×{" "}
-                      {formatEuro(it.unit_price_ttc)}
-                    </p>
-                  </div>
-                  <p className="shrink-0 font-display font-black text-ink">
-                    {formatEuro(it.line_total_ttc)}
-                  </p>
-                </div>
-              ))}
-            </div>
+            <OrderItems items={order.items} />
           </section>
 
           {/* Colonne récap */}
@@ -323,22 +281,7 @@ export default function OrderDetailPage(
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
                 Livraison
               </p>
-              <p className="text-sm font-semibold text-ink">
-                {addr.label ?? "Adresse de livraison"}
-              </p>
-              <p className="mt-1 text-sm text-ink-soft">
-                {addr.line1}
-                {addr.line2 ? (
-                  <>
-                    <br />
-                    {addr.line2}
-                  </>
-                ) : null}
-                <br />
-                {addr.postal_code} {addr.city}
-                <br />
-                {addr.country}
-              </p>
+              <AddressBlock address={addr} fallbackLabel="Adresse de livraison" />
               <p className="mt-3 text-xs text-ink-muted">
                 Mode :{" "}
                 {order.delivery_mode === "home"
@@ -358,22 +301,7 @@ export default function OrderDetailPage(
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
                   Facturation
                 </p>
-                <p className="text-sm font-semibold text-ink">
-                  {billing.label ?? "Adresse de facturation"}
-                </p>
-                <p className="mt-1 text-sm text-ink-soft">
-                  {billing.line1}
-                  {billing.line2 ? (
-                    <>
-                      <br />
-                      {billing.line2}
-                    </>
-                  ) : null}
-                  <br />
-                  {billing.postal_code} {billing.city}
-                  <br />
-                  {billing.country}
-                </p>
+                <AddressBlock address={billing} fallbackLabel="Adresse de facturation" />
               </div>
             )}
 
@@ -383,35 +311,7 @@ export default function OrderDetailPage(
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
                   Suivi de colis
                 </p>
-                {order.carrier && (
-                  <p className="text-sm text-ink-soft">
-                    Transporteur :{" "}
-                    <span className="font-semibold text-ink">{order.carrier}</span>
-                  </p>
-                )}
-                {order.tracking_number && (
-                  <p className="mt-1 text-sm text-ink-soft">
-                    N° de suivi :{" "}
-                    <span className="font-mono font-semibold text-ink">
-                      {order.tracking_number}
-                    </span>
-                  </p>
-                )}
-                {order.tracking_url && (
-                  <a
-                    href={order.tracking_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-signal px-4 py-2 text-sm font-bold text-white transition hover:bg-signal-dark"
-                  >
-                    Suivre mon colis →
-                  </a>
-                )}
-                {!order.tracking_number && !order.tracking_url && (
-                  <p className="text-sm text-ink-muted">
-                    Informations de suivi bientôt disponibles.
-                  </p>
-                )}
+                <TrackingBlock order={order} />
               </div>
             )}
 
@@ -420,57 +320,11 @@ export default function OrderDetailPage(
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-ink-muted">
                 Récapitulatif
               </p>
-              <Row k="Articles" v={order.articles_ttc} />
-              {(order.discount_ttc ?? 0) > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-ok">
-                    Remise{order.promo_code ? ` (${order.promo_code})` : ""}
-                  </span>
-                  <span className="font-semibold text-ok">
-                    −{formatEuro((order.discount_ttc ?? 0))}
-                  </span>
-                </div>
-              )}
-              <Row
-                k="Livraison"
-                v={order.shipping_ttc}
-                free={order.shipping_ttc === 0}
-              />
-              <div className="mt-2 flex justify-between border-t border-line pt-3 text-xs text-ink-muted">
-                <span>dont TVA</span>
-                <span>
-                  {formatEuro(order.total_vat)}
-                </span>
-              </div>
-              <div className="mt-3 flex justify-between border-t border-line pt-3 font-display text-xl font-black text-ink">
-                <span>Total TTC</span>
-                <span>
-                  {formatEuro(order.total_ttc)}
-                </span>
-              </div>
+              <OrderTotals order={order} />
             </div>
           </aside>
         </div>
       </main>
     </>
-  );
-}
-
-function Row({
-  k,
-  v,
-  free,
-}: {
-  k: string;
-  v: number;
-  free?: boolean;
-}) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-ink-soft">{k}</span>
-      <span className="font-semibold text-ink">
-        {free ? "Offerte" : formatEuro(v)}
-      </span>
-    </div>
   );
 }
