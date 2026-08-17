@@ -63,16 +63,21 @@ services:
   # ici — elle n'ajouterait rien contre quelqu'un qui a déjà un shell,
   # et ferait un secret de plus à gérer.
   #
-  # `--readonly` : sur la production, une écriture faite ici ne passerait
-  # ni par la machine à états des commandes, ni par l'audit, ni par les
-  # emails. Un statut passé à « remboursée » à la main marquerait la
-  # commande réglée sans qu'un centime ne bouge. On consulte, on ne
-  # modifie pas.
+  # L'ÉCRITURE EST OUVERTE, en connaissance de cause. Ce qui est écrit
+  # ici ne passe ni par la machine à états des commandes, ni par l'audit,
+  # ni par les emails : rien ne rattrapera une incohérence introduite à
+  # la main. Une sauvegarde avant toute modification, systématiquement :
+  #
+  #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  #     exec -T postgres pg_dump -U tvp -d tvp > avant-$(date +%F-%H%M).sql
+  #
+  # `--lock-session` : une seule connexion, celle de cette base. Interdit
+  # d'ouvrir une autre base depuis l'interface par mégarde.
   #
   # Pas de `restart` : il meurt au redémarrage du serveur, et c'est très
-  # bien. On le rallume pour une session de diagnostic, pas à demeure.
+  # bien. On le rallume pour une session de travail, pas à demeure.
   pgweb:
-    command: ["--readonly", "--lock-session"]
+    command: ["--lock-session"]
 
 volumes:
   uploads:
