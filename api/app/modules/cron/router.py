@@ -338,6 +338,19 @@ async def _run_appointments(db: AsyncSession) -> dict:
 # montage qui n'a pas eu lieu.
 REVIEW_DELAY_DAYS = 2
 
+#: Âge maximal d'une livraison encore sollicitable.
+#:
+#: Sans ce plafond, la PREMIÈRE exécution du job écrit à tout l'historique
+#: d'un coup : chaque commande jamais sollicitée remonte, y compris celles
+#: livrées il y a six mois. Le client reçoit « votre avis sur vos nouveaux
+#: pneus ? » pour un achat qu'il a oublié, et nous, une salve d'envois qui
+#: ressemble à du spam aux yeux des filtres.
+#:
+#: Le même piège se referme après une panne : un crontab cassé pendant
+#: cinq semaines, réparé un matin, rattraperait cinq semaines d'un coup.
+#: Passé un mois, l'avis n'a de toute façon plus grand intérêt.
+REVIEW_MAX_AGE_DAYS = 30
+
 
 @router.post("/reviews")
 async def reviews(
@@ -377,6 +390,7 @@ async def _run_reviews(db: AsyncSession) -> dict:
 
     now = datetime.now(UTC)
     threshold = now - timedelta(days=REVIEW_DELAY_DAYS)
+    trop_vieux = now - timedelta(days=REVIEW_MAX_AGE_DAYS)
 
     rows = (await db.execute(
         select(Order, User, Garage)
@@ -388,6 +402,7 @@ async def _run_reviews(db: AsyncSession) -> dict:
             Order.review_requested_at.is_(None),
             Order.delivered_at.is_not(None),
             Order.delivered_at <= threshold,
+            Order.delivered_at >= trop_vieux,
         )
     )).all()
 
@@ -433,6 +448,7 @@ async def _run_product_reviews(db: AsyncSession) -> dict:
 
     now = datetime.now(UTC)
     threshold = now - timedelta(days=REVIEW_DELAY_DAYS)
+    trop_vieux = now - timedelta(days=REVIEW_MAX_AGE_DAYS)
 
     rows = (await db.execute(
         select(Order, User)
@@ -442,6 +458,7 @@ async def _run_product_reviews(db: AsyncSession) -> dict:
             Order.product_review_requested_at.is_(None),
             Order.delivered_at.is_not(None),
             Order.delivered_at <= threshold,
+            Order.delivered_at >= trop_vieux,
         )
     )).all()
 

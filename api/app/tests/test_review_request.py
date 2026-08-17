@@ -20,7 +20,11 @@ import pytest
 # `_tracked`, qui écrit sa propre trace et commite une seconde fois.
 # Ce test-ci porte sur la sollicitation d'avis, pas sur le suivi
 # d'exécution (voir test_cron_tracking.py).
-from app.modules.cron.router import REVIEW_DELAY_DAYS, _run_reviews
+from app.modules.cron.router import (
+    REVIEW_DELAY_DAYS,
+    REVIEW_MAX_AGE_DAYS,
+    _run_reviews,
+)
 
 NOW = datetime(2026, 8, 16, 10, 0, tzinfo=UTC)
 
@@ -127,3 +131,32 @@ def test_delai_non_nul():
     """Demander un avis le jour de la livraison noterait un montage qui
     n'a pas encore eu lieu."""
     assert REVIEW_DELAY_DAYS >= 1
+
+
+async def test_les_livraisons_trop_anciennes_sont_exclues():
+    """Plafond d'âge sur la requête elle-même.
+
+    Sans lui, la PREMIÈRE exécution du job écrit à tout l'historique d'un
+    coup — y compris à qui a été livré il y a six mois. Même piège après
+    une panne : un crontab cassé cinq semaines, réparé un matin,
+    rattraperait cinq semaines d'envois d'un seul passage.
+
+    La base simulée rend ses lignes sans appliquer le moindre WHERE : on
+    ne peut donc pas l'éprouver par le résultat. On inspecte le SQL
+    généré, qui est ce qui protège réellement.
+    """
+    db = _db([])
+    await _run_reviews(db)
+
+    sql = str(db.execute.await_args_list[0].args[0])
+    # Une borne BASSE sur delivered_at, en plus de la borne haute des
+    # deux jours d'attente.
+    assert sql.count("orders.delivered_at") >= 3
+    assert ">=" in sql
+
+
+def test_le_plafond_reste_raisonnable():
+    """Trop court, on perd des avis légitimes ; trop long, on sollicite
+    sur un achat oublié. Un mois est la fenêtre où le souvenir vaut
+    encore quelque chose."""
+    assert REVIEW_DELAY_DAYS < REVIEW_MAX_AGE_DAYS <= 60
