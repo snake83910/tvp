@@ -39,6 +39,7 @@ from app.schemas.order import (
     AdminStats,
     EmailPreviewIn,
     EmailTemplateIn,
+    InstallmentsSettingIn,
     OrderItemDetail,
     PlateProviderIn,
     PromoCodeIn,
@@ -1344,6 +1345,61 @@ async def force_verify_email(
         )
         await db.commit()
     return None
+
+
+# ── Réglage : paiement en plusieurs fois ───────────────────────────
+
+@router.get("/settings/installments")
+async def get_installments_setting(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """État du paiement en plusieurs fois.
+
+    `configured` distingue les deux « éteints » possibles : personne ne
+    l'a allumé, ou la clé d'API manque. Sans cette nuance, un admin qui
+    bascule l'interrupteur sans effet cherche la cause au mauvais
+    endroit.
+    """
+    from app.core.config import settings
+    from app.integrations import alma
+    from app.modules.orders import installments
+
+    return {
+        "enabled": await installments.is_enabled(db),
+        "configured": alma.configured(),
+        "mode": settings.alma_mode,
+        "installments": list(alma.INSTALLMENTS),
+    }
+
+
+@router.patch("/settings/installments")
+async def set_installments_setting(
+    data: InstallmentsSettingIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Allume ou éteint le 3x/4x. Tracé : c'est un moyen de paiement,
+    savoir qui l'a coupé et quand vaut mieux que de le deviner en
+    regardant la chute des commandes."""
+    from app.modules.orders import installments
+
+    previous = await installments.is_enabled(db)
+    try:
+        await installments.set_enabled(db, data.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await audit(
+        db, user=admin,
+        action="settings.installments",
+        target_type="setting", target_id=installments.SETTING_KEY,
+        payload={"from": previous, "to": data.enabled},
+        request=request,
+    )
+    await db.commit()
+    return await get_installments_setting(db=db, _=admin)
 
 
 # ── Codes promo ────────────────────────────────────────────────────

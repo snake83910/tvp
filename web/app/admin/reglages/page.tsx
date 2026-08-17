@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   adminApi,
   type CronRunStatus,
+  type InstallmentsSetting,
   type PlateProviderSetting,
   type PlateTestResult,
 } from "@/lib/admin";
@@ -77,6 +78,7 @@ const MODE_INFO: Record<
 export default function AdminReglages() {
   const { toast } = useToast();
   const [plate, setPlate] = useState<PlateProviderSetting | null>(null);
+  const [alma, setAlma] = useState<InstallmentsSetting | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testPlate, setTestPlate] = useState("");
@@ -92,7 +94,25 @@ export default function AdminReglages() {
       .then(setPlate)
       .catch((e) => setError(e instanceof Error ? e.message : "Erreur"));
     adminApi.getCronRuns().then(setJobs).catch(() => setJobs([]));
+    adminApi.getInstallments().then(setAlma).catch(() => setAlma(null));
   }, []);
+
+  async function toggleAlma(enabled: boolean) {
+    setSaving("alma");
+    try {
+      setAlma(await adminApi.setInstallments(enabled));
+      toast(
+        enabled
+          ? "Paiement en plusieurs fois activé"
+          : "Paiement en plusieurs fois désactivé",
+        "success",
+      );
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Erreur", "error");
+    } finally {
+      setSaving(null);
+    }
+  }
 
   async function launch(job: string) {
     setRunning(job);
@@ -305,6 +325,71 @@ export default function AdminReglages() {
                 </ul>
               )}
             </div>
+          </>
+        )}
+      </section>
+
+      {/* Paiement en plusieurs fois. Interrupteur et non variable
+          d'environnement : le jour où quelque chose cloche chez Alma un
+          samedi après-midi, il faut pouvoir l'éteindre depuis le
+          navigateur, sans redéploiement. */}
+      <section className="mt-8 rounded-2xl border border-line bg-paper p-6 shadow-card">
+        <h2 className="font-display text-lg font-black text-ink">
+          Paiement en plusieurs fois
+        </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Propose le règlement en 3 ou 4 fois par Alma sur la page de
+          paiement. Alma vous règle l&apos;intégralité à la commande et se
+          fait rembourser par le client.
+        </p>
+
+        {!alma ? (
+          <p className="mt-4 text-sm text-ink-muted">Chargement…</p>
+        ) : (
+          <>
+            {!alma.configured && (
+              <p className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                <strong>Clé d&apos;API absente.</strong> Ouvrez un compte sur
+                alma.eu, puis renseignez <code>ALMA_API_KEY</code> dans le{" "}
+                <code>.env</code> du serveur. L&apos;activation reste refusée
+                tant qu&apos;elle manque — un bouton « payer en 3 fois » qui
+                mène à une erreur coûte la vente.
+              </p>
+            )}
+
+            <div className="mt-5 flex flex-wrap items-center gap-4">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={alma.enabled}
+                disabled={saving === "alma" || !alma.configured}
+                onClick={() => toggleAlma(!alma.enabled)}
+                className={`relative h-8 w-14 shrink-0 rounded-full transition disabled:opacity-40 ${
+                  alma.enabled ? "bg-ok" : "bg-line"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all ${
+                    alma.enabled ? "left-7" : "left-1"
+                  }`}
+                />
+              </button>
+              <div>
+                <p className="font-semibold text-ink">
+                  {alma.enabled ? "Activé" : "Désactivé"}
+                </p>
+                <p className="text-xs text-ink-muted">
+                  Échéanciers proposés : {alma.installments.join(" et ")} fois ·
+                  environnement <strong>{alma.mode}</strong>
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs text-ink-muted">
+              Alma vérifie l&apos;éligibilité montant par montant : sous son
+              plancher ou au-dessus de son plafond contractuel, l&apos;option
+              ne s&apos;affiche pas, même activée.
+            </p>
           </>
         )}
       </section>

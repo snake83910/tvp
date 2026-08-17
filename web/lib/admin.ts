@@ -149,6 +149,18 @@ export interface PlateProviderSetting {
   usage_today: Record<string, number>;
 }
 
+export interface InstallmentsSetting {
+  /** Interrupteur, en base : modifiable sans redéploiement. */
+  enabled: boolean;
+  /** ALMA_API_KEY renseignée côté serveur ? Distingue les deux
+   *  « éteint » possibles — personne ne l'a allumé, ou la clé manque. */
+  configured: boolean;
+  /** sandbox | live */
+  mode: string;
+  /** Échéanciers proposés, ex. [3, 4]. */
+  installments: number[];
+}
+
 export interface PlateTestResult {
   provider: string;
   ok: boolean;
@@ -395,6 +407,14 @@ export const adminApi = {
   setPlateProvider: (mode: string) =>
     call<PlateProviderSetting>(`/admin/settings/plate-provider`, "PATCH", {
       mode,
+    }),
+
+  getInstallments: () =>
+    call<InstallmentsSetting>(`/admin/settings/installments`),
+
+  setInstallments: (enabled: boolean) =>
+    call<InstallmentsSetting>(`/admin/settings/installments`, "PATCH", {
+      enabled,
     }),
 
   /** Déclenche un job planifié à la main. Il peut envoyer des emails

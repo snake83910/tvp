@@ -32,6 +32,10 @@ interface PaymentInit {
   form_token: string;
   amount_cents: number;
   public_key: string;
+  /** Échéanciers Alma proposables sur ce montant, ex. [3, 4]. Vide
+   *  quand le moyen de paiement est éteint, non configuré, ou que le
+   *  montant sort des bornes du contrat. */
+  installments?: number[];
 }
 
 export default function PaymentPage(
@@ -46,6 +50,7 @@ export default function PaymentPage(
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [simBusy, setSimBusy] = useState(false);
+  const [almaBusy, setAlmaBusy] = useState<number | null>(null);
   const [formReady, setFormReady] = useState(false);
   const krRef = useRef<any>(null);
 
@@ -207,6 +212,30 @@ export default function PaymentPage(
       setFormReady(false);
     };
   }, [init, params.orderNumber, router]);
+
+  /** Redirige vers Alma. La commande existe déjà et reste « en attente
+   *  de paiement » : si le client abandonne sur leur page, il retombera
+   *  ici par le lien de son email, rien n'est perdu. */
+  async function payInInstallments(n: number) {
+    setAlmaBusy(n);
+    setError(null);
+    try {
+      const res = await authFetch(`/payment/alma/init/${params.orderNumber}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ installments: n }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message ?? body.detail ?? "Erreur");
+      // `assign` plutôt que l'affectation de `location.href` : le lint
+      // interdit d'écrire dans un objet du navigateur, et la méthode dit
+      // la même chose — on quitte le site pour la page d'Alma.
+      window.location.assign(body.url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+      setAlmaBusy(null);
+    }
+  }
 
   async function simulatePayment() {
     if (!init) return;
@@ -404,6 +433,43 @@ export default function PaymentPage(
 
             {!needsOtp && !init && !error && !configError && (
               <PaymentSkeleton label="Initialisation du paiement…" />
+            )}
+
+            {/* Paiement en plusieurs fois — AU-DESSUS du formulaire
+                carte. C'est ce que le client cherche du regard sur un
+                panier à trois chiffres ; enterré sous les champs de
+                carte, il ne le verrait pas. */}
+            {!needsOtp && init && (init.installments?.length ?? 0) > 0 && (
+              <div className="mb-6 rounded-xl border border-line bg-paper-dim p-5">
+                <p className="font-display text-base font-bold text-ink">
+                  Payer en plusieurs fois
+                </p>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Étalez le règlement, sans dossier de crédit. Vérification
+                  et paiement chez Alma, en quelques secondes.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {init.installments!.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => payInInstallments(n)}
+                      disabled={almaBusy !== null}
+                      className="rounded-full border-2 border-ink bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:bg-ink hover:text-paper disabled:opacity-50"
+                    >
+                      {almaBusy === n
+                        ? "Redirection…"
+                        : `${n}× ${formatEuro(
+                            Math.round((init.amount_cents / n)) / 100,
+                          )}`}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-ink-muted">
+                  Montants indicatifs, hors frais éventuels. Le détail exact
+                  s&apos;affiche chez Alma avant validation.
+                </p>
+              </div>
             )}
 
             {init && init.provider === "sogecommerce" && (

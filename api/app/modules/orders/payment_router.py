@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.core.deps import get_current_user
 from app.core.errors import AppError, ErrorCode
 from app.db.session import get_db
+from app.integrations import alma
 from app.integrations.payment import BuyerInfo, get_payment_provider
 from app.models.order import Order, OrderStatus, Payment
 from app.models.user import ProProfile, User
@@ -31,8 +32,9 @@ from app.modules.mailer.service import (
     send_garage_order_notification,
     send_order_confirmation,
 )
+from app.modules.orders import installments as installments_setting
 from app.modules.orders import reconcile
-from app.schemas.order import PaymentInitOut
+from app.schemas.order import AlmaInitIn, AlmaInitOut, PaymentInitOut
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 
@@ -66,12 +68,17 @@ def _buyer_info(
     )
 
 
-@router.post("/init/{order_number}", response_model=PaymentInitOut)
-async def init_payment(
-    order_number: str,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+async def _payable_order(
+    order_number: str, user: User, db: AsyncSession
+) -> Order:
+    """Charge la commande et vérifie qu'elle peut être payée MAINTENANT,
+    par CE client.
+
+    Facteur commun aux deux moyens de paiement : carte et paiement en
+    plusieurs fois doivent opposer exactement les mêmes refus. Un
+    contrôle présent d'un côté et pas de l'autre offrirait un
+    contournement — il suffirait de choisir l'autre bouton.
+    """
     order = await db.scalar(
         select(Order).where(Order.order_number == order_number)
     )
@@ -105,6 +112,16 @@ async def init_payment(
                 "code à 6 chiffres que nous venons de vous envoyer."
             ),
         )
+    return order
+
+
+@router.post("/init/{order_number}", response_model=PaymentInitOut)
+async def init_payment(
+    order_number: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    order = await _payable_order(order_number, user, db)
 
     # Raison sociale d'un compte pro, chargée explicitement : la relation
     # `user.pro_profile` est paresseuse, et y toucher dans un contexte
@@ -147,7 +164,154 @@ async def init_payment(
         form_token=init.form_token,
         amount_cents=init.amount_cents,
         public_key=init.public_key,
+        # Rendus avec l'init plutôt que par un appel dédié : la page de
+        # paiement doit savoir dès son premier affichage s'il faut
+        # proposer le 3x/4x. Un second aller-retour ferait apparaître le
+        # bouton après coup, sous le doigt du client.
+        installments=await installments_setting.options_for(
+            db, order.total_ttc_cents
+        ),
     )
+
+
+# ── Paiement en plusieurs fois (Alma) ──────────────────────────────
+
+@router.post("/alma/init/{order_number}", response_model=AlmaInitOut)
+async def init_alma_payment(
+    order_number: str,
+    data: AlmaInitIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Ouvre un paiement Alma et rend l'URL de redirection.
+
+    Les mêmes refus que la carte, par `_payable_order`. L'échéancier
+    demandé est revalidé contre Alma : un client qui rejouerait la
+    requête avec `installments: 12` ne doit pas obtenir un échéancier
+    hors contrat.
+    """
+    order = await _payable_order(order_number, user, db)
+
+    autorises = await installments_setting.options_for(db, order.total_ttc_cents)
+    if data.installments not in autorises:
+        raise AppError(
+            status_code=400,
+            code=ErrorCode.BAD_REQUEST,
+            message="Ce nombre d'échéances n'est pas disponible pour ce montant.",
+        )
+
+    site = settings.public_site_url.rstrip("/")
+    try:
+        created = await alma.create_payment(
+            order_number=order.order_number,
+            amount_cents=order.total_ttc_cents,
+            installments=data.installments,
+            return_url=f"{site}/paiement/retour?cmd={order.order_number}",
+            ipn_url=settings.alma_ipn_url,
+            cancel_url=f"{site}/paiement/{order.order_number}",
+            first_name=user.first_name or "",
+            last_name=user.last_name or "",
+            email=user.email,
+            phone=user.phone,
+            billing=order.billing_address or order.shipping_address,
+            shipping=order.shipping_address,
+        )
+    except alma.AlmaError as exc:
+        raise AppError(
+            status_code=502,
+            code=ErrorCode.BAD_REQUEST,
+            message=(
+                "Le paiement en plusieurs fois est momentanément "
+                "indisponible. Réglez par carte, ou réessayez plus tard."
+            ),
+            details={"cause": str(exc)},
+        ) from exc
+
+    if not created.url:
+        raise AppError(
+            status_code=502,
+            code=ErrorCode.BAD_REQUEST,
+            message="Alma n'a pas rendu d'URL de paiement.",
+        )
+
+    # Un seul Payment par commande, comme pour la carte : le client a pu
+    # initialiser un paiement carte avant de changer d'avis.
+    payment = await db.scalar(select(Payment).where(Payment.order_id == order.id))
+    if payment is None:
+        payment = Payment(order_id=order.id)
+        db.add(payment)
+    payment.provider = "alma"
+    payment.provider_ref = created.id
+    payment.amount_cents = order.total_ttc_cents
+    payment.status = "initialised"
+    await db.commit()
+
+    return AlmaInitOut(url=created.url, installments=data.installments)
+
+
+@router.post("/alma/ipn")
+async def alma_ipn(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Webhook Alma.
+
+    SÉCURITÉ, et c'est le point à ne pas manquer : Alma NE SIGNE PAS ses
+    webhooks. Le contenu de cet appel ne vaut donc rien — n'importe qui
+    connaissant l'URL peut la marteler. On n'en retient qu'une chose,
+    l'identifiant de paiement, et on va lire l'état RÉEL chez Alma.
+    C'est finalement plus solide qu'une signature : il n'y a rien à
+    falsifier, la source d'autorité est l'API elle-même.
+
+    Alma passe `pid` en paramètre d'URL. On accepte aussi le corps JSON,
+    au cas où ce détail changerait.
+    """
+    pid = request.query_params.get("pid")
+    if not pid:
+        try:
+            body = await request.json()
+            pid = body.get("payment_id") or body.get("id") or body.get("pid")
+        except Exception:
+            pid = None
+    if not pid:
+        raise HTTPException(status_code=400, detail="Identifiant de paiement absent")
+
+    try:
+        remote = await alma.get_payment(pid)
+    except alma.AlmaError as exc:
+        # 502 et pas 200 : Alma réessaie, et on veut qu'il réessaie.
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    payment = await db.scalar(
+        select(Payment).where(Payment.provider_ref == remote.id)
+    )
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Paiement inconnu")
+    if payment.status == "captured":
+        return {"status": "already_processed"}
+
+    order = await db.get(Order, payment.order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+
+    # Trace de ce qu'Alma nous a répondu, pas de ce que l'appelant a
+    # prétendu : c'est cette lecture qui a décidé.
+    payment.ipn_payload = {
+        "source": "alma_get_payment",
+        "id": remote.id,
+        "processing_status": remote.processing_status,
+        "purchase_amount": remote.purchase_amount,
+    }
+    # Sans signature à vérifier, le champ perdrait son sens s'il valait
+    # « vrai » : ici la preuve est la relecture, pas un HMAC.
+    payment.ipn_signature_ok = False
+
+    await apply_payment_result(
+        db, payment, order,
+        success=remote.paid,
+        amount_cents=remote.purchase_amount,
+    )
+    return {"status": "ok", "order_status": order.status.value}
 
 
 @router.post("/ipn")
@@ -194,22 +358,49 @@ async def payment_ipn(
     if order is None:
         raise HTTPException(status_code=404, detail="Commande introuvable")
 
-    # Un IPN "PAID" dont le montant ne correspond pas au total de la
-    # commande (paiement partiel, montant altéré côté PSP) ne doit
-    # JAMAIS valider la commande.
-    if result.success and result.amount_cents != order.total_ttc_cents:
+    await apply_payment_result(
+        db, payment, order,
+        success=result.success,
+        amount_cents=result.amount_cents,
+    )
+    return {"status": "ok", "order_status": order.status.value}
+
+
+async def apply_payment_result(
+    db: AsyncSession,
+    payment: Payment,
+    order: Order,
+    *,
+    success: bool,
+    amount_cents: int,
+) -> bool:
+    """Applique le résultat d'un paiement à la commande. Rend True si
+    elle vient de basculer en « payée ».
+
+    UN SEUL chemin de l'argent, quel que soit le moyen de paiement. La
+    carte bancaire et le paiement en plusieurs fois arrivent par des
+    webhooks très différents — l'un signé, l'autre relu chez le
+    prestataire — mais ce qu'ils déclenchent ensuite doit être identique
+    au détail près : même contrôle de montant, même transition d'état,
+    même numérotation de facture, mêmes emails. Deux copies auraient
+    fini par diverger, et la divergence se serait vue chez le client.
+    """
+    # Un paiement « réussi » dont le montant ne correspond pas au total
+    # (paiement partiel, montant altéré côté prestataire) ne doit JAMAIS
+    # valider la commande.
+    if success and amount_cents != order.total_ttc_cents:
         payment.status = "amount_mismatch"
         await db.commit()
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Montant IPN ({result.amount_cents}) différent du total "
+                f"Montant reçu ({amount_cents}) différent du total "
                 f"commande ({order.total_ttc_cents})"
             ),
         )
 
     newly_paid = False
-    if result.success:
+    if success:
         payment.status = "captured"
         if order.status == OrderStatus.pending_payment:
             order.transition_to(OrderStatus.paid)
@@ -238,7 +429,7 @@ async def payment_ipn(
                 # commande payée : avant, rien n'est acquis.
                 send_appointment_confirmed(order_full, order_user)
 
-    return {"status": "ok", "order_status": order.status.value}
+    return newly_paid
 
 @router.post("/simulate/{order_number}")
 async def simulate_payment(

@@ -228,6 +228,22 @@ class PaymentInitOut(BaseModel):
     form_token: str
     amount_cents: int
     public_key: str = ""
+    #: Échéanciers proposables pour ce montant, ex. [3, 4]. Vide quand le
+    #: paiement en plusieurs fois est éteint, non configuré, ou que le
+    #: montant sort des bornes du contrat Alma.
+    installments: list[int] = []
+
+
+class AlmaInitIn(BaseModel):
+    installments: int = Field(ge=2, le=12)
+
+
+class AlmaInitOut(BaseModel):
+    """URL de la page Alma. Le client y est redirigé, il ne saisit rien
+    chez nous."""
+
+    url: str
+    installments: int
 
 
 class OrderOut(BaseModel):
@@ -359,6 +375,12 @@ class StatusUpdateIn(BaseModel):
 class PlateProviderIn(BaseModel):
     """Choix du fournisseur d'immatriculation (voir catalog/plate.py)."""
     mode: str
+
+
+class InstallmentsSettingIn(BaseModel):
+    """Interrupteur du paiement en plusieurs fois (voir
+    orders/installments.py)."""
+    enabled: bool
 
 
 class EmailTemplateIn(BaseModel):

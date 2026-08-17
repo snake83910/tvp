@@ -83,6 +83,15 @@ class Settings(BaseSettings):
     sogecommerce_public_key: str = ""   # Back Office → Clés API REST → Clé publique
     sogecommerce_ipn_url: str = "http://localhost:8000/payment/ipn"
 
+    # Paiement en plusieurs fois (Alma). Vide = moyen de paiement
+    # indisponible : l'administration refuse alors de l'activer, et rien
+    # ne s'affiche côté client. Le compte Alma peut donc arriver après.
+    alma_api_key: str = ""
+    alma_mode: str = "sandbox"        # sandbox | live (deux clés distinctes)
+    # URL que ce serveur expose à Alma. Doit être joignable depuis
+    # Internet : en local, Alma ne peut pas rappeler localhost.
+    alma_ipn_url: str = "http://localhost:8000/v1/payment/alma/ipn"
+
     # Email transactionnel
     mailer_provider: str = "console"  # console | smtp
     smtp_host: str = "smtp.ionos.fr"
