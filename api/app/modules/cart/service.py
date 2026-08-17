@@ -28,6 +28,7 @@ from app.core.cache import get_redis
 from app.models.garage import Garage
 from app.models.order import Cart, CartItem, Order, OrderItem, OrderStatus
 from app.models.user import Address, ProProfile, User
+from app.modules.cart import reservation
 from app.modules.catalog.service import connector as _connector
 from app.modules.catalog.service import load_detail, load_dimension_catalog
 from app.modules.garage import booking
@@ -275,10 +276,17 @@ async def add_item(
     if match is None:
         raise ValueError("Référence introuvable chez le fournisseur")
 
-    # STOCK : refuser de mettre au panier plus que le disponible
-    # fournisseur (cumul ligne existante + ajout). Sans ce contrôle,
-    # « 1 restant » n'empêchait pas de commander 2 pneus.
-    stock = await _resolve_stock(match)
+    # STOCK : refuser de mettre au panier plus que le disponible (cumul
+    # ligne existante + ajout). Sans ce contrôle, « 1 restant »
+    # n'empêchait pas de commander 2 pneus.
+    #
+    # « Disponible » = stock fournisseur MOINS ce que nos propres
+    # commandes ont déjà engagé sans le lui avoir transmis. Sans cette
+    # soustraction, la dernière pièce se vendait autant de fois qu'on la
+    # commandait (voir cart/reservation.py).
+    stock = await reservation.available(
+        db, supplier_ref, await _resolve_stock(match)
+    )
     already = existing.quantity if existing is not None else 0
     if stock is not None and already + quantity > stock:
         raise StockError(_stock_message(stock, already), available=stock, already=already)
@@ -374,7 +382,11 @@ async def update_item_quantity(
             (t for t in raw_items if t.get("supplier_ref") == item.supplier_ref),
             None,
         )
-        stock = await _resolve_stock(m) if m else None
+        stock = (
+            await reservation.available(db, item.supplier_ref, await _resolve_stock(m))
+            if m
+            else None
+        )
         if stock is not None and new_quantity > stock:
             raise StockError(_stock_message(stock), available=stock)
 
@@ -560,6 +572,13 @@ async def checkout(
                 stock = full.stock if full else None
             except Exception:
                 stock = None  # fiche indisponible : on ne bloque pas
+
+        # Verrou AVANT de compter, et sur la référence : deux clients qui
+        # valident à la même seconde liraient sinon tous les deux
+        # « 1 disponible, 0 engagé ». Il tient jusqu'au commit, donc
+        # jusqu'à ce que la commande du premier soit visible du second.
+        await reservation.lock(db, it.supplier_ref)
+        stock = await reservation.available(db, it.supplier_ref, stock)
         if stock is not None and it.quantity > stock:
             raise ValueError(
                 f"Stock insuffisant pour « {it.label_snapshot} » : "
