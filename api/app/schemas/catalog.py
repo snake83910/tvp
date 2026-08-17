@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class VehicleDimension(BaseModel):
@@ -96,3 +98,53 @@ class SearchResponse(BaseModel):
     per_page: int
     pages: int                   # nombre de pages total
     facets: SearchFacets
+
+
+# ── Avis produits ────────────────────────────────────────────────
+
+class ReviewItemOut(BaseModel):
+    """Un produit notable de la commande."""
+
+    supplier_ref: str
+    label: str
+    already_reviewed: bool = False
+
+
+class ReviewContextOut(BaseModel):
+    order_number: str
+    items: list[ReviewItemOut]
+
+
+class ReviewNoteIn(BaseModel):
+    supplier_ref: str
+    rating: int = Field(ge=1, le=5)
+    # 2000 caractères : au-delà, personne ne lit, et le champ devient une
+    # surface d'abus.
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class ReviewSubmitIn(BaseModel):
+    """Le jeton tient lieu d'authentification : le client invité n'a pas
+    de mot de passe, et lui en faire inventer un pour noter ses pneus
+    ferait perdre l'avis."""
+
+    token: str
+    reviews: list[ReviewNoteIn] = Field(min_length=1, max_length=20)
+
+
+class ProductReviewOut(BaseModel):
+    """Avis tel qu'affiché. Ni email, ni nom complet, ni numéro de
+    commande : la page est publique et indexée."""
+
+    author_name: str
+    rating: int
+    comment: str | None = None
+    # La date est OBLIGATOIRE à l'affichage (art. L111-7-2) : un avis
+    # sans date laisse croire qu'il est récent.
+    created_at: datetime
+
+
+class ReviewsBlockOut(BaseModel):
+    count: int
+    average: float
+    reviews: list[ProductReviewOut] = []

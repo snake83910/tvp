@@ -254,6 +254,12 @@ class Order(Base):
     review_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # Sollicitation d'avis PRODUIT, distincte de celle sur le garage :
+    # elle concerne toutes les livraisons, l'autre les seuls montages
+    # chez un partenaire. Deux populations, deux horodatages.
+    product_review_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     # Dernière relance email envoyée (dunning) — évite le spam
     last_dunning_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)

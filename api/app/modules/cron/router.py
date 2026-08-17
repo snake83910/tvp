@@ -41,6 +41,7 @@ JOB_PERIOD_MINUTES: dict[str, int] = {
     "dunning": 60,
     "appointments": 60,
     "reviews": 24 * 60,
+    "product-reviews": 24 * 60,
     "purge": 24 * 60,
 }
 
@@ -55,6 +56,7 @@ def job_runners() -> dict:
         "dunning": _run_dunning,
         "appointments": _run_appointments,
         "reviews": _run_reviews,
+        "product-reviews": _run_product_reviews,
         "purge": _run_purge,
     }
 
@@ -340,6 +342,16 @@ async def reviews(
     return await _tracked(db, "reviews", lambda: _run_reviews(db))
 
 
+@router.post("/product-reviews")
+async def product_reviews(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_require_cron_token),
+):
+    return await _tracked(
+        db, "product-reviews", lambda: _run_product_reviews(db)
+    )
+
+
 async def _run_reviews(db: AsyncSession) -> dict:
     """Sollicite un avis sur le garage après une livraison.
 
@@ -388,6 +400,57 @@ async def _run_reviews(db: AsyncSession) -> dict:
         if already:
             continue
         send_review_request(order, user, garage.slug)
+        sent += 1
+
+    await db.commit()
+    return {"checked": len(rows), "sent": sent}
+
+
+async def _run_product_reviews(db: AsyncSession) -> dict:
+    """Sollicite un avis sur les PNEUS, après n'importe quelle livraison.
+
+    Job SÉPARÉ de `reviews`, qui porte sur le garage. Deux populations
+    différentes — toutes les livraisons ici, les seuls montages chez un
+    partenaire là-bas — donc deux requêtes, deux horodatages, et deux
+    santés à surveiller indépendamment. Les fondre aurait fait un job
+    dont « 3 envoyés » ne dit pas de quoi il parle.
+
+    C'est celui-ci qui alimente les fiches produits, donc les étoiles
+    dans les résultats Google.
+
+    Deux garde-fous, mêmes raisons que pour l'avis garage : un
+    horodatage dédié pour ne demander qu'une fois, et rien si le client
+    a déjà noté cette commande — le formulaire le refuserait.
+    """
+    from app.models.catalog import ProductReview
+    from app.modules.catalog import reviews as review_tokens
+    from app.modules.mailer.service import send_product_review_request
+
+    now = datetime.now(UTC)
+    threshold = now - timedelta(days=REVIEW_DELAY_DAYS)
+
+    rows = (await db.execute(
+        select(Order, User)
+        .join(User, User.id == Order.user_id)
+        .where(
+            Order.status == OrderStatus.delivered,
+            Order.product_review_requested_at.is_(None),
+            Order.delivered_at.is_not(None),
+            Order.delivered_at <= threshold,
+        )
+    )).all()
+
+    sent = 0
+    for order, user in rows:
+        order.product_review_requested_at = now
+        already = await db.scalar(
+            select(ProductReview.id).where(ProductReview.order_id == order.id)
+        )
+        if already:
+            continue
+        send_product_review_request(
+            order, user, review_tokens.create_token(str(order.id))
+        )
         sent += 1
 
     await db.commit()

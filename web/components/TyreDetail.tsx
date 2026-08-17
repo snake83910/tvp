@@ -9,6 +9,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PriceComparator } from "@/components/PriceComparator";
 import { MountingOffer } from "@/components/MountingOffer";
+import { ProductReviews, type ReviewsBlock } from "@/components/ProductReviews";
 import { formatEuro } from "@/lib/money";
 
 const SEASON: Record<string, string> = {
@@ -37,9 +38,14 @@ function stockMessage(stock: number | null | undefined): { tone: "ok" | "warn" |
 export function TyreDetail({
   tyre,
   canonicalUrl,
+  reviews,
 }: {
   tyre: TyreResult;
   canonicalUrl: string;
+  /** Avis publiés, chargés côté serveur par la page. Null si l'API n'a
+   *  pas répondu : la fiche reste une page de vente, elle ne tombe pas
+   *  parce que les avis manquent. */
+  reviews?: ReviewsBlock | null;
 }) {
   const noise = tyre.eu_label?.noise as number | string | null | undefined;
   const noiseClass = tyre.eu_label?.noise_class as string | null | undefined;
@@ -80,6 +86,19 @@ export function TyreDetail({
     },
   };
   if (tyre.ean) productJsonLd.gtin13 = tyre.ean;
+  // AggregateRating : c'est CE bloc qui fait apparaître les étoiles dans
+  // les résultats Google. Il n'est posé que s'il y a de vrais avis
+  // publiés — un balisage sans avis derrière est une fausse déclaration,
+  // et Google sanctionne le site plutôt que la page.
+  if (reviews && reviews.count > 0) {
+    productJsonLd.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: reviews.average.toFixed(1),
+      reviewCount: reviews.count,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
 
   return (
     <>
@@ -247,6 +266,8 @@ export function TyreDetail({
             d&apos;un professionnel.
           </p>
         </section>
+
+        <ProductReviews block={reviews ?? null} />
       </main>
     </>
   );

@@ -484,3 +484,12 @@ class AdminCustomer(BaseModel):
     # existe d'autres plutôt que de croire celle-ci unique.
     address: AdminCustomerAddress | None = None
     addresses_count: int = 0
+
+
+class ReviewModerationIn(BaseModel):
+    """Retrait ou remise en ligne d'un avis. Le motif est exigé pour
+    dépublier : écarter un avis parce qu'il est mauvais est interdit,
+    et une raison écrite rend le choix relisible."""
+
+    is_published: bool
+    reason: str | None = Field(default=None, max_length=255)

@@ -45,6 +45,7 @@ from app.schemas.order import (
     PromoCodeIn,
     PromoCodeOut,
     PromoCodeUpdate,
+    ReviewModerationIn,
     StatusUpdateIn,
 )
 
@@ -1502,3 +1503,79 @@ async def delete_promo_code(
     )
     await db.commit()
     return None
+
+
+# ── Modération des avis produits ───────────────────────────────────
+
+@router.get("/reviews")
+async def list_product_reviews(
+    published: bool | None = Query(None, description="Filtrer par état"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(_admin),
+):
+    """Avis produits, du plus récent au plus ancien."""
+    from app.models.catalog import ProductReview
+
+    stmt = select(ProductReview).order_by(ProductReview.created_at.desc())
+    if published is not None:
+        stmt = stmt.where(ProductReview.is_published.is_(published))
+    rows = (await db.scalars(stmt.limit(200))).all()
+
+    return [
+        {
+            "id": str(r.id),
+            "supplier_ref": r.supplier_ref,
+            "label": r.label_snapshot,
+            "author_name": r.author_name,
+            "rating": r.rating,
+            "comment": r.comment,
+            "is_published": r.is_published,
+            "moderation_reason": r.moderation_reason,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
+@router.patch("/reviews/{review_id}")
+async def moderate_product_review(
+    review_id: uuid.UUID,
+    data: ReviewModerationIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(_admin),
+):
+    """Retire ou remet un avis en ligne.
+
+    Le motif est OBLIGATOIRE pour dépublier, et c'est le cœur du sujet.
+    Le code de la consommation interdit d'écarter un avis parce qu'il est
+    mauvais : exiger une raison écrite, tracée au nom de l'admin, rend ce
+    choix relisible — par nous d'abord, par un contrôle ensuite. Une
+    étoile n'est pas un motif.
+    """
+    from app.models.catalog import ProductReview
+
+    review = await db.get(ProductReview, review_id)
+    if review is None:
+        raise HTTPException(404, "Avis introuvable")
+
+    motif = (data.reason or "").strip()
+    if not data.is_published and not motif:
+        raise HTTPException(
+            422,
+            "Indiquez le motif du retrait (propos injurieux, illégaux, "
+            "hors sujet). Une note basse n'est pas un motif.",
+        )
+
+    review.is_published = data.is_published
+    review.moderation_reason = motif or None
+
+    await audit(
+        db, user=admin,
+        action="review.moderate",
+        target_type="product_review", target_id=str(review.id),
+        payload={"published": data.is_published, "reason": motif},
+        request=request,
+    )
+    await db.commit()
+    return {"id": str(review.id), "is_published": review.is_published}

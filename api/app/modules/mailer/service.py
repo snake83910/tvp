@@ -543,3 +543,28 @@ def send_review_request(order: Order, user: User, garage_slug: str) -> None:
             site_url=_site_url(),
         )
     )
+
+
+def send_product_review_request(order: Order, user: User, token: str) -> None:
+    """Sollicite un avis sur les PNEUS, quelques jours après livraison.
+
+    Distinct de la demande d'avis sur le garage : celle-ci concerne
+    toutes les livraisons, y compris à domicile, et c'est elle qui
+    alimente les fiches produits.
+
+    Le lien porte un jeton signé : le client invité n'a pas de mot de
+    passe, et lui en faire inventer un pour noter ses pneus ferait
+    perdre l'avis.
+    """
+    mailer = get_mailer()
+    fire_and_forget(
+        mailer.send_template(
+            to=user.email,
+            subject="Votre avis sur vos nouveaux pneus ?",
+            template="product_review_request.html",
+            civilite=_civilite(user),
+            order_number=order.order_number,
+            review_url=f"{_site_url()}/avis/{token}",
+            site_url=_site_url(),
+        )
+    )

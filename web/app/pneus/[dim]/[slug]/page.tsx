@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TyreDetail } from "@/components/TyreDetail";
+import { fetchReviews } from "@/components/ProductReviews";
 import { api } from "@/lib/api";
 import { parseProductSlug } from "@/lib/slug";
 
@@ -66,10 +67,17 @@ export default async function ProductSeoPage(
   const params = await props.params;
   const data = await load(params, searchParams.t);
   if (!data) notFound();
+  // Après le chargement du pneu : les avis se lisent par référence
+  // fournisseur, qu'on ne connaît qu'ici.
+  const reviews = await fetchReviews(data.tyre.supplier_ref);
   return (
     <>
       <SiteHeader />
-      <TyreDetail tyre={data.tyre} canonicalUrl={`/pneus/${params.dim}/${params.slug}`} />
+      <TyreDetail
+        tyre={data.tyre}
+        canonicalUrl={`/pneus/${params.dim}/${params.slug}`}
+        reviews={reviews}
+      />
     </>
   );
 }

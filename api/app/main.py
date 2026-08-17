@@ -78,6 +78,7 @@ from app.modules.admin.router import router as admin_router  # noqa: E402
 from app.modules.auth.router import router as auth_router  # noqa: E402
 from app.modules.auth.totp_router import router as totp_router  # noqa: E402
 from app.modules.cart.router import router as cart_router  # noqa: E402
+from app.modules.catalog.reviews_router import router as reviews_router  # noqa: E402
 from app.modules.catalog.router import router as catalog_router  # noqa: E402
 from app.modules.cron.router import router as cron_router  # noqa: E402
 from app.modules.garage.router import router as garage_router  # noqa: E402
@@ -256,6 +257,7 @@ for _router in (
     totp_router,
     accounts_router,
     catalog_router,
+    reviews_router,
     garage_router,
     cart_router,
     payment_router,

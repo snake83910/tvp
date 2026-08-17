@@ -1,0 +1,33 @@
+{% extends "_layout.html" %}
+{% block content %}
+  <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:900;color:#17181a;">
+    {{ civilite }}, vos pneus tiennent-ils leurs promesses&nbsp;?
+  </h1>
+
+  <p style="margin:0 0 16px 0;">
+    Vous avez reçu votre commande {{ order_number }} il y a quelques
+    jours. Votre retour aide les prochains acheteurs à choisir — et nous
+    à mieux sélectionner ce que nous vendons.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    Deux minutes suffisent, et il n'y a rien à créer : le lien
+    ci-dessous vous reconnaît.
+  </p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+    <tr>
+      <td style="background:#D8232A;border-radius:999px;">
+        <a href="{{ review_url }}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;letter-spacing:0.5px;text-transform:uppercase;">
+          Donner mon avis
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:24px 0 0 0;color:#7a7a72;font-size:13px;">
+    Le lien reste valable 60 jours. Nous publions tous les avis, bons
+    comme mauvais&nbsp;: seuls les propos injurieux ou illégaux sont
+    retirés.
+  </p>
+{% endblock %}
