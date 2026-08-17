@@ -120,8 +120,20 @@ crontab -e
 0 * * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/dunning >/dev/null 2>&1
 15 * * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/appointments >/dev/null 2>&1
 30 10 * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/reviews >/dev/null 2>&1
+40 10 * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/product-reviews >/dev/null 2>&1
 45 4 * * * curl -sS -X POST -H "X-Cron-Token: <le_token>" https://tousvospneus.com/api/cron/purge >/dev/null 2>&1
 ```
+
+`reviews` et `product-reviews` sont deux jobs distincts : le premier
+demande un avis sur le GARAGE (montages partenaires uniquement), le
+second sur les PNEUS (toutes les livraisons). Décalés de dix minutes
+pour ne pas envoyer deux emails dans la même seconde au client qui
+relève des deux.
+
+**Vérifier qu'ils tournent** : la page Réglages de l'administration
+affiche la dernière exécution de chaque job, et `/health/jobs` passe en
+503 dès qu'un job a plus de deux fois sa période de retard. Un crontab
+oublié au redéploiement se voit là, pas dans les réclamations clients.
 
 Effets :
 

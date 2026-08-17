@@ -10,9 +10,14 @@ Exemple crontab sur le VPS :
     # Rappels de rendez-vous, toutes les heures
     15 * * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
         https://tousvospneus.com/api/cron/appointments >/dev/null
-    # Sollicitation d'avis, une fois par jour
+    # Sollicitation d'avis sur le GARAGE (montages partenaires)
     30 10 * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
         https://tousvospneus.com/api/cron/reviews >/dev/null
+    # Sollicitation d'avis sur les PNEUS (toutes les livraisons).
+    # Décalé de dix minutes : un client livré chez un partenaire relève
+    # des deux, et deux emails dans la même seconde font mauvais effet.
+    40 10 * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
+        https://tousvospneus.com/api/cron/product-reviews >/dev/null
     # Purge des données périmées, une fois par jour en heure creuse
     45 4 * * * curl -sS -X POST -H "X-Cron-Token: $CRON_TOKEN" \\
         https://tousvospneus.com/api/cron/purge >/dev/null
