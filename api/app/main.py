@@ -82,6 +82,7 @@ from app.modules.catalog.router import router as catalog_router  # noqa: E402
 from app.modules.cron.router import router as cron_router  # noqa: E402
 from app.modules.garage.router import router as garage_router  # noqa: E402
 from app.modules.orders.payment_router import router as payment_router  # noqa: E402
+from app.modules.orders.tracking_router import router as tracking_router  # noqa: E402
 
 
 @asynccontextmanager
@@ -258,6 +259,7 @@ for _router in (
     garage_router,
     cart_router,
     payment_router,
+    tracking_router,
 ):
     app.include_router(_router, prefix=API_V1)
 

@@ -33,6 +33,7 @@ export function SiteFooter() {
             <li><Link href="/a-propos" className="text-ink-soft hover:text-signal">À propos de nous</Link></li>
             <li><Link href="/montage-pneu" className="text-ink-soft hover:text-signal">Montage en garage</Link></li>
             <li><Link href="/guide" className="text-ink-soft hover:text-signal">Guide du pneu</Link></li>
+            <li><Link href="/suivi" className="text-ink-soft hover:text-signal">Suivre ma commande</Link></li>
             <li><Link href="/compte" className="text-ink-soft hover:text-signal">Mon compte</Link></li>
             <li><Link href="/cgv" className="text-ink-soft hover:text-signal">Conditions générales</Link></li>
             <li>

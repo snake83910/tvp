@@ -386,6 +386,38 @@ class AdminStats(BaseModel):
     orders_prev30: int = 0
 
 
+class OrderTrackingIn(BaseModel):
+    """Suivi sans connexion : le numéro identifie, l'email authentifie."""
+
+    order_number: str = Field(min_length=4, max_length=32)
+    email: NormalizedEmail
+
+
+class OrderTrackingOut(BaseModel):
+    """Vue RESTREINTE, volontairement.
+
+    Ni adresse postale, ni nom, ni détail des prix : ce couple
+    numéro + email est plus facile à obtenir qu'une session (il suffit
+    d'avoir vu passer l'email de confirmation). On rend l'avancement et
+    le suivi transporteur, pas le dossier client.
+    """
+
+    order_number: str
+    status: str
+    created_at: datetime
+    paid_at: datetime | None = None
+    delivery_mode: str
+    total_ttc: float
+    item_count: int
+    #: Libellés des articles, sans les prix unitaires.
+    items: list[str] = []
+    tracking_number: str | None = None
+    carrier: str | None = None
+    tracking_url: str | None = None
+    garage_name: str | None = None
+    garage_city: str | None = None
+
+
 class AdminCustomerAddress(BaseModel):
     """Adresse par défaut d'un client, telle qu'enregistrée dans son
     carnet — à ne pas confondre avec l'adresse figée dans une commande,
