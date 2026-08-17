@@ -50,18 +50,21 @@ services:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
-  # Consultation de la base de production, à distance. Ne démarre jamais
-  # avec la pile (profil « outils ») : il faut le nommer explicitement.
+  # Base de production, à distance. Ne démarre jamais avec la pile
+  # (profil « outils ») : il faut le nommer explicitement.
   #
   #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  #     --profile outils up -d pgweb
+  #     --profile outils up -d dbgate
   #
-  # Puis, depuis son poste :  ssh -L 8081:127.0.0.1:8081 user@serveur
-  # et ouvrir http://localhost:8081. Le service n'écoute que sur la
-  # loopback du serveur : le tunnel SSH est le SEUL chemin, et il est
-  # déjà protégé par la clé SSH. D'où l'absence d'authentification HTTP
-  # ici — elle n'ajouterait rien contre quelqu'un qui a déjà un shell,
-  # et ferait un secret de plus à gérer.
+  # Puis, depuis son poste :  ssh -L 8091:127.0.0.1:8081 user@serveur
+  # et ouvrir http://localhost:8091. Le 8091 évite la collision avec le
+  # DbGate local, qui occupe déjà 8081 — sans quoi on ne sait plus
+  # laquelle des deux bases on regarde.
+  #
+  # Le service n'écoute que sur la loopback du serveur : le tunnel SSH
+  # est le SEUL chemin, et il est déjà protégé par la clé. D'où l'absence
+  # d'authentification HTTP — elle n'ajouterait rien contre quelqu'un qui
+  # a déjà un shell, et ferait un secret de plus à gérer.
   #
   # L'ÉCRITURE EST OUVERTE, en connaissance de cause. Ce qui est écrit
   # ici ne passe ni par la machine à états des commandes, ni par l'audit,
@@ -71,13 +74,11 @@ services:
   #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
   #     exec -T postgres pg_dump -U tvp -d tvp > avant-$(date +%F-%H%M).sql
   #
-  # `--lock-session` : une seule connexion, celle de cette base. Interdit
-  # d'ouvrir une autre base depuis l'interface par mégarde.
-  #
   # Pas de `restart` : il meurt au redémarrage du serveur, et c'est très
   # bien. On le rallume pour une session de travail, pas à demeure.
-  pgweb:
-    command: ["--lock-session"]
+  dbgate:
+    environment:
+      LABEL_pg: tvp — PRODUCTION
 
 volumes:
   uploads:
